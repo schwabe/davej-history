@@ -1,10 +1,27 @@
-/* $Id: config.c,v 1.15.2.11 1998/05/27 18:05:07 keil Exp $
+/* $Id: config.c,v 1.15.2.16 1998/09/27 13:05:48 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 1.15.2.16  1998/09/27 13:05:48  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
+ * Revision 1.15.2.15  1998/09/12 18:43:56  niemann
+ * Added new card: Sedlbauer ISDN-Controller PC/104
+ *
+ * Revision 1.15.2.14  1998/08/25 14:01:27  calle
+ * Ported driver for AVM Fritz!Card PCI from the 2.1 tree.
+ * I could not test it.
+ *
+ * Revision 1.15.2.13  1998/07/30 20:51:24  niemann
+ * Fixed Sedlbauer Speed Card PCMCIA missing isdnl3new
+ *
+ * Revision 1.15.2.12  1998/07/15 14:43:29  calle
+ * Support for AVM passive PCMCIA cards:
+ *    A1 PCMCIA, FRITZ!Card PCMCIA and FRITZ!Card PCMCIA 2.0
+ *
  * Revision 1.15.2.11  1998/05/27 18:05:07  keil
  * HiSax 3.0
  *
@@ -56,7 +73,7 @@
 #include <linux/timer.h>
 #include <linux/config.h>
 #include "hisax.h"
-
+#include <linux/module.h>
 /*
  * This structure array contains one entry per card. An entry looks
  * like this:
@@ -89,7 +106,9 @@
  *   23 reserved
  *   24 Dr Neuhaus Niccy PnP/PCI card p0=irq p1=IO0 p2=IO1 (PnP only)
  *   25 Teles S0Box             p0=irq p1=iobase (from isapnp setup)
- *
+ *   26 AVM A1 PCMCIA (Fritz)   p0=irq p1=iobase
+ *   27 AVM PCI (Fritz!PCI)     no parameter
+ *   28 reserved
  *
  * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
  *
@@ -99,8 +118,8 @@
 #ifdef CONFIG_HISAX_ELSA
 #define DEFAULT_CARD ISDN_CTYPE_ELSA
 #define DEFAULT_CFG {0,0,0,0}
-int elsa_init_pcmcia(void*, int, int*, int);
 #ifdef MODULE
+int elsa_init_pcmcia(void*, int, int*, int);
 static struct symbol_table hisax_syms_elsa = {
 #include <linux/symtab_begin.h>
 	X(elsa_init_pcmcia),
@@ -116,6 +135,32 @@ void register_elsa_symbols(void) {
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_A1
 #define DEFAULT_CFG {10,0x340,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_AVM_A1_PCMCIA
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_A1_PCMCIA
+#define DEFAULT_CFG {11,0x170,0,0}
+#ifdef MODULE
+int avm_a1_init_pcmcia(void*, int, int*, int);
+void HiSax_closecard(int cardnr);
+static struct symbol_table hisax_syms_avm_a1= {
+#include <linux/symtab_begin.h>
+	X(avm_a1_init_pcmcia),
+	X(HiSax_closecard),
+#include <linux/symtab_end.h>
+};
+void register_avm_a1_symbols(void) {
+	register_symtab(&hisax_syms_avm_a1);
+}
+#endif
+#endif
+#ifdef CONFIG_HISAX_FRITZPCI
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_FRITZPCI
+#define DEFAULT_CFG {0,0,0,0}
 #endif
 #ifdef CONFIG_HISAX_16_3
 #undef DEFAULT_CARD
@@ -176,8 +221,8 @@ void register_elsa_symbols(void) {
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_SEDLBAUER
 #define DEFAULT_CFG {11,0x270,0,0}
-int sedl_init_pcmcia(void*, int, int*, int);
 #ifdef MODULE
+int sedl_init_pcmcia(void*, int, int*, int);
 static struct symbol_table hisax_syms_sedl= {
 #include <linux/symtab_begin.h>
 	X(sedl_init_pcmcia),
@@ -352,7 +397,7 @@ HiSaxVersion(void))
 	char tmp[64];
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
-	printk(KERN_INFO "HiSax: Version 3.0\n");
+	printk(KERN_INFO "HiSax: Version 3.0b\n");
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp)); 
 	strcpy(tmp, l2_revision);
@@ -445,6 +490,13 @@ HiSax_init(void))
 		return 0;
 	}
 #endif
+#ifdef CONFIG_HISAX_AVM_A1_PCMCIA
+	if (type[0] == ISDN_CTYPE_A1_PCMCIA) {
+		/* we have to export  and return in this case */
+		register_avm_a1_symbols();
+		return 0;
+	}
+#endif
 #endif
 	nrcards = 0;
 	HiSaxVersion();
@@ -489,6 +541,7 @@ HiSax_init(void))
 			case ISDN_CTYPE_16_3:
 			case ISDN_CTYPE_TELESPCMCIA:
 			case ISDN_CTYPE_A1:
+			case ISDN_CTYPE_A1_PCMCIA:
 			case ISDN_CTYPE_ELSA_PNP:
 			case ISDN_CTYPE_ELSA_PCMCIA:
 			case ISDN_CTYPE_IX1MICROR2:
@@ -497,6 +550,7 @@ HiSax_init(void))
 			case ISDN_CTYPE_TELEINT:
 			case ISDN_CTYPE_SEDLBAUER:
 			case ISDN_CTYPE_SEDLBAUER_PCMCIA:
+			case ISDN_CTYPE_SEDLBAUER_FAX:
 			case ISDN_CTYPE_SPORTSTER:
 			case ISDN_CTYPE_MIC:
 			case ISDN_CTYPE_TELES3C:
@@ -508,6 +562,7 @@ HiSax_init(void))
 			case ISDN_CTYPE_NETJET:
 			case ISDN_CTYPE_AMD7930:
 			case ISDN_CTYPE_TELESPCI:
+			case ISDN_CTYPE_FRITZPCI:
 				break;
 		}
 	}
@@ -645,6 +700,55 @@ int sedl_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	cards[0].para[1] = (int)pcm_iob;
 	cards[0].protocol = prot;
 	cards[0].typ = ISDN_CTYPE_SEDLBAUER_PCMCIA;
+	nzproto = 1;
+
+	if (!HiSax_id)
+		HiSax_id = HiSaxID;
+	if (!HiSaxID[0])
+		strcpy(HiSaxID, "HiSax");
+	for (i = 0; i < HISAX_MAX_CARDS; i++)
+		if (cards[i].typ > 0)
+			nrcards++;
+	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
+	       nrcards, (nrcards > 1) ? "s" : "");
+
+	CallcNew();
+	Isdnl3New();
+	Isdnl2New();
+	Isdnl1New();
+	TeiNew();
+	HiSax_inithardware(busy_flag);
+	printk(KERN_NOTICE "HiSax: module installed\n");
+	return (0);
+}
+#endif
+
+#ifdef CONFIG_HISAX_AVM_A1_PCMCIA
+int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
+{
+	int i;
+	int nzproto = 0;
+
+	nrcards = 0;
+	HiSaxVersion();
+	if (id)			/* If id= string used */
+		HiSax_id = id;
+	/* Initialize all 16 structs, even though we only accept
+	   two pcmcia cards
+	   */
+	for (i = 0; i < 16; i++) {
+		cards[i].para[0] = irq[i];
+		cards[i].para[1] = io[i];
+		cards[i].typ = type[i];
+		if (protocol[i]) {
+			cards[i].protocol = protocol[i];
+			nzproto++;
+		}
+	}
+	cards[0].para[0] = pcm_irq;
+	cards[0].para[1] = (int)pcm_iob;
+	cards[0].protocol = prot;
+	cards[0].typ = ISDN_CTYPE_A1_PCMCIA;
 	nzproto = 1;
 
 	if (!HiSax_id)

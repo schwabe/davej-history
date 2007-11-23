@@ -205,14 +205,30 @@ void ext2_free_inode (struct inode * inode)
 			inode->i_nlink);
 		return;
 	}
-	if (!inode->i_sb) {
+	sb = inode->i_sb;
+	if (!sb) {
 		printk("ext2_free_inode: inode on nonexistent device\n");
 		return;
 	}
 
 	ext2_debug ("freeing inode %lu\n", inode->i_ino);
 
-	sb = inode->i_sb;
+	/* We need to kill quota references now, before grabbing the
+	 * superblock lock because writing the quota out to disk
+	 * may need to lock the superblock as well.
+	 *
+	 * It is safe to do this early instead of the original
+	 * places because we cannot be here in ext2_free_inode
+	 * if any other references to this inode exist at all.
+	 *
+	 * Based upon a 2.1.x fix by Bill Hawes.   --DaveM
+	 */
+	if (sb->dq_op) {
+		sb->dq_op->free_inode (inode, 1);
+		if (IS_WRITABLE (inode))
+			sb->dq_op->drop(inode);
+	}
+
 	lock_super (sb);
 	if (inode->i_ino < EXT2_FIRST_INO(sb) ||
 	    inode->i_ino > sb->u.ext2_sb.s_es->s_inodes_count) {
@@ -249,8 +265,6 @@ void ext2_free_inode (struct inode * inode)
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}
-	if (sb->dq_op)
-		sb->dq_op->free_inode (inode, 1);
 	sb->s_dirt = 1;
 	clear_inode (inode);
 	unlock_super (sb);

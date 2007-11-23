@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 1.16.2.4 1998/05/27 18:06:08 keil Exp $
+/* $Id: l3dss1.c,v 1.16.2.5 1998/09/27 13:06:48 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -9,6 +9,9 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 1.16.2.5  1998/09/27 13:06:48  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.16.2.4  1998/05/27 18:06:08  keil
  * HiSax 3.0
  *
@@ -47,7 +50,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 1.16.2.4 $";
+const char *dss1_revision = "$Revision: 1.16.2.5 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -58,9 +61,9 @@ const char *dss1_revision = "$Revision: 1.16.2.4 $";
 	*ptr++ = mty
 
 
-#ifdef HISAX_DE_AOC
+#if HISAX_DE_AOC
 static void
-l3dss1_parse_facility(struct l3_process *pc, u_char *p)
+l3dss1_parse_facility(struct l3_process *pc, u_char * p)
 {
 	int qd_len = 0;
 
@@ -70,91 +73,99 @@ l3dss1_parse_facility(struct l3_process *pc, u_char *p)
 		l3_debug(pc->st, "qd_len == 0");
 		return;
 	}
-	if((*p & 0x1F) != 0x11) {	/* Service discriminator, supplementary service */
+	if ((*p & 0x1F) != 0x11) {	/* Service discriminator, supplementary service */
 		l3_debug(pc->st, "supplementary service != 0x11");
 		return;
 	}
-	while(qd_len > 0 && !(*p & 0x80)) {	/* extension ? */
-		p++; qd_len--;
-	} 
-	if(qd_len < 2) {
+	while (qd_len > 0 && !(*p & 0x80)) {	/* extension ? */
+		p++;
+		qd_len--;
+	}
+	if (qd_len < 2) {
 		l3_debug(pc->st, "qd_len < 2");
 		return;
 	}
-	p++; qd_len--;
-	if((*p & 0xE0) != 0xA0) {	/* class and form */
+	p++;
+	qd_len--;
+	if ((*p & 0xE0) != 0xA0) {	/* class and form */
 		l3_debug(pc->st, "class and form != 0xA0");
 		return;
 	}
-	switch(*p & 0x1F) {		/* component tag */
-	    case 1: /* invoke */
-		{
-		    unsigned char nlen, ilen;
-		    int ident;
-    
-		    p++; qd_len--;
-		    if(qd_len < 1) {
-			    l3_debug(pc->st, "qd_len < 1");
-			    break;
-		    }
-		    if(*p & 0x80) { /* length format */
-			    l3_debug(pc->st, "*p & 0x80 length format");
-			    break;
-		    }
-		    nlen = *p++; qd_len--;
-		    if(qd_len < nlen) {
-			    l3_debug(pc->st, "qd_len < nlen");
-			    return;
-		    }
-		    qd_len -= nlen;
-    
-		    if(nlen < 2) {
-			    l3_debug(pc->st, "nlen < 2");
-			    return;
-		    }
-		    if(*p != 0x02) {	/* invoke identifier tag */
-			    l3_debug(pc->st, "invoke identifier tag !=0x02");
-			    return;
-		    }
-		    p++; nlen--;
-		    if(*p & 0x80) { /* length format */
-			    l3_debug(pc->st, "*p & 0x80 length format 2");
-			    break;
-		    }
-		    ilen = *p++; nlen--;
-		    if(ilen > nlen || ilen == 0) {
-			    l3_debug(pc->st, "ilen > nlen || ilen == 0");
-			    return;
-		    }
-		    nlen -= ilen;
-		    ident = 0;
-		    while(ilen > 0) {
-			    ident = (ident << 8) | (*p++ & 0xFF);	/* invoke identifier */
-			    ilen--;
-		    }
-    
-		    if(nlen < 2) {
-			    l3_debug(pc->st, "nlen < 2 22");
-			    return;
-		    }
-		    if(*p != 0x02)	{	/* operation value */ 
-			    l3_debug(pc->st, "operation value !=0x02");
-			    return;
-		    }
-		    p++; nlen--;
-		    ilen = *p++; nlen--;
-		    if(ilen > nlen || ilen == 0) {
-			    l3_debug(pc->st, "ilen > nlen || ilen == 0 22");
-			    return;
-		    }
-		    nlen -= ilen;
-		    ident = 0;
-		    while(ilen > 0) {
-			    ident = (ident << 8) | (*p++ & 0xFF);
-			    ilen--;
-		    }
-    
-    #define FOO1(s,a,b) \
+	switch (*p & 0x1F) {	/* component tag */
+		case 1:	/* invoke */
+			{
+				unsigned char nlen, ilen;
+				int ident;
+
+				p++;
+				qd_len--;
+				if (qd_len < 1) {
+					l3_debug(pc->st, "qd_len < 1");
+					break;
+				}
+				if (*p & 0x80) {	/* length format */
+					l3_debug(pc->st, "*p & 0x80 length format");
+					break;
+				}
+				nlen = *p++;
+				qd_len--;
+				if (qd_len < nlen) {
+					l3_debug(pc->st, "qd_len < nlen");
+					return;
+				}
+				qd_len -= nlen;
+
+				if (nlen < 2) {
+					l3_debug(pc->st, "nlen < 2");
+					return;
+				}
+				if (*p != 0x02) {	/* invoke identifier tag */
+					l3_debug(pc->st, "invoke identifier tag !=0x02");
+					return;
+				}
+				p++;
+				nlen--;
+				if (*p & 0x80) {	/* length format */
+					l3_debug(pc->st, "*p & 0x80 length format 2");
+					break;
+				}
+				ilen = *p++;
+				nlen--;
+				if (ilen > nlen || ilen == 0) {
+					l3_debug(pc->st, "ilen > nlen || ilen == 0");
+					return;
+				}
+				nlen -= ilen;
+				ident = 0;
+				while (ilen > 0) {
+					ident = (ident << 8) | (*p++ & 0xFF);	/* invoke identifier */
+					ilen--;
+				}
+
+				if (nlen < 2) {
+					l3_debug(pc->st, "nlen < 2 22");
+					return;
+				}
+				if (*p != 0x02) {	/* operation value */
+					l3_debug(pc->st, "operation value !=0x02");
+					return;
+				}
+				p++;
+				nlen--;
+				ilen = *p++;
+				nlen--;
+				if (ilen > nlen || ilen == 0) {
+					l3_debug(pc->st, "ilen > nlen || ilen == 0 22");
+					return;
+				}
+				nlen -= ilen;
+				ident = 0;
+				while (ilen > 0) {
+					ident = (ident << 8) | (*p++ & 0xFF);
+					ilen--;
+				}
+
+#define FOO1(s,a,b) \
 	    while(nlen > 1) {		\
 		    int ilen = p[1];	\
 		    if(nlen < ilen+2) {	\
@@ -170,68 +181,72 @@ l3dss1_parse_facility(struct l3_process *pc, u_char *p)
 			    p += ilen+2;	\
 		    }			\
 	    }
-			    
-		    switch(ident) {
-		    default:
-			    break;
-		    case 0x22: /* during */
-			    FOO1("1A",0x30,FOO1("1C",0xA1,FOO1("1D",0x30,FOO1("1E",0x02,({
-				    ident = 0;
-				    while(ilen > 0) {
-					    ident = (ident<<8) | *p++;
-					    ilen--;
-				    }
-				    if (ident > pc->para.chargeinfo) {
-					    pc->para.chargeinfo = ident;
-					    pc->st->l3.l3l4(pc->st, CC_CHARGE | INDICATION, pc);
-				    }
-				    if (pc->st->l3.debug & L3_DEB_CHARGE) {
-					    if (*(p+2) == 0) {
-						    l3_debug(pc->st, "charging info during %d", pc->para.chargeinfo);
-					    } else {
-						    l3_debug(pc->st, "charging info final %d", pc->para.chargeinfo);
-					    }
-				    }
-			    })))))
-			    break;
-		    case 0x24: /* final */
-			    FOO1("2A",0x30,FOO1("2B",0x30,FOO1("2C",0xA1,FOO1("2D",0x30,FOO1("2E",0x02,({
-				    ident = 0;
-				    while(ilen > 0) {
-					    ident = (ident<<8) | *p++;
-					    ilen--;
-				    }
-				    if (ident > pc->para.chargeinfo) {
-					    pc->para.chargeinfo = ident;
-					    pc->st->l3.l3l4(pc->st, CC_CHARGE | INDICATION, pc);
-				    }
-				    if (pc->st->l3.debug & L3_DEB_CHARGE) {
-					    l3_debug(pc->st, "charging info final %d", pc->para.chargeinfo);
-				    }
-			    }))))))
-		    break;
-		    }
-    #undef FOO1
-    
-		}
-	    break;
-	    case 2: /* return result */
-		    l3_debug(pc->st, "return result break");
-		    break;
-	    case 3: /* return error */
-		    l3_debug(pc->st, "return error break");
-		    break;
-	    default:
-		    l3_debug(pc->st, "default break");
-		    break;
+
+				switch (ident) {
+					default:
+						break;
+					case 0x22:	/* during */
+						FOO1("1A", 0x30, FOO1("1C", 0xA1, FOO1("1D", 0x30, FOO1("1E", 0x02, ( {
+							       ident = 0;
+							while (ilen > 0) {
+														     ident = (ident << 8) | *p++;
+								  ilen--;
+									}
+														     if (ident > pc->para.chargeinfo) {
+														     pc->para.chargeinfo = ident;
+														     pc->st->l3.l3l4(pc->st, CC_CHARGE | INDICATION, pc);
+									}
+														     if (pc->st->l3.debug & L3_DEB_CHARGE) {
+														     if (*(p + 2) == 0) {
+														     l3_debug(pc->st, "charging info during %d", pc->para.chargeinfo);
+									}
+								   else {
+														     l3_debug(pc->st, "charging info final %d", pc->para.chargeinfo);
+									}
+									}
+									}
+								    )))))
+							break;
+					case 0x24:	/* final */
+						FOO1("2A", 0x30, FOO1("2B", 0x30, FOO1("2C", 0xA1, FOO1("2D", 0x30, FOO1("2E", 0x02, ( {
+							       ident = 0;
+							while (ilen > 0) {
+																      ident = (ident << 8) | *p++;
+								  ilen--;
+									}
+																      if (ident > pc->para.chargeinfo) {
+																      pc->para.chargeinfo = ident;
+																      pc->st->l3.l3l4(pc->st, CC_CHARGE | INDICATION, pc);
+									}
+																      if (pc->st->l3.debug & L3_DEB_CHARGE) {
+																      l3_debug(pc->st, "charging info final %d", pc->para.chargeinfo);
+									}
+									}
+								   ))))))
+							break;
+				}
+#undef FOO1
+
+			}
+			break;
+		case 2:	/* return result */
+			l3_debug(pc->st, "return result break");
+			break;
+		case 3:	/* return error */
+			l3_debug(pc->st, "return error break");
+			break;
+		default:
+			l3_debug(pc->st, "default break");
+			break;
 	}
 }
-#endif	
+#endif
 
-static int 
-l3dss1_check_messagetype_validity(int mt) {
+static int
+l3dss1_check_messagetype_validity(int mt)
+{
 /* verify if a message type exists */
-	switch(mt) {
+	switch (mt) {
 		case MT_ALERTING:
 		case MT_CALL_PROCEEDING:
 		case MT_CONNECT:
@@ -310,161 +325,240 @@ l3dss1_release_cmpl(struct l3_process *pc, u_char pr, void *arg)
 	release_l3_process(pc);
 }
 
-#ifdef EXT_BEARER_CAPS
+#if EXT_BEARER_CAPS
 
-u_char *EncodeASyncParams(u_char *p, u_char si2)
-{ // 7c 06 88  90 21 42 00 bb
+u_char *
+EncodeASyncParams(u_char * p, u_char si2)
+{				// 7c 06 88  90 21 42 00 bb
 
-  p[0] = p[1] = 0; p[2] = 0x80;
-  if (si2 & 32) // 7 data bits
-    p[2] += 16;
-  else          // 8 data bits
-    p[2] +=24;
+	p[0] = p[1] = 0;
+	p[2] = 0x80;
+	if (si2 & 32)		// 7 data bits
 
-  if (si2 & 16) // 2 stop bits
-    p[2] += 96;
-  else          // 1 stop bit
-    p[2] = 32;
+		p[2] += 16;
+	else			// 8 data bits
 
-  if (si2 & 8)  // even parity
-    p[2] += 2;
-  else          // no parity
-    p[2] += 3;
+		p[2] += 24;
 
-  switch (si2 & 0x07)
-  {
-    case 0:     p[0] = 66;      // 1200 bit/s
-                break;
-    case 1:     p[0] = 88;      // 1200/75 bit/s
-                break;
-    case 2:     p[0] = 87;      // 75/1200 bit/s
-                break;
-    case 3:     p[0] = 67;      // 2400 bit/s
-                break;
-    case 4:     p[0] = 69;      // 4800 bit/s
-                break;
-    case 5:     p[0] = 72;      // 9600 bit/s
-                break;
-    case 6:     p[0] = 73;      // 14400 bit/s
-                break;
-    case 7:     p[0] = 75;      // 19200 bit/s
-                break;
-  }
-  return p+3;
+	if (si2 & 16)		// 2 stop bits
+
+		p[2] += 96;
+	else			// 1 stop bit
+
+		p[2] = 32;
+
+	if (si2 & 8)		// even parity
+
+		p[2] += 2;
+	else			// no parity
+
+		p[2] += 3;
+
+	switch (si2 & 0x07) {
+		case 0:
+			p[0] = 66;	// 1200 bit/s
+
+			break;
+		case 1:
+			p[0] = 88;	// 1200/75 bit/s
+
+			break;
+		case 2:
+			p[0] = 87;	// 75/1200 bit/s
+
+			break;
+		case 3:
+			p[0] = 67;	// 2400 bit/s
+
+			break;
+		case 4:
+			p[0] = 69;	// 4800 bit/s
+
+			break;
+		case 5:
+			p[0] = 72;	// 9600 bit/s
+
+			break;
+		case 6:
+			p[0] = 73;	// 14400 bit/s
+
+			break;
+		case 7:
+			p[0] = 75;	// 19200 bit/s
+
+			break;
+	}
+	return p + 3;
 }
 
-u_char EncodeSyncParams(u_char si2, u_char ai)
+u_char
+EncodeSyncParams(u_char si2, u_char ai)
 {
 
-  switch (si2)
-  {
-    case 0:     return ai + 2;  // 1200 bit/s
-    case 1:     return ai + 24; // 1200/75 bit/s
-    case 2:     return ai + 23; // 75/1200 bit/s
-    case 3:     return ai + 3;  // 2400 bit/s
-    case 4:     return ai + 5;  // 4800 bit/s
-    case 5:     return ai + 8;  // 9600 bit/s
-    case 6:     return ai + 9;  // 14400 bit/s
-    case 7:     return ai + 11; // 19200 bit/s
-    case 8:     return ai + 14; // 48000 bit/s
-    case 9:     return ai + 15; // 56000 bit/s
-    case 15:    return ai + 40; // negotiate bit/s
-    default:    break;
-  }
-  return ai;
+	switch (si2) {
+		case 0:
+			return ai + 2;	// 1200 bit/s
+
+		case 1:
+			return ai + 24;		// 1200/75 bit/s
+
+		case 2:
+			return ai + 23;		// 75/1200 bit/s
+
+		case 3:
+			return ai + 3;	// 2400 bit/s
+
+		case 4:
+			return ai + 5;	// 4800 bit/s
+
+		case 5:
+			return ai + 8;	// 9600 bit/s
+
+		case 6:
+			return ai + 9;	// 14400 bit/s
+
+		case 7:
+			return ai + 11;		// 19200 bit/s
+
+		case 8:
+			return ai + 14;		// 48000 bit/s
+
+		case 9:
+			return ai + 15;		// 56000 bit/s
+
+		case 15:
+			return ai + 40;		// negotiate bit/s
+
+		default:
+			break;
+	}
+	return ai;
 }
 
 
-static u_char DecodeASyncParams(u_char si2, u_char *p)
-{ u_char info;
-
-  switch (p[5])
-  {
-    case 66: // 1200 bit/s
-             break; // si2 bleibt gleich
-    case 88: // 1200/75 bit/s
-             si2 += 1;
-             break;
-    case 87: // 75/1200 bit/s
-             si2 += 2;
-             break;
-    case 67: // 2400 bit/s
-             si2 += 3;
-             break;
-    case 69: // 4800 bit/s
-             si2 += 4;
-             break;
-    case 72: // 9600 bit/s
-             si2 += 5;
-             break;
-    case 73: // 14400 bit/s
-             si2 += 6;
-             break;
-    case 75: // 19200 bit/s
-             si2 += 7;
-             break;
-  }
-
-  info = p[7] & 0x7f;
-  if ((info & 16) && (!(info & 8)))   // 7 data bits
-    si2 += 32;                        // else 8 data bits
-  if ((info & 96) == 96)              // 2 stop bits
-    si2 += 16;                        // else 1 stop bit
-  if ((info & 2) && (!(info & 1)))    // even parity
-    si2 += 8;                         // else no parity
-
-  return si2;
-}
-
-
-static u_char DecodeSyncParams(u_char si2, u_char info)
+static u_char
+DecodeASyncParams(u_char si2, u_char * p)
 {
-  info &= 0x7f;
-  switch (info)
-  {
-    case 40: // bit/s aushandeln  --- hat nicht geklappt, ai wird 165 statt 175!
-      return si2 + 15;
-    case 15: // 56000 bit/s --- hat nicht geklappt, ai wird 0 statt 169 !
-      return si2 + 9;
-    case 14: // 48000 bit/s
-      return si2 + 8;
-    case 11: // 19200 bit/s
-      return si2 + 7;
-    case 9:  // 14400 bit/s
-      return si2 + 6;
-    case 8:  // 9600  bit/s
-      return si2 + 5;
-    case 5:  // 4800  bit/s
-      return si2 + 4;
-    case 3:  // 2400  bit/s
-      return si2 + 3;
-    case 23: // 75/1200 bit/s
-      return si2 + 2;
-    case 24: // 1200/75 bit/s
-      return si2 + 1;
-    default: // 1200 bit/s
-      return si2;
-  }
+	u_char info;
+
+	switch (p[5]) {
+		case 66:	// 1200 bit/s
+
+			break;	// si2 don't change
+
+		case 88:	// 1200/75 bit/s
+
+			si2 += 1;
+			break;
+		case 87:	// 75/1200 bit/s
+
+			si2 += 2;
+			break;
+		case 67:	// 2400 bit/s
+
+			si2 += 3;
+			break;
+		case 69:	// 4800 bit/s
+
+			si2 += 4;
+			break;
+		case 72:	// 9600 bit/s
+
+			si2 += 5;
+			break;
+		case 73:	// 14400 bit/s
+
+			si2 += 6;
+			break;
+		case 75:	// 19200 bit/s
+
+			si2 += 7;
+			break;
+	}
+
+	info = p[7] & 0x7f;
+	if ((info & 16) && (!(info & 8)))	// 7 data bits
+
+		si2 += 32;	// else 8 data bits
+
+	if ((info & 96) == 96)	// 2 stop bits
+
+		si2 += 16;	// else 1 stop bit
+
+	if ((info & 2) && (!(info & 1)))	// even parity
+
+		si2 += 8;	// else no parity
+
+	return si2;
 }
 
-static u_char DecodeSI2(struct sk_buff *skb)
-{ u_char *p; //, *pend=skb->data + skb->len;
 
-        if ((p = findie(skb->data, skb->len, 0x7c, 0)))
-        {
-          switch (p[4] & 0x0f)
-          {
-            case 0x01:  if (p[1] == 0x04) // sync. Bitratenadaption
-                          return DecodeSyncParams(160, p[5]); // V.110/X.30
-                        else if (p[1] == 0x06) // async. Bitratenadaption
-                          return DecodeASyncParams(192, p);   // V.110/X.30
-                        break;
-            case 0x08:  // if (p[5] == 0x02) // sync. Bitratenadaption
-                          return DecodeSyncParams(176, p[5]); // V.120
-                        break;
-          }
-        }
-        return 0;
+static u_char
+DecodeSyncParams(u_char si2, u_char info)
+{
+	info &= 0x7f;
+	switch (info) {
+		case 40:	// bit/s negotiation failed  ai := 165 not 175!
+
+			return si2 + 15;
+		case 15:	// 56000 bit/s failed, ai := 0 not 169 !
+
+			return si2 + 9;
+		case 14:	// 48000 bit/s
+
+			return si2 + 8;
+		case 11:	// 19200 bit/s
+
+			return si2 + 7;
+		case 9:	// 14400 bit/s
+
+			return si2 + 6;
+		case 8:	// 9600  bit/s
+
+			return si2 + 5;
+		case 5:	// 4800  bit/s
+
+			return si2 + 4;
+		case 3:	// 2400  bit/s
+
+			return si2 + 3;
+		case 23:	// 75/1200 bit/s
+
+			return si2 + 2;
+		case 24:	// 1200/75 bit/s
+
+			return si2 + 1;
+		default:	// 1200 bit/s
+
+			return si2;
+	}
+}
+
+static u_char
+DecodeSI2(struct sk_buff *skb)
+{
+	u_char *p;		//, *pend=skb->data + skb->len;
+
+	if ((p = findie(skb->data, skb->len, 0x7c, 0))) {
+		switch (p[4] & 0x0f) {
+			case 0x01:
+				if (p[1] == 0x04)	// sync. Bitratenadaption
+
+					return DecodeSyncParams(160, p[5]);	// V.110/X.30
+
+				else if (p[1] == 0x06)	// async. Bitratenadaption
+
+					return DecodeASyncParams(192, p);	// V.110/X.30
+
+				break;
+			case 0x08:	// if (p[5] == 0x02) // sync. Bitratenadaption
+
+				return DecodeSyncParams(176, p[5]);	// V.120
+
+				break;
+		}
+	}
+	return 0;
 }
 
 #endif
@@ -490,7 +584,7 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	/*
 	 * Set Bearer Capability, Map info from 1TR6-convention to EDSS1
 	 */
-#ifdef HISAX_EURO_SENDCOMPLETE
+#if HISAX_EURO_SENDCOMPLETE
 	*p++ = 0xa1;		/* complete indicator */
 #endif
 	switch (pc->para.setup.si1) {
@@ -550,11 +644,11 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	msn = pc->para.setup.eazmsn;
 	sub = NULL;
 	sp = msn;
-	while (*sp) { 
+	while (*sp) {
 		if ('.' == *sp) {
 			sub = sp;
 			*sp = 0;
-		} else 
+		} else
 			sp++;
 	}
 	if (*msn) {
@@ -571,20 +665,20 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	}
 	if (sub) {
 		*sub++ = '.';
-		*p++ = 0x6d; /* Calling party subaddress */
- 		*p++ = strlen(sub) + 2;
+		*p++ = 0x6d;	/* Calling party subaddress */
+		*p++ = strlen(sub) + 2;
 		*p++ = 0x80;	/* NSAP coded */
 		*p++ = 0x50;	/* local IDI format */
- 		while (*sub)
+		while (*sub)
 			*p++ = *sub++ & 0x7f;
 	}
 	sub = NULL;
 	sp = teln;
-	while (*sp) { 
+	while (*sp) {
 		if ('.' == *sp) {
 			sub = sp;
 			*sp = 0;
-		} else 
+		} else
 			sp++;
 	}
 	*p++ = 0x70;
@@ -596,33 +690,47 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 
 	if (sub) {
 		*sub++ = '.';
-		*p++ = 0x71; /* Called party subaddress */
- 		*p++ = strlen(sub) + 2;
+		*p++ = 0x71;	/* Called party subaddress */
+		*p++ = strlen(sub) + 2;
 		*p++ = 0x80;	/* NSAP coded */
 		*p++ = 0x50;	/* local IDI format */
- 		while (*sub)
+		while (*sub)
 			*p++ = *sub++ & 0x7f;
 	}
+#if EXT_BEARER_CAPS
+	if ((pc->para.setup.si2 >= 160) && (pc->para.setup.si2 <= 175)) {	// sync. Bitratenadaption, V.110/X.30
 
-#ifdef EXT_BEARER_CAPS
-        if ((pc->para.setup.si2 >= 160) && (pc->para.setup.si2 <= 175))
-        { // sync. Bitratenadaption, V.110/X.30
-          *p++ = 0x7c; *p++ = 0x04; *p++ = 0x88; *p++ = 0x90; *p++ = 0x21;
-          *p++ = EncodeSyncParams(pc->para.setup.si2 - 160, 0x80);
-        }
-        else if ((pc->para.setup.si2 >= 176) && (pc->para.setup.si2 <= 191))
-        { // sync. Bitratenadaption, V.120
-          *p++ = 0x7c; *p++ = 0x05; *p++ = 0x88; *p++ = 0x90; *p++ = 0x28;
-          *p++ = EncodeSyncParams(pc->para.setup.si2 - 176, 0);
-          *p++ = 0x82;
-        }
-        else if (pc->para.setup.si2 >= 192)
-        { // async. Bitratenadaption, V.110/X.30
-          *p++ = 0x7c; *p++ = 0x06; *p++ = 0x88; *p++ = 0x90; *p++ = 0x21;
-          p = EncodeASyncParams(p, pc->para.setup.si2 - 192);
-        } else {
-		*p++ = 0x7c; *p++ = 0x02; *p++ = 0x88; *p++ = 0x90;
-        }
+		*p++ = 0x7c;
+		*p++ = 0x04;
+		*p++ = 0x88;
+		*p++ = 0x90;
+		*p++ = 0x21;
+		*p++ = EncodeSyncParams(pc->para.setup.si2 - 160, 0x80);
+	} else if ((pc->para.setup.si2 >= 176) && (pc->para.setup.si2 <= 191)) {	// sync. Bitratenadaption, V.120
+
+		*p++ = 0x7c;
+		*p++ = 0x05;
+		*p++ = 0x88;
+		*p++ = 0x90;
+		*p++ = 0x28;
+		*p++ = EncodeSyncParams(pc->para.setup.si2 - 176, 0);
+		*p++ = 0x82;
+	} else if (pc->para.setup.si2 >= 192) {		// async. Bitratenadaption, V.110/X.30
+
+		*p++ = 0x7c;
+		*p++ = 0x06;
+		*p++ = 0x88;
+		*p++ = 0x90;
+		*p++ = 0x21;
+		p = EncodeASyncParams(p, pc->para.setup.si2 - 192);
+#if HISAX_SEND_STD_LLC_IE
+	} else {
+		*p++ = 0x7c;
+		*p++ = 0x02;
+		*p++ = 0x88;
+		*p++ = 0x90;
+#endif
+	}
 #endif
 	l = p - tmp;
 	if (!(skb = l3_alloc_skb(l)))
@@ -722,30 +830,30 @@ l3dss1_alerting(struct l3_process *pc, u_char pr, void *arg)
 static void
 l3dss1_msg_without_setup(struct l3_process *pc, u_char pr, void *arg)
 {
-  /* This routine is called if here was no SETUP made (checks in dss1up and in
-   * l3dss1_setup) and a RELEASE_COMPLETE have to be sent with an error code
-   * MT_STATUS_ENQUIRE in the NULL state is handled too
-   */
+	/* This routine is called if here was no SETUP made (checks in dss1up and in
+	 * l3dss1_setup) and a RELEASE_COMPLETE have to be sent with an error code
+	 * MT_STATUS_ENQUIRE in the NULL state is handled too
+	 */
 	u_char tmp[16];
-	u_char *p=tmp;
+	u_char *p = tmp;
 	int l;
 	struct sk_buff *skb;
 
 	switch (pc->para.cause) {
-	  case  81: /* 0x51 invalid callreference */
-	  case  88: /* 0x58 incomp destination */
-	  case  96: /* 0x60 mandory IE missing */
-	  case 101: /* 0x65 incompatible Callstate */
-	  	MsgHead(p, pc->callref, MT_RELEASE_COMPLETE);
-		*p++ = IE_CAUSE;
-		*p++ = 0x2;
-		*p++ = 0x80;
-		*p++ = pc->para.cause | 0x80;
-		break;
-	  default:
-	  	printk(KERN_ERR "HiSax internal error l3dss1_msg_without_setup\n");
-	  	return;
-	}	
+		case 81:	/* 0x51 invalid callreference */
+		case 88:	/* 0x58 incomp destination */
+		case 96:	/* 0x60 mandory IE missing */
+		case 101:	/* 0x65 incompatible Callstate */
+			MsgHead(p, pc->callref, MT_RELEASE_COMPLETE);
+			*p++ = IE_CAUSE;
+			*p++ = 0x2;
+			*p++ = 0x80;
+			*p++ = pc->para.cause | 0x80;
+			break;
+		default:
+			printk(KERN_ERR "HiSax internal error l3dss1_msg_without_setup\n");
+			return;
+	}
 	l = p - tmp;
 	if (!(skb = l3_alloc_skb(l)))
 		return;
@@ -757,7 +865,7 @@ l3dss1_msg_without_setup(struct l3_process *pc, u_char pr, void *arg)
 static void
 l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 {
-        u_char *p, *ptmp[8];
+	u_char *p, *ptmp[8];
 	int i;
 	int bcfound = 0;
 	char tmp[80];
@@ -765,9 +873,9 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 
 	/* ETS 300-104 1.3.4 and 1.3.5
 	 * we need to detect unknown inform. element from 0 to 7
-	 */	
+	 */
 	p = skb->data;
-	for(i = 0; i < 8; i++)
+	for (i = 0; i < 8; i++)
 		ptmp[i] = skb->data;
 	if (findie(ptmp[1], skb->len, 0x01, 0)
 	    || findie(ptmp[2], skb->len, 0x02, 0)
@@ -775,15 +883,14 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 	    || findie(ptmp[5], skb->len, 0x05, 0)
 	    || findie(ptmp[6], skb->len, 0x06, 0)
 	    || findie(ptmp[7], skb->len, 0x07, 0)) {
-	  	/* if ie is < 8 and not 0 nor 4, send RELEASE_COMPLETE 
-	  	 * cause 0x60
-	  	 */
-	  	pc->para.cause = 0x60;
+		/* if ie is < 8 and not 0 nor 4, send RELEASE_COMPLETE
+		 * cause 0x60
+		 */
+		pc->para.cause = 0x60;
 		dev_kfree_skb(skb, FREE_READ);
-			l3dss1_msg_without_setup(pc, pr, NULL);
+		l3dss1_msg_without_setup(pc, pr, NULL);
 		return;
 	}
-
 	/*
 	 * Channel Identification
 	 */
@@ -796,8 +903,8 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 			l3_debug(pc->st, "setup without bchannel");
 	} else {
 		if (pc->debug & L3_DEB_WARN)
-		l3_debug(pc->st, "setup without bchannel");
-	  	pc->para.cause = 0x60;
+			l3_debug(pc->st, "setup without bchannel");
+		pc->para.cause = 0x60;
 		dev_kfree_skb(skb, FREE_READ);
 		l3dss1_msg_without_setup(pc, pr, NULL);
 		return;
@@ -819,10 +926,10 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 				/* Unrestricted digital information */
 				pc->para.setup.si1 = 7;
 /* JIM, 05.11.97 I wanna set service indicator 2 */
-#ifdef EXT_BEARER_CAPS
-                                pc->para.setup.si2 = DecodeSI2(skb);
-                                printk(KERN_DEBUG "HiSax: SI=%d, AI=%d\n",
-                                       pc->para.setup.si1, pc->para.setup.si2);
+#if EXT_BEARER_CAPS
+				pc->para.setup.si2 = DecodeSI2(skb);
+				printk(KERN_DEBUG "HiSax: SI=%d, AI=%d\n",
+				 pc->para.setup.si1, pc->para.setup.si2);
 #endif
 				break;
 			case 0x09:
@@ -844,9 +951,9 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 		if (pc->debug & L3_DEB_WARN)
 			l3_debug(pc->st, "setup without bearer capabilities");
 		/* ETS 300-104 1.3.3 */
-	  	pc->para.cause = 0x60;
+		pc->para.cause = 0x60;
 		dev_kfree_skb(skb, FREE_READ);
-			l3dss1_msg_without_setup(pc, pr, NULL);
+		l3dss1_msg_without_setup(pc, pr, NULL);
 		return;
 	}
 
@@ -859,8 +966,8 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 	p = skb->data;
 	if ((p = findie(p, skb->len, 0x71, 0))) {
 		/* Called party subaddress */
-		if ((p[1]>=2) && (p[2]==0x80) && (p[3]==0x50)) {
-			tmp[0]='.';
+		if ((p[1] >= 2) && (p[2] == 0x80) && (p[3] == 0x50)) {
+			tmp[0] = '.';
 			iecpy(&tmp[1], p, 2);
 			strcat(pc->para.setup.eazmsn, tmp);
 		} else if (pc->debug & L3_DEB_WARN)
@@ -884,24 +991,23 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 	p = skb->data;
 	if ((p = findie(p, skb->len, 0x6d, 0))) {
 		/* Calling party subaddress */
-		if ((p[1]>=2) && (p[2]==0x80) && (p[3]==0x50)) {
-			tmp[0]='.';
+		if ((p[1] >= 2) && (p[2] == 0x80) && (p[3] == 0x50)) {
+			tmp[0] = '.';
 			iecpy(&tmp[1], p, 2);
 			strcat(pc->para.setup.phone, tmp);
 		} else if (pc->debug & L3_DEB_WARN)
 			l3_debug(pc->st, "wrong calling subaddress");
 	}
-
 	dev_kfree_skb(skb, FREE_READ);
 
 	if (bcfound) {
 		if ((pc->para.setup.si1 != 7) && (pc->debug & L3_DEB_WARN)) {
 			l3_debug(pc->st, "non-digital call: %s -> %s",
-				pc->para.setup.phone, pc->para.setup.eazmsn);
+			    pc->para.setup.phone, pc->para.setup.eazmsn);
 		}
 		if ((pc->para.setup.si1 != 7) &&
-			test_bit(FLG_PTP, &pc->st->l2.flag)) {
-		  	pc->para.cause = 0x58;
+		    test_bit(FLG_PTP, &pc->st->l2.flag)) {
+			pc->para.cause = 0x58;
 			l3dss1_msg_without_setup(pc, pr, NULL);
 			return;
 		}
@@ -1013,8 +1119,8 @@ l3dss1_release(struct l3_process *pc, u_char pr, void *arg)
 	}
 	p = skb->data;
 	if ((p = findie(p, skb->len, IE_FACILITY, 0))) {
-#ifdef HISAX_DE_AOC
-	    l3dss1_parse_facility(pc,p);
+#if HISAX_DE_AOC
+		l3dss1_parse_facility(pc, p);
 #else
 		p = NULL;
 #endif
@@ -1067,9 +1173,9 @@ l3dss1_status_enq(struct l3_process *pc, u_char pr, void *arg)
 static void
 l3dss1_status_req(struct l3_process *pc, u_char pr, void *arg)
 {
-  /* ETS 300-104 7.4.1, 8.4.1, 10.3.1, 11.4.1, 12.4.1, 13.4.1, 14.4.1...
-     if setup has been made and a non expected message type is received, we must send MT_STATUS cause 0x62  */
-        u_char tmp[16];
+	/* ETS 300-104 7.4.1, 8.4.1, 10.3.1, 11.4.1, 12.4.1, 13.4.1, 14.4.1...
+	   if setup has been made and a non expected message type is received, we must send MT_STATUS cause 0x62  */
+	u_char tmp[16];
 	u_char *p = tmp;
 	int l;
 	struct sk_buff *skb = arg;
@@ -1081,7 +1187,7 @@ l3dss1_status_req(struct l3_process *pc, u_char pr, void *arg)
 	*p++ = IE_CAUSE;
 	*p++ = 0x2;
 	*p++ = 0x80;
-	*p++ = 0x62 | 0x80;		/* status sending */
+	*p++ = 0x62 | 0x80;	/* status sending */
 
 	*p++ = 0x14;		/* CallState */
 	*p++ = 0x1;
@@ -1104,10 +1210,10 @@ l3dss1_release_ind(struct l3_process *pc, u_char pr, void *arg)
 
 	if ((p = findie(p, skb->len, IE_CALL_STATE, 0))) {
 		p++;
-		if (1== *p++)
+		if (1 == *p++)
 			callState = *p;
 	}
-	if(callState == 0) {
+	if (callState == 0) {
 		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1... and 16.1
 		 * set down layer 3 without sending any message
 		 */
@@ -1211,8 +1317,8 @@ static void
 l3dss1_t318(struct l3_process *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
-	pc->para.cause = 0x66; /* Timer expiry */
-	pc->para.loc = 0; /* local */
+	pc->para.cause = 0x66;	/* Timer expiry */
+	pc->para.loc = 0;	/* local */
 	pc->st->l3.l3l4(pc->st, CC_RESUME_ERR, pc);
 	newl3state(pc, 19);
 	l3dss1_message(pc, MT_RELEASE);
@@ -1223,8 +1329,8 @@ static void
 l3dss1_t319(struct l3_process *pc, u_char pr, void *arg)
 {
 	L3DelTimer(&pc->timer);
-	pc->para.cause = 0x66; /* Timer expiry */
-	pc->para.loc = 0; /* local */
+	pc->para.cause = 0x66;	/* Timer expiry */
+	pc->para.loc = 0;	/* local */
 	pc->st->l3.l3l4(pc->st, CC_SUSPEND_ERR, pc);
 	newl3state(pc, 10);
 }
@@ -1252,30 +1358,30 @@ l3dss1_status(struct l3_process *pc, u_char pr, void *arg)
 	if ((p = findie(p, skb->len, IE_CAUSE, 0))) {
 		p++;
 		l = *p++;
-		t += sprintf(t,"Status CR %x Cause:", pc->callref);
+		t += sprintf(t, "Status CR %x Cause:", pc->callref);
 		while (l--) {
-		        cause = *p;
-			t += sprintf(t," %2x",*p++);
+			cause = *p;
+			t += sprintf(t, " %2x", *p++);
 		}
 	} else
-		sprintf(t,"Status CR %x no Cause", pc->callref);
+		sprintf(t, "Status CR %x no Cause", pc->callref);
 	l3_debug(pc->st, tmp);
 	p = skb->data;
 	t = tmp;
-	t += sprintf(t,"Status state %x ", pc->state);
+	t += sprintf(t, "Status state %x ", pc->state);
 	if ((p = findie(p, skb->len, IE_CALL_STATE, 0))) {
 		p++;
-		if (1== *p++) {
-		        callState = *p;
-			t += sprintf(t,"peer state %x" , *p);
+		if (1 == *p++) {
+			callState = *p;
+			t += sprintf(t, "peer state %x", *p);
 		} else
-			t += sprintf(t,"peer state len error");
+			t += sprintf(t, "peer state len error");
 	} else
-		sprintf(t,"no peer state");
+		sprintf(t, "no peer state");
 	l3_debug(pc->st, tmp);
-	if(((cause & 0x7f) == 0x6f) && (callState == 0)) {
-		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1... 
-		 * if received MT_STATUS with cause == 0x6f and call 
+	if (((cause & 0x7f) == 0x6f) && (callState == 0)) {
+		/* ETS 300-104 7.6.1, 8.6.1, 10.6.1...
+		 * if received MT_STATUS with cause == 0x6f and call
 		 * state == 0, then we must set down layer 3
 		 */
 		l3dss1_release_ind(pc, pr, arg);
@@ -1286,13 +1392,13 @@ l3dss1_status(struct l3_process *pc, u_char pr, void *arg)
 static void
 l3dss1_facility(struct l3_process *pc, u_char pr, void *arg)
 {
-        u_char *p;
+	u_char *p;
 	struct sk_buff *skb = arg;
 
 	p = skb->data;
 	if ((p = findie(p, skb->len, IE_FACILITY, 0))) {
-#ifdef HISAX_DE_AOC
-	    l3dss1_parse_facility(pc,p);
+#if HISAX_DE_AOC
+		l3dss1_parse_facility(pc, p);
 #else
 		p = NULL;
 #endif
@@ -1305,21 +1411,21 @@ l3dss1_suspend_req(struct l3_process *pc, u_char pr, void *arg)
 	struct sk_buff *skb;
 	u_char tmp[32];
 	u_char *p = tmp;
-	u_char i,l;
+	u_char i, l;
 	u_char *msg = pc->chan->setup.phone;
 
 	MsgHead(p, pc->callref, MT_SUSPEND);
-	
+
 	*p++ = IE_CALLID;
 	l = *msg++;
-	if (l && (l<=10)) { /* Max length 10 octets */
+	if (l && (l <= 10)) {	/* Max length 10 octets */
 		*p++ = l;
-		for (i=0;i<l;i++)
+		for (i = 0; i < l; i++)
 			*p++ = *msg++;
 	} else {
 		l3_debug(pc->st, "SUS wrong CALLID len %d", l);
 		return;
-        }
+	}
 	l = p - tmp;
 	if (!(skb = l3_alloc_skb(l)))
 		return;
@@ -1369,21 +1475,21 @@ l3dss1_resume_req(struct l3_process *pc, u_char pr, void *arg)
 	struct sk_buff *skb;
 	u_char tmp[32];
 	u_char *p = tmp;
-	u_char i,l;
+	u_char i, l;
 	u_char *msg = pc->para.setup.phone;
 
 	MsgHead(p, pc->callref, MT_RESUME);
-	
+
 	*p++ = IE_CALLID;
 	l = *msg++;
-	if (l && (l<=10)) { /* Max length 10 octets */
+	if (l && (l <= 10)) {	/* Max length 10 octets */
 		*p++ = l;
-		for (i=0;i<l;i++)
+		for (i = 0; i < l; i++)
 			*p++ = *msg++;
 	} else {
 		l3_debug(pc->st, "RES wrong CALLID len %d", l);
 		return;
-        }
+	}
 	l = p - tmp;
 	if (!(skb = l3_alloc_skb(l)))
 		return;
@@ -1433,23 +1539,23 @@ l3dss1_resume_rej(struct l3_process *pc, u_char pr, void *arg)
 	pc->st->l3.l3l4(pc->st, CC_RESUME_ERR, pc);
 	release_l3_process(pc);
 }
-	
+
 static void
 l3dss1_global_restart(struct l3_process *pc, u_char pr, void *arg)
 {
 	u_char tmp[32];
 	u_char *p;
-	u_char ri, ch=0, chan=0;
+	u_char ri, ch = 0, chan = 0;
 	int l;
 	struct sk_buff *skb = arg;
 	struct l3_process *up;
-	
+
 	newl3state(pc, 2);
 	L3DelTimer(&pc->timer);
 	p = skb->data;
 	if ((p = findie(p, skb->len, IE_RESTART_IND, 0))) {
-	        ri = p[2];
-	        	l3_debug(pc->st, "Restart %x", ri);
+		ri = p[2];
+		l3_debug(pc->st, "Restart %x", ri);
 	} else {
 		l3_debug(pc->st, "Restart without restart IE");
 		ri = 0x86;
@@ -1458,17 +1564,17 @@ l3dss1_global_restart(struct l3_process *pc, u_char pr, void *arg)
 	if ((p = findie(p, skb->len, IE_CHANNEL_ID, 0))) {
 		chan = p[2] & 3;
 		ch = p[2];
-	        if (pc->st->l3.debug)
+		if (pc->st->l3.debug)
 			l3_debug(pc->st, "Restart for channel %d", chan);
 	}
 	dev_kfree_skb(skb, FREE_READ);
 	newl3state(pc, 2);
 	up = pc->st->l3.proc;
 	while (up) {
-		if ((ri & 7)==7)
+		if ((ri & 7) == 7)
 			up->st->lli.l4l3(up->st, CC_RESTART | REQUEST, up);
 		else if (up->para.bchannel == chan)
-				up->st->lli.l4l3(up->st, CC_RESTART | REQUEST, up);
+			up->st->lli.l4l3(up->st, CC_RESTART | REQUEST, up);
 		up = up->next;
 	}
 	p = tmp;
@@ -1478,7 +1584,7 @@ l3dss1_global_restart(struct l3_process *pc, u_char pr, void *arg)
 		*p++ = 1;
 		*p++ = ch | 0x80;
 	}
-	*p++ = 0x79; /* RESTART Ind */
+	*p++ = 0x79;		/* RESTART Ind */
 	*p++ = 1;
 	*p++ = ri;
 	l = p - tmp;
@@ -1488,7 +1594,6 @@ l3dss1_global_restart(struct l3_process *pc, u_char pr, void *arg)
 	newl3state(pc, 0);
 	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 }
-
 /* *INDENT-OFF* */
 static struct stateentry downstatelist[] =
 {
@@ -1597,34 +1702,24 @@ static int datasllen = sizeof(datastatelist) / sizeof(struct stateentry);
 static struct stateentry globalmes_list[] =
 {
 	{ALL_STATES,
-         MT_STATUS, l3dss1_status},
+	 MT_STATUS, l3dss1_status},
 	{SBIT(0),
 	 MT_RESTART, l3dss1_global_restart},
 /*	{SBIT(1),
-	 MT_RESTART_ACKNOWLEDGE, l3dss1_restart_ack},                                  
+	 MT_RESTART_ACKNOWLEDGE, l3dss1_restart_ack},
 */
 };
 static int globalm_len = sizeof(globalmes_list) / sizeof(struct stateentry);
 
-#if 0
-static struct stateentry globalcmd_list[] =
-{
-	{ALL_STATES,
-         CC_STATUS | REQUEST, l3dss1_status_req},
-	{SBIT(0),
-	 CC_RESTART | REQUEST, l3dss1_restart_req},
-};
-
-static int globalc_len = sizeof(globalcmd_list) / sizeof(struct stateentry);
-#endif
 /* *INDENT-ON* */
+
 
 static void
 global_handler(struct PStack *st, int mt, struct sk_buff *skb)
 {
 	int i;
 	struct l3_process *proc = st->l3.global;
-	
+
 	for (i = 0; i < globalm_len; i++)
 		if ((mt == globalmes_list[i].primitive) &&
 		    ((1 << proc->state) & globalmes_list[i].state))
@@ -1668,18 +1763,18 @@ dss1up(struct PStack *st, int pr, void *arg)
 	if (skb->data[0] != PROTO_DIS_EURO) {
 		if (st->l3.debug & L3_DEB_PROTERR) {
 			l3_debug(st, "dss1up%sunexpected discriminator %x message len %d",
-				(pr == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
-				skb->data[0], skb->len);
+				 (pr == (DL_DATA | INDICATION)) ? " " : "(broadcast) ",
+				 skb->data[0], skb->len);
 		}
 		dev_kfree_skb(skb, FREE_READ);
 		return;
 	}
 	cr = getcallref(skb->data);
 	mt = skb->data[skb->data[1] + 2];
-	if (!cr) {				/* Global CallRef */
+	if (!cr) {		/* Global CallRef */
 		global_handler(st, mt, skb);
 		return;
-	} else if (cr == -1) {			/* Dummy Callref */
+	} else if (cr == -1) {	/* Dummy Callref */
 		dev_kfree_skb(skb, FREE_READ);
 		return;
 	} else if (!(proc = getl3proc(st, cr))) {
@@ -1687,7 +1782,7 @@ dss1up(struct PStack *st, int pr, void *arg)
 		 * this callreference is active
 		 */
 		if (mt == MT_SETUP) {
-		/* Setup creates a new transaction process */
+			/* Setup creates a new transaction process */
 			if (!(proc = new_l3_process(st, cr))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
@@ -1698,14 +1793,14 @@ dss1up(struct PStack *st, int pr, void *arg)
 			}
 		} else if (mt == MT_STATUS) {
 			cause = 0;
-			if((ptr = findie(skb->data, skb->len, IE_CAUSE, 0)) != NULL) {
-				  ptr++;
-				  if (*ptr++ == 2)
-				  	ptr++;
-				  cause = *ptr & 0x7f;
+			if ((ptr = findie(skb->data, skb->len, IE_CAUSE, 0)) != NULL) {
+				ptr++;
+				if (*ptr++ == 2)
+					ptr++;
+				cause = *ptr & 0x7f;
 			}
 			callState = 0;
-			if((ptr = findie(skb->data, skb->len, IE_CALL_STATE, 0)) != NULL) {
+			if ((ptr = findie(skb->data, skb->len, IE_CALL_STATE, 0)) != NULL) {
 				ptr++;
 				if (*ptr++ == 2)
 					ptr++;
@@ -1721,28 +1816,28 @@ dss1up(struct PStack *st, int pr, void *arg)
 				return;
 			} else {
 				/* ETS 300-104 part 2.4.2
-				 * if setup has not been made and a message type 
+				 * if setup has not been made and a message type
 				 * MT_STATUS is received with call state != 0,
 				 * we must send MT_RELEASE_COMPLETE cause 101
 				 */
 				dev_kfree_skb(skb, FREE_READ);
 				if ((proc = new_l3_process(st, cr))) {
-					proc->para.cause = 0x65; /* 101 */
+					proc->para.cause = 0x65;	/* 101 */
 					l3dss1_msg_without_setup(proc, 0, NULL);
 				}
 				return;
 			}
-		} else if (mt == MT_RELEASE_COMPLETE){
+		} else if (mt == MT_RELEASE_COMPLETE) {
 			dev_kfree_skb(skb, FREE_READ);
 			return;
 		} else {
 			/* ETS 300-104 part 2
-			 * if setup has not been made and a message type 
+			 * if setup has not been made and a message type
 			 * (except MT_SETUP and RELEASE_COMPLETE) is received,
 			 * we must send MT_RELEASE_COMPLETE cause 81 */
 			dev_kfree_skb(skb, FREE_READ);
 			if ((proc = new_l3_process(st, cr))) {
-				proc->para.cause = 0x51; /* 81 */
+				proc->para.cause = 0x51;	/* 81 */
 				l3dss1_msg_without_setup(proc, 0, NULL);
 			}
 			return;
@@ -1753,9 +1848,8 @@ dss1up(struct PStack *st, int pr, void *arg)
 		 * if setup has been made and invalid message type is received,
 		 * we must send MT_STATUS cause 0x62
 		 */
-		mt = MT_INVALID;  /* sorry, not clean, but do the right thing ;-) */
+		mt = MT_INVALID;	/* sorry, not clean, but do the right thing ;-) */
 	}
-
 	for (i = 0; i < datasllen; i++)
 		if ((mt == datastatelist[i].primitive) &&
 		    ((1 << proc->state) & datastatelist[i].state))
@@ -1785,7 +1879,7 @@ dss1down(struct PStack *st, int pr, void *arg)
 	struct l3_process *proc;
 	struct Channel *chan;
 
-	if (((DL_ESTABLISH | REQUEST)== pr) || ((DL_RELEASE | REQUEST)== pr)) {
+	if (((DL_ESTABLISH | REQUEST) == pr) || ((DL_RELEASE | REQUEST) == pr)) {
 		l3_msg(st, pr, NULL);
 		return;
 	} else if (((CC_SETUP | REQUEST) == pr) || ((CC_RESUME | REQUEST) == pr)) {

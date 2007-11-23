@@ -1,5 +1,12 @@
 L_OBJS :=
 M_OBJS :=
+LX_OBJS :=
+MX_OBJS :=
+O_OBJS :=
+OX_OBJS :=
+L_TARGET :=
+O_TARGET :=
+
 O_OBJS := isdnl1.o tei.o isdnl2.o isdnl3.o \
           lmgr.o q931.o callc.o fsm.o
 
@@ -52,6 +59,18 @@ ifeq ($(CONFIG_HISAX_AVM_A1),y)
 	 ISAC_OBJ := isac.o
 	 HSCX_OBJ := hscx.o
 endif
+
+ifeq ($(CONFIG_HISAX_AVM_A1_PCMCIA),y)
+	 O_OBJS += avm_a1p.o
+ 	 ISAC_OBJ := isac.o
+	 HSCX_OBJ := hscx.o
+endif
+ 
+ifeq ($(CONFIG_HISAX_FRITZPCI),y)
+	 O_OBJS += avm_pci.o
+ 	 ISAC_OBJ := isac.o
+endif
+
 
 ifeq ($(CONFIG_HISAX_ELSA),y)
 	 O_OBJS += elsa.o
@@ -118,7 +137,8 @@ ifeq ($(CONFIG_HISAX_NICCY),y)
 	 HSCX_OBJ := hscx.o
 endif
 
-O_OBJS += $(ISAC_OBJ) $(HSCX_OBJ) $(HFC_OBJ) $(HFC_2BDS0) $(ARCOFI_OBJ)
+O_OBJS += $(ISAC_OBJ) $(HSCX_OBJ) $(ARCOFI_OBJ) 
+O_OBJS += $(HFC_OBJ) $(HFC_2BDS0)
 OX_OBJS += config.o
 
 O_TARGET :=

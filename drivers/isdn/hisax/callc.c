@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 1.30.2.9 1998/05/27 18:04:53 keil Exp $
+/* $Id: callc.c,v 1.30.2.11 1998/09/30 22:20:05 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,6 +7,12 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 1.30.2.11  1998/09/30 22:20:05  keil
+ * Cosmetics
+ *
+ * Revision 1.30.2.10  1998/09/27 13:05:35  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.30.2.9  1998/05/27 18:04:53  keil
  * HiSax 3.0
  *
@@ -71,7 +77,7 @@ extern long mod_use_count_;
 #define MOD_USE_COUNT mod_use_count_
 #endif				/* MODULE */
 
-const char *lli_revision = "$Revision: 1.30.2.9 $";
+const char *lli_revision = "$Revision: 1.30.2.11 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -87,7 +93,7 @@ static struct Fsm callcfsm =
 static int chancount = 0;
 
 /* experimental REJECT after ALERTING for CALLBACK to beat the 4s delay */ 
-#define ALERT_REJECT 1
+#define ALERT_REJECT 0
 
 /* Value to delay the sending of the first B-channel paket after CONNECT
  * here is no value given by ITU, but experience shows that 300 ms will
@@ -1260,7 +1266,7 @@ dchan_l3l4(struct PStack *st, int pr, void *arg)
 			chanp++;
 			i++;
 		}
-			return;
+		return;
 	} else if (pr == (CC_SETUP | INDICATION)) {
 		if (!(chanp = selectfreechannel(pc->st))) {
 			pc->st->lli.l4l3(pc->st, CC_DLRL | REQUEST, pc);
@@ -1269,9 +1275,11 @@ dchan_l3l4(struct PStack *st, int pr, void *arg)
 			pc->chan = chanp;
 			FsmEvent(&chanp->fi, EV_SETUP_IND, NULL);
 		}
-			return;
-		}
-	chanp = pc->chan;
+		return;
+	}
+	if (!(chanp = pc->chan))
+		return;
+	
 	switch (pr) {
 		case (CC_DISCONNECT | INDICATION):
 			FsmEvent(&chanp->fi, EV_DISCONNECT_IND, NULL);
@@ -1318,7 +1326,7 @@ dchan_l3l4(struct PStack *st, int pr, void *arg)
 		default:
 			if (chanp->debug & 0x800) {
 				jiftime(tm, jiffies);
-				sprintf(tmp, "%s Channel %d L3->L4 unknown primitiv %d\n",
+				sprintf(tmp, "%s Channel %d L3->L4 unknown primitiv %x\n",
 					tm, chanp->chan, pr);
 				HiSax_putstatus(chanp->cs, tmp);
 			}
@@ -1344,10 +1352,7 @@ init_d_st(struct Channel *chanp)
 	st->l2.window = 1;
 	st->l2.T200 = 1000;	/* 1000 milliseconds  */
 	st->l2.N200 = 3;	/* try 3 times        */
-	if (st->protocol == ISDN_PTYPE_1TR6)
-		st->l2.T203 = 10000;	/* 10000 milliseconds */
-	else
-		st->l2.T203 = 10000;	/* 5000 milliseconds  */
+	st->l2.T203 = 10000;	/* 10000 milliseconds */
 	if (test_bit(FLG_TWO_DCHAN, &cs->HW_Flags))
 		sprintf(tmp, "DCh%d Q.921", chanp->chan);
 	else
@@ -1433,9 +1438,9 @@ CallcNewChan(struct IsdnCardState *csta)
 	printk(KERN_INFO "HiSax: 2 channels added\n");
 	if (test_bit(FLG_PTP, &csta->channel->d_st->l2.flag)) {
 		printk(KERN_INFO "LAYER2 WATCHING ESTABLISH\n");
-	test_and_set_bit(FLG_START_D, &csta->channel->Flags);
-	csta->channel->d_st->lli.l4l3(csta->channel->d_st,
-		DL_ESTABLISH | REQUEST, NULL);
+		test_and_set_bit(FLG_START_D, &csta->channel->Flags);
+		csta->channel->d_st->lli.l4l3(csta->channel->d_st,
+			DL_ESTABLISH | REQUEST, NULL);
 	}
 	return (2);
 }
@@ -1501,7 +1506,7 @@ lldata_handler(struct PStack *st, int pr, void *arg)
 			FsmEvent(&chanp->fi, EV_BC_REL, NULL);
 			break;
 		default:
-			printk(KERN_WARNING "lldata_handler unknown primitive %d\n",
+			printk(KERN_WARNING "lldata_handler unknown primitive %x\n",
 			       pr);
 			break;
 	}
@@ -1531,7 +1536,7 @@ lltrans_handler(struct PStack *st, int pr, void *arg)
 			FsmEvent(&chanp->fi, EV_BC_REL, NULL);
 			break;
 		default:
-			printk(KERN_WARNING "lltrans_handler unknown primitive %d\n",
+			printk(KERN_WARNING "lltrans_handler unknown primitive %x\n",
 			       pr);
 			break;
 	}
@@ -1558,7 +1563,10 @@ init_b_st(struct Channel *chanp, int incoming)
 	char tmp[128];
 
 	st->l1.hardware = cs;
-	chanp->bcs->mode = 2;
+	if (chanp->leased)
+		st->l1.bc = chanp->chan & 1;
+	else
+		st->l1.bc = chanp->proc->para.bchannel - 1;
 	switch (chanp->l2_active_protocol) {
 		case (ISDN_PROTO_L2_X75I):
 		case (ISDN_PROTO_L2_HDLC):
@@ -1607,10 +1615,6 @@ init_b_st(struct Channel *chanp, int incoming)
 			setstack_l3bc(st, chanp);
 			break;
 	}
-			if (chanp->leased)
-				st->l1.bc = chanp->chan & 1;
-			else
-				st->l1.bc = chanp->proc->para.bchannel - 1;
 	return (0);
 }
 
@@ -1631,7 +1635,7 @@ leased_l4l3(struct PStack *st, int pr, void *arg)
 		case (DL_RELEASE | REQUEST):
 			break;
 		default:
-			printk(KERN_WARNING "transd_l4l3 unknown primitive %d\n",
+			printk(KERN_WARNING "transd_l4l3 unknown primitive %x\n",
 			       pr);
 			break;
 	}
@@ -1666,7 +1670,7 @@ leased_l1l2(struct PStack *st, int pr, void *arg)
 			break;
 		default:
 			printk(KERN_WARNING
-				"transd_l1l2 unknown primitive %d\n", pr);
+				"transd_l1l2 unknown primitive %x\n", pr);
 			break;
 	}
 }
@@ -1761,7 +1765,8 @@ HiSax_command(isdn_ctrl * ic)
 	struct Channel *chanp;
 	char tmp[128];
 	int i;
-	unsigned int num;
+	u_int num;
+	u_long adr;
 
 	if (!csta) {
 		printk(KERN_ERR
@@ -1784,12 +1789,21 @@ HiSax_command(isdn_ctrl * ic)
 			}
 			chanp->l2_protocol = ic->arg >> 8;
 			break;
+		case (ISDN_CMD_SETL3):
+			chanp = csta->channel + (ic->arg & 0xff);
+			if (chanp->debug & 1) {
+				sprintf(tmp, "SETL3 card %d %ld", csta->cardnr + 1,
+					ic->arg >> 8);
+				link_debug(chanp, tmp, 1);
+			}
+			chanp->l3_protocol = ic->arg >> 8;
+			break;
 		case (ISDN_CMD_DIAL):
 			chanp = csta->channel + (ic->arg & 0xff);
 			if (chanp->debug & 1) {
 				sprintf(tmp, "DIAL %s -> %s (%d,%d)",
 					ic->parm.setup.eazmsn, ic->parm.setup.phone,
-				 ic->parm.setup.si1, ic->parm.setup.si2);
+					ic->parm.setup.si1, ic->parm.setup.si2);
 				link_debug(chanp, tmp, 1);
 			}
 			chanp->setup = ic->parm.setup;
@@ -1839,7 +1853,7 @@ HiSax_command(isdn_ctrl * ic)
 						lli_got_manufacturer(chanp, csta, &ic->parm.cmsg);
 					break;
 				default:
-			break;
+					break;
 			}
 			break;
 #endif
@@ -1924,13 +1938,25 @@ HiSax_command(isdn_ctrl * ic)
 							PH_TESTLOOP | REQUEST, (void *) (long)num);
 					break;
 				case (7):	/* set card in PTP mode */
+					num = *(unsigned int *) ic->parm.num;
 					if (test_bit(FLG_TWO_DCHAN, &csta->HW_Flags)) {
 						printk(KERN_ERR "HiSax PTP mode only with one TEI possible\n");
-					} else {
+					} else if (num) {
 						test_and_set_bit(FLG_PTP, &csta->channel[0].d_st->l2.flag);
 						test_and_set_bit(FLG_FIXED_TEI, &csta->channel[0].d_st->l2.flag);
 						csta->channel[0].d_st->l2.tei = 0;
 						sprintf(tmp, "set card in PTP mode\n");
+						HiSax_putstatus(csta, tmp);
+						printk(KERN_DEBUG "HiSax: %s", tmp);
+						printk(KERN_INFO "LAYER2 WATCHING ESTABLISH\n");
+						test_and_set_bit(FLG_START_D, &csta->channel[0].Flags);
+						test_and_set_bit(FLG_START_D, &csta->channel[1].Flags);
+						csta->channel[0].d_st->lli.l4l3(csta->channel[0].d_st,
+							DL_ESTABLISH | REQUEST, NULL);
+					} else {
+						test_and_clear_bit(FLG_PTP, &csta->channel[0].d_st->l2.flag);
+						test_and_clear_bit(FLG_FIXED_TEI, &csta->channel[0].d_st->l2.flag);
+						sprintf(tmp, "set card in PTMP mode\n");
 						HiSax_putstatus(csta, tmp);
 						printk(KERN_DEBUG "HiSax: %s", tmp);
 					}
@@ -1944,6 +1970,11 @@ HiSax_command(isdn_ctrl * ic)
 					sprintf(tmp, "set card in FIXED TEI (%d) mode\n", num);
 					HiSax_putstatus(csta, tmp);
 					printk(KERN_DEBUG "HiSax: %s", tmp);
+					break;
+				case (9): /* load firmware */
+					memcpy(&adr, ic->parm.num, sizeof(ulong));
+					csta->cardmsg(csta, CARD_LOAD_FIRM,
+						(void *) adr);
 					break;
 #ifdef MODULE
 				case (55):

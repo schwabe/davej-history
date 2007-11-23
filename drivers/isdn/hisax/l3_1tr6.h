@@ -1,8 +1,11 @@
-/* $Id: l3_1tr6.h,v 1.1.2.1 1997/10/17 22:14:15 keil Exp $
+/* $Id: l3_1tr6.h,v 1.1.2.2 1998/09/27 13:06:46 keil Exp $
  *
  *  German 1TR6 D-channel protocol defines
  *
  * $Log: l3_1tr6.h,v $
+ * Revision 1.1.2.2  1998/09/27 13:06:46  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.1.2.1  1997/10/17 22:14:15  keil
  * update to last hisax version
  *
@@ -67,6 +70,7 @@
 #define MT_N1_REG_ACK 0x6C
 #define MT_N1_REG_REJ 0x6F
 #define MT_N1_STAT 0x63
+#define MT_N1_INVALID 0
 
 /*
  * W Elemente

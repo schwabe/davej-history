@@ -1,4 +1,4 @@
-/* $Id: avm_a1.c,v 1.6.2.10 1998/05/27 18:04:50 keil Exp $
+/* $Id: avm_a1.c,v 1.6.2.11 1998/09/27 13:05:30 keil Exp $
 
  * avm_a1.c     low level stuff for AVM A1 (Fritz) isdn cards
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: avm_a1.c,v $
+ * Revision 1.6.2.11  1998/09/27 13:05:30  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.6.2.10  1998/05/27 18:04:50  keil
  * HiSax 3.0
  *
@@ -60,7 +63,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *avm_revision = "$Revision: 1.6.2.10 $";
+static const char *avm_revision = "$Revision: 1.6.2.11 $";
 
 #define	 AVM_A1_STAT_ISAC	0x01
 #define	 AVM_A1_STAT_HSCX	0x02

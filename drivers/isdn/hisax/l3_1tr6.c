@@ -1,4 +1,4 @@
-/* $Id: l3_1tr6.c,v 1.11.2.3 1998/05/27 18:06:04 keil Exp $
+/* $Id: l3_1tr6.c,v 1.11.2.4 1998/09/27 13:06:42 keil Exp $
 
  *  German 1TR6 D-channel protocol
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: l3_1tr6.c,v $
+ * Revision 1.11.2.4  1998/09/27 13:06:42  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.11.2.3  1998/05/27 18:06:04  keil
  * HiSax 3.0
  *
@@ -38,7 +41,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *l3_1tr6_revision = "$Revision: 1.11.2.3 $";
+const char *l3_1tr6_revision = "$Revision: 1.11.2.4 $";
 
 #define MsgHead(ptr, cref, mty, dis) \
 	*ptr++ = dis; \
@@ -56,66 +59,34 @@ l3_1TR6_message(struct l3_process *pc, u_char mt, u_char pd)
 		return;
 	p = skb_put(skb, 4);
 	MsgHead(p, pc->callref, mt, pd);
-	pc->st->l3.l3l2(pc->st, DL_DATA | REQUEST, skb);
+	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 }
 
-static int
-l31tr6_check_messagetype_validity(int mt, int pd) {
-/* verify if a message type exists */
+static void
+l3_1tr6_release_req(struct l3_process *pc, u_char pr, void *arg)
+{
+	StopAllL3Timer(pc);
+	newl3state(pc, 19);
+	l3_1TR6_message(pc, MT_N1_REL, PROTO_DIS_N1);
+	L3AddTimer(&pc->timer, T308, CC_T308_1);
+}
 
-	if (pd == PROTO_DIS_N0)
-		switch(mt) {
-		   case MT_N0_REG_IND:
-		   case MT_N0_CANC_IND:
-		   case MT_N0_FAC_STA:
-		   case MT_N0_STA_ACK:
-		   case MT_N0_STA_REJ:
-		   case MT_N0_FAC_INF:
-		   case MT_N0_INF_ACK:
-		   case MT_N0_INF_REJ:
-		   case MT_N0_CLOSE:
-		   case MT_N0_CLO_ACK:
-			return(1);
-		   default:
-			return(0);
-		}
-	else if (pd == PROTO_DIS_N1)
-		switch(mt) {
-		   case MT_N1_ESC:
-		   case MT_N1_ALERT:
-		   case MT_N1_CALL_SENT:
-		   case MT_N1_CONN:
-		   case MT_N1_CONN_ACK:
-		   case MT_N1_SETUP:
-		   case MT_N1_SETUP_ACK:
-		   case MT_N1_RES:
-		   case MT_N1_RES_ACK:
-		   case MT_N1_RES_REJ:
-		   case MT_N1_SUSP:
-		   case MT_N1_SUSP_ACK:
-		   case MT_N1_SUSP_REJ:
-		   case MT_N1_USER_INFO:
-		   case MT_N1_DET:
-		   case MT_N1_DISC:
-		   case MT_N1_REL:
-		   case MT_N1_REL_ACK:
-		   case MT_N1_CANC_ACK:
-		   case MT_N1_CANC_REJ:
-		   case MT_N1_CON_CON:
-		   case MT_N1_FAC:
-		   case MT_N1_FAC_ACK:
-		   case MT_N1_FAC_CAN:
-		   case MT_N1_FAC_REG:
-		   case MT_N1_FAC_REJ:
-		   case MT_N1_INFO:
-		   case MT_N1_REG_ACK:
-		   case MT_N1_REG_REJ:
-		   case MT_N1_STAT:
-		   	return (1);
-		   default:
-		   	return(0);
-		}
-	return(0);
+static void
+l3_1tr6_invalid(struct l3_process *pc, u_char pr, void *arg)
+{
+	struct sk_buff *skb = arg;
+
+	dev_kfree_skb(skb, FREE_READ);
+	l3_1tr6_release_req(pc, 0, NULL);
+}
+
+static void
+l3_1tr6_error(struct l3_process *pc, u_char *msg, struct sk_buff *skb)
+{
+	dev_kfree_skb(skb, FREE_READ);
+	if (pc->st->l3.debug & L3_DEB_WARN)
+		l3_debug(pc->st, msg);
+	l3_1tr6_release_req(pc, 0, NULL);
 }
 
 static void
@@ -204,7 +175,7 @@ l3_1tr6_setup_req(struct l3_process *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	L3AddTimer(&pc->timer, T303, CC_T303);
 	newl3state(pc, 1);
-	pc->st->l3.l3l2(pc->st, DL_DATA | REQUEST, skb);
+	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 }
 
 static void
@@ -220,17 +191,29 @@ l3_1tr6_setup(struct l3_process *pc, u_char pr, void *arg)
 	/* Channel Identification */
 	p = skb->data;
 	if ((p = findie(p, skb->len, WE0_chanID, 0))) {
-		pc->para.bchannel = p[2] & 0x3;
-		bcfound++;
-	} else if (pc->st->l3.debug & L3_DEB_WARN)
-		l3_debug(pc->st, "setup without bchannel");
+		if (p[1] != 1) {
+			l3_1tr6_error(pc, "setup wrong chanID len", skb);
+			return;
+		}
+		if ((p[2] & 0xf4) != 0x80) {
+			l3_1tr6_error(pc, "setup wrong WE0_chanID", skb);
+			return;
+		}
+		if ((pc->para.bchannel = p[2] & 0x3))
+				bcfound++;
+	} else {
+		l3_1tr6_error(pc, "missing setup chanID", skb);
+		return;
+	}
 
 	p = skb->data;
 	if ((p = findie(p, skb->len, WE6_serviceInd, 6))) {
 		pc->para.setup.si1 = p[2];
 		pc->para.setup.si2 = p[3];
-	} else if (pc->st->l3.debug & L3_DEB_WARN)
-		l3_debug(pc->st, "setup without service indicator");
+	} else {
+		l3_1tr6_error(pc, "missing setup SI", skb);
+		return;
+	}
 
 	p = skb->data;
 	if ((p = findie(p, skb->len, WE0_destAddr, 0)))
@@ -276,9 +259,19 @@ l3_1tr6_setup_ack(struct l3_process *pc, u_char pr, void *arg)
 	p = skb->data;
 	newl3state(pc, 2);
 	if ((p = findie(p, skb->len, WE0_chanID, 0))) {
+		if (p[1] != 1) {
+			l3_1tr6_error(pc, "setup_ack wrong chanID len", skb);
+			return;
+		}
+		if ((p[2] & 0xf4) != 0x80) {
+			l3_1tr6_error(pc, "setup_ack wrong WE0_chanID", skb);
+			return;
+		}
 		pc->para.bchannel = p[2] & 0x3;
-	} else if (pc->st->l3.debug & L3_DEB_WARN)
-		l3_debug(pc->st, "setup answer without bchannel");
+	} else {
+		l3_1tr6_error(pc, "missing setup_ack WE0_chanID", skb);
+		return;
+	}
 	dev_kfree_skb(skb, FREE_READ);
 	L3AddTimer(&pc->timer, T304, CC_T304);
 	pc->st->l3.l3l4(pc->st, CC_MORE_INFO | INDICATION, pc);
@@ -293,9 +286,23 @@ l3_1tr6_call_sent(struct l3_process *pc, u_char pr, void *arg)
 	L3DelTimer(&pc->timer);
 	p = skb->data;
 	if ((p = findie(p, skb->len, WE0_chanID, 0))) {
+		if (p[1] != 1) {
+			l3_1tr6_error(pc, "call sent wrong chanID len", skb);
+			return;
+		}
+		if ((p[2] & 0xf4) != 0x80) {
+			l3_1tr6_error(pc, "call sent wrong WE0_chanID", skb);
+			return;
+		}
+		if ((pc->state == 2) && (pc->para.bchannel != (p[2] & 0x3))) {
+			l3_1tr6_error(pc, "call sent wrong chanID value", skb);
+			return;
+		}
 		pc->para.bchannel = p[2] & 0x3;
-	} else if (pc->st->l3.debug & L3_DEB_WARN)
-		l3_debug(pc->st, "setup answer without bchannel");
+	} else {
+		l3_1tr6_error(pc, "missing call sent WE0_chanID", skb);
+		return;
+	}
 	dev_kfree_skb(skb, FREE_READ);
 	L3AddTimer(&pc->timer, T310, CC_T310);
 	newl3state(pc, 3);
@@ -356,6 +363,10 @@ l3_1tr6_connect(struct l3_process *pc, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	L3DelTimer(&pc->timer);	/* T310 */
+	if (!findie(skb->data, skb->len, WE6_date, 6)) {
+		l3_1tr6_error(pc, "missing connect date", skb);
+		return;
+	}
 	newl3state(pc, 10);
 	dev_kfree_skb(skb, FREE_READ);
 	pc->para.chargeinfo = 0;
@@ -380,8 +391,11 @@ l3_1tr6_rel(struct l3_process *pc, u_char pr, void *arg)
 			pc->para.cause = 0;
 			pc->para.loc = 0;
 		}
-	} else
+	} else {
 		pc->para.cause = -1;
+		l3_1tr6_error(pc, "missing REL cause", skb);
+		return;
+	}
 	dev_kfree_skb(skb, FREE_READ);
 	StopAllL3Timer(pc);
 	newl3state(pc, 0);
@@ -448,6 +462,10 @@ l3_1tr6_disc(struct l3_process *pc, u_char pr, void *arg)
 			l3_debug(pc->st, "cause not found");
 		pc->para.cause = -1;
 	}
+	if (!findie(skb->data, skb->len, WE6_date, 6)) {
+		l3_1tr6_error(pc, "missing connack date", skb);
+		return;
+	}
 	dev_kfree_skb(skb, FREE_READ);
 	newl3state(pc, 12);
 	pc->st->l3.l3l4(pc->st, CC_DISCONNECT | INDICATION, pc);
@@ -459,6 +477,10 @@ l3_1tr6_connect_ack(struct l3_process *pc, u_char pr, void *arg)
 {
 	struct sk_buff *skb = arg;
 
+	if (!findie(skb->data, skb->len, WE6_date, 6)) {
+		l3_1tr6_error(pc, "missing connack date", skb);
+		return;
+	}
 	dev_kfree_skb(skb, FREE_READ);
 	newl3state(pc, 10);
 	pc->para.chargeinfo = 0;
@@ -502,7 +524,7 @@ l3_1tr6_setup_rsp(struct l3_process *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	pc->st->l3.l3l2(pc->st, DL_DATA | REQUEST, skb);
+	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 	L3DelTimer(&pc->timer);
 	L3AddTimer(&pc->timer, T313, CC_T313);
 }
@@ -545,17 +567,8 @@ l3_1tr6_disconnect_req(struct l3_process *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	pc->st->l3.l3l2(pc->st, DL_DATA | REQUEST, skb);
+	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 	L3AddTimer(&pc->timer, T305, CC_T305);
-}
-
-static void
-l3_1tr6_release_req(struct l3_process *pc, u_char pr, void *arg)
-{
-	StopAllL3Timer(pc);
-	newl3state(pc, 19);
-	l3_1TR6_message(pc, MT_N1_REL, PROTO_DIS_N1);
-	L3AddTimer(&pc->timer, T308, CC_T308_1);
 }
 
 static void
@@ -567,8 +580,8 @@ l3_1tr6_t303(struct l3_process *pc, u_char pr, void *arg)
 		l3_1tr6_setup_req(pc, pr, arg);
 	} else {
 		L3DelTimer(&pc->timer);
-		pc->st->l3.l3l4(pc->st, CC_NOSETUP_RSP, pc);
-		release_l3_process(pc);
+		pc->para.cause = 0;
+		l3_1tr6_disconnect_req(pc, 0, NULL);
 	}
 }
 
@@ -613,7 +626,7 @@ l3_1tr6_t305(struct l3_process *pc, u_char pr, void *arg)
 	if (!(skb = l3_alloc_skb(l)))
 		return;
 	memcpy(skb_put(skb, l), tmp, l);
-	pc->st->l3.l3l2(pc->st, DL_DATA | REQUEST, skb);
+	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 	L3AddTimer(&pc->timer, T308, CC_T308_1);
 }
 
@@ -693,6 +706,8 @@ sizeof(struct stateentry);
 static struct stateentry datastln1[] =
 {
 	{SBIT(0),
+	 MT_N1_INVALID, l3_1tr6_invalid},
+	{SBIT(0),
 	 MT_N1_SETUP, l3_1tr6_setup},
 	{SBIT(1),
 	 MT_N1_SETUP_ACK, l3_1tr6_setup_ack},
@@ -711,8 +726,13 @@ static struct stateentry datastln1[] =
 	{SBIT(10),
 	 MT_N1_INFO, l3_1tr6_info},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) |
-	 SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19),
+	 SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17),
 	 MT_N1_REL, l3_1tr6_rel},
+	{SBIT(19),
+	 MT_N1_REL, l3_1tr6_rel_ack},
+	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) |
+	 SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17),
+	 MT_N1_REL_ACK, l3_1tr6_invalid},
 	{SBIT(19),
 	 MT_N1_REL_ACK, l3_1tr6_rel_ack}
 };
@@ -781,7 +801,28 @@ up1tr6(struct PStack *st, int pr, void *arg)
 		}
 	} else if (skb->data[0] == PROTO_DIS_N1) {
 		if (!(proc = getl3proc(st, cr))) {
-			if ((mt == MT_N1_SETUP) && (cr < 128)) {
+			if (mt == MT_N1_SETUP) { 
+				if (cr < 128) {
+					if (!(proc = new_l3_process(st, cr))) {
+						if (st->l3.debug & L3_DEB_PROTERR) {
+							sprintf(tmp, "up1tr6 no roc mem");
+							l3_debug(st, tmp);
+						}
+						dev_kfree_skb(skb, FREE_READ);
+						return;
+					}
+				} else {
+					dev_kfree_skb(skb, FREE_READ);
+					return;
+				}
+			} else if ((mt == MT_N1_REL) || (mt == MT_N1_REL_ACK) ||
+				(mt == MT_N1_CANC_ACK) || (mt == MT_N1_CANC_REJ) ||
+				(mt == MT_N1_REG_ACK) || (mt == MT_N1_REG_REJ) ||
+				(mt == MT_N1_SUSP_ACK) || (mt == MT_N1_RES_REJ) ||
+				(mt == MT_N1_INFO)) {
+				dev_kfree_skb(skb, FREE_READ);
+				return;
+			} else {
 				if (!(proc = new_l3_process(st, cr))) {
 					if (st->l3.debug & L3_DEB_PROTERR) {
 						sprintf(tmp, "up1tr6 no roc mem");
@@ -790,9 +831,7 @@ up1tr6(struct PStack *st, int pr, void *arg)
 					dev_kfree_skb(skb, FREE_READ);
 					return;
 				}
-			} else {
-				dev_kfree_skb(skb, FREE_READ);
-				return;
+				mt = MT_N1_INVALID;
 			}
 		}
 		for (i = 0; i < datastln1_len; i++)

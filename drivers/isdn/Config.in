@@ -22,7 +22,8 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
     bool 'HiSax Support for EURO/DSS1' CONFIG_HISAX_EURO
     if [ "$CONFIG_HISAX_EURO" != "n" ]; then
 	    bool 'Support for german chargeinfo' CONFIG_DE_AOC
-	    bool 'Support for australian Microlink service (not for std. EURO)' CONFIG_HISAX_ML
+	    bool 'Disable sending complete' CONFIG_HISAX_NO_SENDCOMPLETE
+	    bool 'Disable sending low layer compatibility' CONFIG_HISAX_NO_LLC
     fi
     bool 'HiSax Support for german 1TR6' CONFIG_HISAX_1TR6
     bool 'HiSax Support for Teles 16.0/8.0' CONFIG_HISAX_16_0
@@ -31,12 +32,14 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
     bool 'HiSax Support for Teles PCI' CONFIG_HISAX_TELESPCI 
     bool 'HiSax Support for Teles S0Box' CONFIG_HISAX_S0BOX 
     bool 'HiSax Support for AVM A1 (Fritz)' CONFIG_HISAX_AVM_A1
+    bool 'HiSax Support for AVM PCI (Fritz!PCI)' CONFIG_HISAX_FRITZPCI
+    bool 'HiSax Support for AVM A1 PCMCIA (Fritz)' CONFIG_HISAX_AVM_A1_PCMCIA
     bool 'HiSax Support for Elsa cards' CONFIG_HISAX_ELSA
     bool 'HiSax Support for ITK ix1-micro Revision 2' CONFIG_HISAX_IX1MICROR2
     bool 'HiSax Support for Eicon.Diehl Diva cards' CONFIG_HISAX_DIEHLDIVA
     bool 'HiSax Support for ASUSCOM cards' CONFIG_HISAX_ASUSCOM
     bool 'HiSax Support for TELEINT cards' CONFIG_HISAX_TELEINT
-    bool 'HiSax Support for Sedlbauer speed card/win/star' CONFIG_HISAX_SEDLBAUER
+    bool 'HiSax Support for Sedlbauer speed card/win/star/PC104/fax' CONFIG_HISAX_SEDLBAUER
     bool 'HiSax Support for USR Sportster internal TA' CONFIG_HISAX_SPORTSTER
     bool 'HiSax Support for MIC card' CONFIG_HISAX_MIC
     bool 'HiSax Support for NETjet card' CONFIG_HISAX_NETJET

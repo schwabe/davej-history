@@ -237,7 +237,7 @@ static struct sock *nr_find_socket(unsigned char index, unsigned char id)
 /*
  *	Find a connected NET/ROM socket given their circuit IDs.
  */
-static struct sock *nr_find_peer(unsigned char index, unsigned char id)
+static struct sock *nr_find_peer(unsigned char index, unsigned char id, ax25_address *dest)
 {
 	struct sock *s;
 	unsigned long flags;
@@ -246,7 +246,7 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id)
 	cli();
 
 	for (s = nr_list; s != NULL; s = s->next) {
-		if (s->protinfo.nr->your_index == index && s->protinfo.nr->your_id == id) {
+		if (s->protinfo.nr->your_index == index && s->protinfo.nr->your_id == id && ax25cmp(&s->protinfo.nr->dest_addr, dest) == 0) {
 			restore_flags(flags);
 			return s;
 		}
@@ -936,10 +936,10 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 
 	if (circuit_index == 0 && circuit_id == 0) {
 		if (frametype == NR_CONNACK && flags == NR_CHOKE_FLAG)
-			sk = nr_find_peer(peer_circuit_index, peer_circuit_id);
+			sk = nr_find_peer(peer_circuit_index, peer_circuit_id, src);
 	} else {
 		if (frametype == NR_CONNREQ)
-			sk = nr_find_peer(circuit_index, circuit_id);
+			sk = nr_find_peer(circuit_index, circuit_id, src);
 		else
 			sk = nr_find_socket(circuit_index, circuit_id);
 	}

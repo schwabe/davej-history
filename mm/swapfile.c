@@ -5,6 +5,7 @@
  *  Swap reorganised 29.12.95, Stephen Tweedie
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/head.h>

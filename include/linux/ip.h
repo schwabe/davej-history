@@ -65,7 +65,7 @@ struct route {
 
 #define	IPOPT_TS_TSONLY		0		/* timestamps only */
 #define	IPOPT_TS_TSANDADDR	1		/* timestamps and addresses */
-#define	IPOPT_TS_PRESPEC	2		/* specified modules only */
+#define	IPOPT_TS_PRESPEC	3		/* specified modules only */
 
 struct options {
   __u32		faddr;				/* Saved first hop address */

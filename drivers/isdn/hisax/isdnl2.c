@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 1.10.2.9 1998/06/19 15:17:56 keil Exp $
+/* $Id: isdnl2.c,v 1.10.2.10 1998/09/27 13:06:30 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,6 +7,9 @@
  *              Fritz Elfert
  *
  * $Log: isdnl2.c,v $
+ * Revision 1.10.2.10  1998/09/27 13:06:30  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.10.2.9  1998/06/19 15:17:56  keil
  * fix LAPB tx_cnt for none I-frames
  *
@@ -48,7 +51,7 @@
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 1.10.2.9 $";
+const char *l2_revision = "$Revision: 1.10.2.10 $";
 
 static void l2m_debug(struct FsmInst *fi, char *s);
 
@@ -254,6 +257,16 @@ IsRR(u_char * data, int ext)
 }
 
 inline int
+IsSFrame(u_char * data, int ext)
+{
+	register u_char d = *data;
+	
+	if (!ext)
+		d &= 0xf;
+	return(((d & 0xf3) == 1) && ((d & 0x0c) != 0x0c));
+}
+
+inline int
 IsSABMX(u_char * data, int ext)
 {
 	u_char d = data[0] & ~0x10;
@@ -398,9 +411,16 @@ l2_dl_establish(struct FsmInst *fi, int event, void *arg)
 	struct PStack *st = fi->userdata;
 	int state = fi->state;
 
-	FsmChangeState(fi, ST_L2_3); 
-	if (state == ST_L2_1)
-		st->l2.l2tei(st, MDL_ASSIGN | INDICATION, NULL);
+	
+	if (test_bit(FLG_FIXED_TEI, &st->l2.flag)) {
+		FsmChangeState(fi, ST_L2_4);
+		establishlink(fi);
+		test_and_set_bit(FLG_L3_INIT, &st->l2.flag);
+	} else {
+		FsmChangeState(fi, ST_L2_3);
+		if (state == ST_L2_1)
+			st->l2.l2tei(st, MDL_ASSIGN | INDICATION, NULL);
+	}
 }
 
 static void
@@ -692,19 +712,37 @@ l2_got_dm(struct FsmInst *fi, int event, void *arg)
 			establishlink(fi);
 			test_and_clear_bit(FLG_L3_INIT, &st->l2.flag);
 			FsmChangeState(fi, ST_L2_5);
+		} else if ((fi->state == ST_L2_7) || (fi->state == ST_L2_8)) {
+			st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'E');
+			establishlink(fi);
 		}
-	} else if (fi->state != ST_L2_4) {
-		if (test_and_clear_bit(FLG_T200_RUN, &st->l2.flag))
-			FsmDelTimer(&st->l2.t200, 2);
-	 	if (fi->state == ST_L2_5)
-			discard_queue(&st->l2.i_queue);
-		if (test_bit(FLG_LAPB, &st->l2.flag))
-			st->l2.l2l1(st, PH_DEACTIVATE | REQUEST, NULL);
-		if (fi->state == ST_L2_6)
-			st->l2.l2l3(st, DL_RELEASE | CONFIRM, NULL);
-		else
-			st->l2.l2l3(st, DL_RELEASE | INDICATION, NULL);
-		FsmChangeState(fi, ST_L2_4);
+	} else {
+		switch (fi->state) {
+			case ST_L2_8:
+				 establishlink(fi);
+			case ST_L2_7:
+				st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'B');
+				break;
+			case ST_L2_4:
+				break;
+			case ST_L2_5:
+				if (test_and_clear_bit(FLG_T200_RUN, &st->l2.flag))
+					FsmDelTimer(&st->l2.t200, 2);
+				discard_queue(&st->l2.i_queue);
+				if (test_bit(FLG_LAPB, &st->l2.flag))
+					st->l2.l2l1(st, PH_DEACTIVATE | REQUEST, NULL);
+				st->l2.l2l3(st, DL_RELEASE | INDICATION, NULL);
+				FsmChangeState(fi, ST_L2_4);
+				break;
+			case ST_L2_6:
+				if (test_and_clear_bit(FLG_T200_RUN, &st->l2.flag))
+					FsmDelTimer(&st->l2.t200, 2);
+				if (test_bit(FLG_LAPB, &st->l2.flag))
+					st->l2.l2l1(st, PH_DEACTIVATE | REQUEST, NULL);
+				st->l2.l2l3(st, DL_RELEASE | CONFIRM, NULL);
+				FsmChangeState(fi, ST_L2_4);
+				break;
+		}
 	}
 }
 
@@ -817,9 +855,11 @@ l2_got_st7_super(struct FsmInst *fi, int event, void *arg)
 			PollFlag = (skb->data[1] & 0x1) == 0x1;
 			nr = skb->data[1] >> 1;
 		} else {
-			st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'N');
+			if (skb->len >2) {
+				st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'N');
+				establishlink(fi);
+			}
 			FreeSkb(skb);
-			establishlink(fi);
 			return;
 		}
 	} else {
@@ -908,9 +948,7 @@ l2_got_iframe(struct FsmInst *fi, int event, void *arg)
 	i = l2addrsize(l2);
 	if (test_bit(FLG_MOD128, &l2->flag)) {
 		if (skb->len <= (i + 1)) {
-			st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'N');
 			FreeSkb(skb);
-			establishlink(fi);
 			return;
 		} else if ((skb->len - i - 1) > l2->maxlen) { 
 			st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'O');
@@ -1369,8 +1407,8 @@ static struct FsmNode L2FnList[] HISAX_INITDATA =
 	{ST_L2_4, EV_L2_DM, l2_got_dm},
 	{ST_L2_5, EV_L2_DM, l2_got_dm},
 	{ST_L2_6, EV_L2_DM, l2_got_dm},
-	{ST_L2_7, EV_L2_DM, l2_mdl_error},
-	{ST_L2_8, EV_L2_DM, l2_mdl_error},
+	{ST_L2_7, EV_L2_DM, l2_got_dm},
+	{ST_L2_8, EV_L2_DM, l2_got_dm},
 	{ST_L2_1, EV_L2_UI, l2_got_ui},
 	{ST_L2_2, EV_L2_UI, l2_got_ui},
 	{ST_L2_3, EV_L2_UI, l2_got_ui},
@@ -1424,7 +1462,7 @@ isdnl2_l1l2(struct PStack *st, int pr, void *arg)
 			}
 			if (!(*datap & 1))	/* I-Frame */
 				ret = FsmEvent(&st->l2.l2m, EV_L2_I, skb);
-			else if ((*datap & 3) == 1)	/* S-Frame */
+			else if (IsSFrame(datap, test_bit(FLG_MOD128, &st->l2.flag)))
 				ret = FsmEvent(&st->l2.l2m, EV_L2_SUPER, skb);
 			else if (IsUI(datap, test_bit(FLG_MOD128, &st->l2.flag)))
 				ret = FsmEvent(&st->l2.l2m, EV_L2_UI, skb);
@@ -1439,9 +1477,11 @@ isdnl2_l1l2(struct PStack *st, int pr, void *arg)
 			else if (IsFRMR(datap, test_bit(FLG_MOD128, &st->l2.flag)))
 				ret = FsmEvent(&st->l2.l2m, EV_L2_FRMR, skb);
 			else {
-				ret = 0;
+				ret = 1;
+				if ((st->l2.l2m.state == ST_L2_7) ||
+					(st->l2.l2m.state == ST_L2_8))
+					establishlink(&st->l2.l2m);
 				st->ma.layer(st, MDL_ERROR | INDICATION, (void *) 'L');
-				FreeSkb(skb);
 			}
 			if (ret) {
 				FreeSkb(skb);
@@ -1576,13 +1616,13 @@ transl2_l3l2(struct PStack *st, int pr, void *arg)
 	switch (pr) {
 		case (DL_DATA | REQUEST):
 		case (DL_UNIT_DATA | REQUEST):
-			st->l2.l2l1(st, PH_DATA, arg);
+			st->l2.l2l1(st, PH_DATA | REQUEST, arg);
 			break;
 		case (DL_ESTABLISH | REQUEST):
-			st->l2.l2l1(st, PH_ACTIVATE, NULL);
+			st->l2.l2l1(st, PH_ACTIVATE | REQUEST, NULL);
 			break;
 		case (DL_RELEASE | REQUEST):
-			st->l2.l2l1(st, PH_DEACTIVATE, NULL);
+			st->l2.l2l1(st, PH_DEACTIVATE | REQUEST, NULL);
 			break;
 	}
 }

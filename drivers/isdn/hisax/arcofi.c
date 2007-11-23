@@ -1,12 +1,18 @@
-/* $Id: arcofi.c,v 1.1.2.3 1998/05/27 18:04:48 keil Exp $
+/* $Id: arcofi.c,v 1.1.2.5 1998/09/30 22:20:03 keil Exp $
 
- * arcofi.h   Ansteuerung ARCOFI 2165
+ * arcofi.c   Ansteuerung ARCOFI 2165
  *
  * Author     Karsten Keil (keil@temic-ech.spacenet.de)
  *
  *
  *
  * $Log: arcofi.c,v $
+ * Revision 1.1.2.5  1998/09/30 22:20:03  keil
+ * Cosmetics
+ *
+ * Revision 1.1.2.4  1998/09/27 13:05:29  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.1.2.3  1998/05/27 18:04:48  keil
  * HiSax 3.0
  *
@@ -27,9 +33,8 @@
 int
 send_arcofi(struct IsdnCardState *cs, const u_char *msg, int bc, int receive) {
 	u_char val;
-	char tmp[32];
 	long flags;
-	int cnt=50;
+	int cnt=30;
 	
 	cs->mon_txp = 0;
 	cs->mon_txc = msg[0];
@@ -55,11 +60,6 @@ send_arcofi(struct IsdnCardState *cs, const u_char *msg, int bc, int receive) {
 	while (cnt && !test_bit(HW_MON1_TX_END, &cs->HW_Flags)) {
 		cnt--;
 		udelay(500);
-#if 0
-		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
-		schedule();
-#endif
 	}
 	if (receive) {
 		while (cnt && !test_bit(HW_MON1_RX_END, &cs->HW_Flags)) {
@@ -68,8 +68,9 @@ send_arcofi(struct IsdnCardState *cs, const u_char *msg, int bc, int receive) {
 		}
 	}
 	restore_flags(flags);
-	sprintf(tmp, "arcofi tout %d", cnt);
-	debugl1(cs, tmp);
+	if (cnt <= 0) {
+		printk(KERN_WARNING"HiSax arcofi monitor timed out\n");
+		debugl1(cs, "HiSax arcofi monitor timed out");
+	}
 	return(cnt);	
 }
-

@@ -1,6 +1,12 @@
-/* $Id: isdnl1.h,v 1.4.2.4 1998/05/27 18:05:49 keil Exp $
+/* $Id: isdnl1.h,v 1.4.2.6 1998/09/30 22:20:04 keil Exp $
 
  * $Log: isdnl1.h,v $
+ * Revision 1.4.2.6  1998/09/30 22:20:04  keil
+ * Cosmetics
+ *
+ * Revision 1.4.2.5  1998/09/27 13:06:28  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.4.2.4  1998/05/27 18:05:49  keil
  * HiSax 3.0
  *
@@ -38,7 +44,7 @@
 #define	L1_DEB_HSCX_FIFO	0x20
 #define	L1_DEB_LAPD	        0x40
 #define	L1_DEB_IPAC	        0x80
-#define L1_DEB_RECEIVE_FRAME	0x100
+#define	L1_DEB_RECEIVE_FRAME    0x100
 #define L1_DEB_MONITOR		0x200
 
 #define D_RCVBUFREADY	0
@@ -53,7 +59,7 @@
 #define B_RCVBUFREADY 0
 #define B_XMTBUFREADY 1
 
-extern void debugl1(struct IsdnCardState *sp, char *msg);
+extern void debugl1(struct IsdnCardState *cs, char *msg);
 extern void DChannel_proc_xmt(struct IsdnCardState *cs);
 extern void DChannel_proc_rcv(struct IsdnCardState *cs);
 extern void l1_msg(struct IsdnCardState *cs, int pr, void *arg);

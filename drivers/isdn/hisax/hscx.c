@@ -1,4 +1,4 @@
-/* $Id: hscx.c,v 1.3.2.7 1998/06/26 22:02:55 keil Exp $
+/* $Id: hscx.c,v 1.3.2.9 1998/09/27 13:06:14 keil Exp $
 
  * hscx.c   HSCX specific routines
  *
@@ -6,6 +6,12 @@
  *
  *
  * $Log: hscx.c,v $
+ * Revision 1.3.2.9  1998/09/27 13:06:14  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
+ * Revision 1.3.2.8  1998/09/15 15:25:04  keil
+ * Repair HSCX init
+ *
  * Revision 1.3.2.7  1998/06/26 22:02:55  keil
  * send flags between hdlc frames
  *
@@ -67,7 +73,7 @@ void
 modehscx(struct BCState *bcs, int mode, int bc)
 {
 	struct IsdnCardState *cs = bcs->cs;
-	int hscx = bcs->channel;
+	int hscx = bcs->hw.hscx.hscx;
 
 	if (cs->debug & L1_DEB_HSCX) {
 		char tmp[40];
@@ -76,11 +82,16 @@ modehscx(struct BCState *bcs, int mode, int bc)
 		debugl1(cs, tmp);
 	}
 	bcs->mode = mode;
+	bcs->channel = bc;
+	cs->BC_Write_Reg(cs, hscx, HSCX_CCR1, 
+		test_bit(HW_IPAC, &cs->HW_Flags) ? 0x82 : 0x85);
 	cs->BC_Write_Reg(cs, hscx, HSCX_XAD1, 0xFF);
 	cs->BC_Write_Reg(cs, hscx, HSCX_XAD2, 0xFF);
 	cs->BC_Write_Reg(cs, hscx, HSCX_RAH2, 0xFF);
 	cs->BC_Write_Reg(cs, hscx, HSCX_XBCH, 0x0);
 	cs->BC_Write_Reg(cs, hscx, HSCX_RLCR, 0x0);
+	cs->BC_Write_Reg(cs, hscx, HSCX_CCR1, 
+		test_bit(HW_IPAC, &cs->HW_Flags) ? 0x82 : 0x85);
 	cs->BC_Write_Reg(cs, hscx, HSCX_CCR2, 0x30);
 	cs->BC_Write_Reg(cs, hscx, HSCX_XCCR, 7);
 	cs->BC_Write_Reg(cs, hscx, HSCX_RCCR, 7);
@@ -100,8 +111,8 @@ modehscx(struct BCState *bcs, int mode, int bc)
 	}
 	switch (mode) {
 		case (L1_MODE_NULL):
-			cs->BC_Write_Reg(cs, hscx, HSCX_TSAX, 0xff);
-			cs->BC_Write_Reg(cs, hscx, HSCX_TSAR, 0xff);
+			cs->BC_Write_Reg(cs, hscx, HSCX_TSAX, 0x1f);
+			cs->BC_Write_Reg(cs, hscx, HSCX_TSAR, 0x1f);
 			cs->BC_Write_Reg(cs, hscx, HSCX_MODE, 0x84);
 			break;
 		case (L1_MODE_TRANS):
@@ -136,11 +147,11 @@ hscx_l2l1(struct PStack *st, int pr, void *arg)
 		case (PH_DATA | REQUEST):
 			save_flags(flags);
 			cli();
-			if (st->l1.bcs->hw.hscx.tx_skb) {
+			if (st->l1.bcs->tx_skb) {
 				skb_queue_tail(&st->l1.bcs->squeue, skb);
 				restore_flags(flags);
 			} else {
-				st->l1.bcs->hw.hscx.tx_skb = skb;
+				st->l1.bcs->tx_skb = skb;
 				test_and_set_bit(BC_FLG_BUSY, &st->l1.bcs->Flag);
 				st->l1.bcs->hw.hscx.count = 0;
 				restore_flags(flags);
@@ -148,17 +159,17 @@ hscx_l2l1(struct PStack *st, int pr, void *arg)
 			}
 			break;
 		case (PH_PULL | INDICATION):
-			if (st->l1.bcs->hw.hscx.tx_skb) {
+			if (st->l1.bcs->tx_skb) {
 				printk(KERN_WARNING "hscx_l2l1: this shouldn't happen\n");
 				break;
 			}
 			test_and_set_bit(BC_FLG_BUSY, &st->l1.bcs->Flag);
-			st->l1.bcs->hw.hscx.tx_skb = skb;
+			st->l1.bcs->tx_skb = skb;
 			st->l1.bcs->hw.hscx.count = 0;
 			st->l1.bcs->cs->BC_Send_Data(st->l1.bcs);
 			break;
 		case (PH_PULL | REQUEST):
-			if (!st->l1.bcs->hw.hscx.tx_skb) {
+			if (!st->l1.bcs->tx_skb) {
 				test_and_clear_bit(FLG_L1_PULL_REQ, &st->l1.Flags);
 				st->l1.l1l2(st, PH_PULL | CONFIRM, NULL);
 			} else
@@ -184,7 +195,7 @@ hscx_l2l1(struct PStack *st, int pr, void *arg)
 void
 close_hscxstate(struct BCState *bcs)
 {
-	modehscx(bcs, 0, 0);
+	modehscx(bcs, 0, bcs->channel);
 	if (test_and_clear_bit(BC_FLG_INIT, &bcs->Flag)) {
 		if (bcs->hw.hscx.rcvbuf) {
 			kfree(bcs->hw.hscx.rcvbuf);
@@ -192,20 +203,17 @@ close_hscxstate(struct BCState *bcs)
 		}
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
-		if (bcs->hw.hscx.tx_skb) {
-			dev_kfree_skb(bcs->hw.hscx.tx_skb, FREE_WRITE);
-			bcs->hw.hscx.tx_skb = NULL;
+		if (bcs->tx_skb) {
+			dev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
 	}
 }
 
 int
-open_hscxstate(struct IsdnCardState *cs,
-	       int bc)
+open_hscxstate(struct IsdnCardState *cs, struct BCState *bcs)
 {
-	struct BCState *bcs = cs->bcs + bc;
-
 	if (!test_and_set_bit(BC_FLG_INIT, &bcs->Flag)) {
 		if (!(bcs->hw.hscx.rcvbuf = kmalloc(HSCX_BUFMAX, GFP_ATOMIC))) {
 			printk(KERN_WARNING
@@ -215,7 +223,7 @@ open_hscxstate(struct IsdnCardState *cs,
 		skb_queue_head_init(&bcs->rqueue);
 		skb_queue_head_init(&bcs->squeue);
 	}
-	bcs->hw.hscx.tx_skb = NULL;
+	bcs->tx_skb = NULL;
 	test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 	bcs->event = 0;
 	bcs->hw.hscx.rcvidx = 0;
@@ -226,7 +234,8 @@ open_hscxstate(struct IsdnCardState *cs,
 int
 setstack_hscx(struct PStack *st, struct BCState *bcs)
 {
-	if (open_hscxstate(st->l1.hardware, bcs->channel))
+	bcs->channel = st->l1.bc;
+	if (open_hscxstate(st->l1.hardware, bcs))
 		return (-1);
 	st->l1.bcs = bcs;
 	st->l2.l2l1 = hscx_l2l1;
@@ -276,6 +285,8 @@ inithscx(struct IsdnCardState *cs))
 	cs->bcs[1].BC_SetStack = setstack_hscx;
 	cs->bcs[0].BC_Close = close_hscxstate;
 	cs->bcs[1].BC_Close = close_hscxstate;
+	cs->bcs[0].hw.hscx.hscx = 0;
+	cs->bcs[1].hw.hscx.hscx = 1;
 	modehscx(cs->bcs, 0, 0);
 	modehscx(cs->bcs + 1, 0, 0);
 }

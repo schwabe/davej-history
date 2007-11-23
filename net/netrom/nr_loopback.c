@@ -11,6 +11,8 @@
  *
  *	History
  *	NET/ROM 006	Tomi(OH2BNS)	Created this file.
+ *					Changed the way the loopback
+ *					queue is consumed.
  *
  */
 
@@ -53,15 +55,16 @@ int nr_loopback_queue(struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 
-	skbn = skb_copy(skb, GFP_ATOMIC);
+	skbn = skb_clone(skb, GFP_ATOMIC);
 
 	kfree_skb(skb, FREE_WRITE);
 
-	if (skbn != NULL)
+	if (skbn != NULL) {
 		skb_queue_tail(&loopback_queue, skbn);
 
-	if (!nr_loopback_running())
-		nr_set_loopback_timer();
+		if (!nr_loopback_running())
+			nr_set_loopback_timer();
+	}
 
 	return 1;
 }
@@ -85,16 +88,16 @@ static void nr_loopback_timer(unsigned long param)
 	ax25_address *nr_dest;
 	struct device *dev;
 
-	while ((skb = skb_dequeue(&loopback_queue)) != NULL) {
+	if ((skb = skb_dequeue(&loopback_queue)) != NULL) {
 		nr_dest = (ax25_address *)(skb->data + 7);
 
-		if ((dev = nr_dev_get(nr_dest)) == NULL) {
-			kfree_skb(skb, FREE_READ);
-			continue;
-		}
+		dev = nr_dev_get(nr_dest);
 
-		if (nr_rx_frame(skb, dev) == 0)
+		if (dev == NULL || nr_rx_frame(skb, dev) == 0)
 			kfree_skb(skb, FREE_READ);
+
+		if (!skb_queue_empty(&loopback_queue) && !nr_loopback_running())
+			nr_set_loopback_timer();
 	}
 }
 

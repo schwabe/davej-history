@@ -1,4 +1,4 @@
-/* $Id: isdnl3.c,v 1.10.2.4 1998/05/27 18:05:59 keil Exp $
+/* $Id: isdnl3.c,v 1.10.2.5 1998/09/27 13:06:39 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,6 +7,9 @@
  *              Fritz Elfert
  *
  * $Log: isdnl3.c,v $
+ * Revision 1.10.2.5  1998/09/27 13:06:39  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.10.2.4  1998/05/27 18:05:59  keil
  * HiSax 3.0
  *
@@ -42,7 +45,7 @@
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 1.10.2.4 $";
+const char *l3_revision = "$Revision: 1.10.2.5 $";
 
 static
 struct Fsm l3fsm =
@@ -329,7 +332,8 @@ release_l3_process(struct l3_process *p)
 		pp = np;
 		np = np->next;
 	}
-	printk(KERN_ERR "HiSax internal L3 error CR not in list\n");
+	printk(KERN_ERR "HiSax internal L3 error CR(%d) not in list\n", p->callref);
+	l3_debug(p->st, "HiSax internal L3 error CR(%d) not in list", p->callref);
 };
 
 void

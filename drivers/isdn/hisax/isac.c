@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.7.2.7 1998/05/27 18:05:38 keil Exp $
+/* $Id: isac.c,v 1.7.2.8 1998/09/27 13:06:18 keil Exp $
 
  * isac.c   ISAC specific routines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: isac.c,v $
+ * Revision 1.7.2.8  1998/09/27 13:06:18  keil
+ * Apply most changes from 2.1.X (HiSax 3.1)
+ *
  * Revision 1.7.2.7  1998/05/27 18:05:38  keil
  * HiSax 3.0
  *
@@ -156,7 +159,7 @@ isac_empty_fifo(struct IsdnCardState *cs, int count)
 	if ((cs->debug & L1_DEB_ISAC) && !(cs->debug & L1_DEB_ISAC_FIFO))
 		debugl1(cs, "isac_empty_fifo");
 
-	if ((cs->rcvidx + count) >= MAX_DFRAME_LEN) {
+	if ((cs->rcvidx + count) >= MAX_DFRAME_LEN_L1) {
 		if (cs->debug & L1_DEB_WARN) {
 			char tmp[40];
 			sprintf(tmp, "isac_empty_fifo overrun %d",
@@ -322,12 +325,12 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 		}
 		if (exval & 2) {
 			cs->ph_state = (exval >> 2) & 0xf;
-		if (cs->debug & L1_DEB_ISAC) {
-			sprintf(tmp, "ph_state change %x", cs->ph_state);
-			debugl1(cs, tmp);
+			if (cs->debug & L1_DEB_ISAC) {
+				sprintf(tmp, "ph_state change %x", cs->ph_state);
+				debugl1(cs, tmp);
+			}
+			isac_sched_event(cs, D_L1STATECHANGE);
 		}
-		isac_sched_event(cs, D_L1STATECHANGE);
-	}
 		if (exval & 1) {
 			exval = cs->readisac(cs, ISAC_CIR1);
 			if (cs->debug & L1_DEB_ISAC) {
@@ -412,9 +415,9 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 					sprintf(tmp, "ISAC MOR1 %02x", cs->mon_rx[cs->mon_rxp -1]);
 					debugl1(cs, tmp);
 				}
-					cs->mocr |= 0x40;
-					cs->writeisac(cs, ISAC_MOCR, cs->mocr);
-				}
+				cs->mocr |= 0x40;
+				cs->writeisac(cs, ISAC_MOCR, cs->mocr);
+			}
 		      afterMONR1:
 			if (v1 & 0x04) {
 				cs->mocr &= 0xf0;

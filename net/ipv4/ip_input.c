@@ -251,14 +251,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	ip_statistics.IpInReceives++;
 
-	/*
-	 *	Account for the packet (even if the packet is
-	 *	not accepted by the firewall!).
-	 */
-
-#ifdef CONFIG_IP_ACCT
-	ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_IN);
-#endif	
 
 	/*
 	 *	Tag the ip header of this packet so we can find it
@@ -294,6 +286,24 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 	skb_trim(skb,ntohs(iph->tot_len));
+	
+	if(skb->len < (iph->ihl<<2))
+	{
+		ip_statistics.IpInHdrErrors++;
+		kfree_skb(skb, FREE_WRITE);
+		return 0;
+	}
+
+	/*
+	 *	Account for the packet (even if the packet is
+	 *	not accepted by the firewall!). We do this after
+	 *	the sanity checks and the additional ihl check
+	 *	so we dont account garbage as we might do before.
+	 */
+
+#ifdef CONFIG_IP_ACCT
+	ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_IN);
+#endif	
 
 	/*
 	 *	Try to select closest <src,dst> alias device, if any.

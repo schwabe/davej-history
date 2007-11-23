@@ -162,6 +162,8 @@ extern void enable_irq(unsigned int);
 	"jnc 3f\n\t" \
 	"cmpb "SYMBOL_NAME_STR(active_kernel_processor)", %al\n\t" \
 	"je 4f\n\t" \
+	"cmpb "SYMBOL_NAME_STR(boot_cpu_id)", %al\n\t" \
+	"jne 2f\n\t" \
 	"movb $1, "SYMBOL_NAME_STR(smp_blocked_interrupt_pending)"\n\t" \
 	"2: " \
         SMP_PROF_INT_SPINS \
@@ -190,7 +192,10 @@ extern void enable_irq(unsigned int);
 	"movb %al, "SYMBOL_NAME_STR(active_kernel_processor)"\n\t" \
 	"4: " \
 	"incl "SYMBOL_NAME_STR(kernel_counter)"\n\t" \
+	"cmpb "SYMBOL_NAME_STR(boot_cpu_id)", %al\n\t" \
+	"jne 7f\n\t" \
 	"movb $0, "SYMBOL_NAME_STR(smp_blocked_interrupt_pending)"\n\t" \
+	"7: " \
 	"popfl\n\t" \
 	"popl %edx\n\t" \
 	"popl %ecx\n\t" \
