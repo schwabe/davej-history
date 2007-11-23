@@ -1600,8 +1600,8 @@ void __init smp_boot_cpus(void)
 		}
 		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
 			cpucount+1,
-			(bogosum+2500)/(500000/HZ),
-			((bogosum+2500)/(5000/HZ))%100);
+			bogosum/(500000/HZ),
+			(bogosum/(5000/HZ))%100);
 		SMP_PRINTK(("Before bogocount - setting activated=1.\n"));
 		smp_activated=1;
 		smp_num_cpus=cpucount+1;
@@ -1813,7 +1813,7 @@ static inline void send_IPI_single(int dest, int vector)
 void smp_flush_tlb(void)
 {
 	int cpu = smp_processor_id();
-	int stuck;
+	long long stuck;
 	unsigned long flags;
 
 	/*

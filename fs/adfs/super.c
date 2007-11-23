@@ -438,8 +438,7 @@ struct super_block *adfs_read_super(struct super_block *sb, void *data, int sile
 		kfree(sb->u.adfs_sb.s_map);
 		adfs_error(sb, "get root inode failed\n");
 		goto error_dec_use;
-	}
-	else
+	} else
 		sb->s_root->d_op = &adfs_dentry_operations;
 	return sb;
 

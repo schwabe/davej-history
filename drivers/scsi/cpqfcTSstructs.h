@@ -83,7 +83,9 @@
 #define CPQFCTS_CMD_PER_LUN 15 // power of 2 -1, must be >0 
 #define CPQFCTS_REQ_QUEUE_LEN (TACH_SEST_LEN/2) // must be < TACH_SEST_LEN
 
+#ifndef LinuxVersionCode
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+#endif
 #ifndef DECLARE_MUTEX_LOCKED
 #define DECLARE_MUTEX_LOCKED(sem) struct semaphore sem = MUTEX_LOCKED
 #endif
@@ -104,8 +106,25 @@ typedef struct
                             // the fields shared with ODB
                             // need to have same value
 
+// Queues for TachLite not in original Tachyon
+// ERQ       - Exchange Request Queue (for outbound commands)
+// SFQ       - Single Frame Queue (for incoming frames)
+
+                            // Define Tachyon Outbound Command Que
+                            // (Since many Tachyon registers are Read
+                            // only, maintain copies for debugging)
+                            // most Tach ques need power-of-2 sizes,
+                            // where registers are loaded with po2 -1
+#define TACH_SEST_LEN 512   // TachLite SEST
+
+#define ELS_EXCHANGES 64    // e.g. PLOGI, RSCN, ...
+// define the total number of outstanding (simultaneous) exchanges
+#define TACH_MAX_XID (TACH_SEST_LEN + ELS_EXCHANGES)  // ELS exchanges
+
+#define ERQ_LEN 128         // power of 2, max 4096
 
 
+#ifndef HOSTS_C
 
 #ifndef BYTE
 //typedef UCHAR BYTE;
@@ -307,22 +326,6 @@ typedef struct              // each entry 8 words (32 bytes)
 } TachyonIMQE;
 
 
-// Queues for TachLite not in original Tachyon
-// ERQ       - Exchange Request Queue (for outbound commands)
-// SFQ       - Single Frame Queue (for incoming frames)
-
-                            // Define Tachyon Outbound Command Que
-                            // (Since many Tachyon registers are Read
-                            // only, maintain copies for debugging)
-                            // most Tach ques need power-of-2 sizes,
-                            // where registers are loaded with po2 -1
-#define TACH_SEST_LEN 512   // TachLite SEST
-
-#define ELS_EXCHANGES 64    // e.g. PLOGI, RSCN, ...
-// define the total number of outstanding (simultaneous) exchanges
-#define TACH_MAX_XID (TACH_SEST_LEN + ELS_EXCHANGES)  // ELS exchanges
-
-#define ERQ_LEN 128         // power of 2, max 4096
 
 // Inbound Message Queue structures...
 #define IMQ_LEN 512              // minimum 4 entries [(power of 2) - 1]
@@ -1489,6 +1492,6 @@ typedef struct {
 #define BA_SEQUENCE_ABORTED	0x00000500
 
 
-
+#endif
 #endif /* CPQFCTSSTRUCTS_H	*/
 

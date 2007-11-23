@@ -38,35 +38,29 @@ static unsigned int net_debug = NET_DEBUG;
 static void
 am79c961_setmulticastlist (struct device *dev);
 
-static char *version = "am79c961 ethernet driver (c) 1995 R.M.King v0.00\n";
-
-#define FUNC_PROLOGUE \
-	struct dev_priv *priv = (struct dev_priv *)dev->priv
+static char *version = "am79c961 ethernet driver (c) 1995 R.M.King v0.01\n";
 
 /* --------------------------------------------------------------------------- */
 
+#ifdef __arm__
 static void
 write_rreg (unsigned long base, unsigned int reg, unsigned short val)
 {
-	__asm__("
-		strh	%1, [%2]	@ NET_RAP
-		strh	%0, [%2, #-4]	@ NET_RDP
+	__asm__("str%?h	%1, [%2]	@ NET_RAP
+		str%?h	%0, [%2, #-4]	@ NET_RDP
 		" : : "r" (val), "r" (reg), "r" (0xf0000464));
 }
 
 static inline void
 write_ireg (unsigned long base, unsigned int reg, unsigned short val)
 {
-	__asm__("
-		strh	%1, [%2]	@ NET_RAP
-		strh	%0, [%2, #8]	@ NET_RDP
+	__asm__("str%?h	%1, [%2]	@ NET_RAP
+		str%?h	%0, [%2, #8]	@ NET_RDP
 		" : : "r" (val), "r" (reg), "r" (0xf0000464));
 }
 
 #define am_writeword(dev,off,val)\
-	__asm__("\
-		strh	%0, [%1]\
-		" : : "r" ((val) & 0xffff), "r" (0xe0000000 + ((off) << 1)));
+	__asm__("str%?h	%0, [%1]" : : "r" ((val) & 0xffff), "r" (0xe0000000 + ((off) << 1)));
 
 static inline void
 am_writebuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
@@ -74,30 +68,28 @@ am_writebuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsi
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
 	if ((int)buf & 2) {
-		__asm__ __volatile__("
-			strh	%2, [%0], #4
-		" : "=&r" (offset) : "0" (offset), "r" (buf[0] | (buf[1] << 8)));
+		__asm__ __volatile__("str%?h	%2, [%0], #4"
+		 : "=&r" (offset) : "0" (offset), "r" (buf[0] | (buf[1] << 8)));
 		buf += 2;
 		length -= 2;
 	}
 	while (length > 8) {
 		unsigned int tmp, tmp2;
 		__asm__ __volatile__("
-			ldmia	%1!, {%2, %3}
-			strh	%2, [%0], #4
-			mov	%2, %2, lsr #16
-			strh	%2, [%0], #4
-			strh	%3, [%0], #4
-			mov	%3, %3, lsr #16
-			strh	%3, [%0], #4
-		" : "=&r" (offset), "=&r" (buf), "=r" (tmp), "=r" (tmp2)
+			ldm%?ia	%1!, {%2, %3}
+			str%?h	%2, [%0], #4
+			mov%?	%2, %2, lsr #16
+			str%?h	%2, [%0], #4
+			str%?h	%3, [%0], #4
+			mov%?	%3, %3, lsr #16
+			str%?h	%3, [%0], #4
+		" : "=&r" (offset), "=&r" (buf), "=&r" (tmp), "=&r" (tmp2)
 		  : "0" (offset), "1" (buf));
 		length -= 8;
 	}
 	while (length > 0) {
-		__asm__ __volatile__("
-			strh	%2, [%0], #4
-		" : "=&r" (offset) : "0" (offset), "r" (buf[0] | (buf[1] << 8)));
+		__asm__ __volatile__("str%?h	%2, [%0], #4"
+		 : "=&r" (offset) : "0" (offset), "r" (buf[0] | (buf[1] << 8)));
 		buf += 2;
 		length -= 2;
 	}
@@ -107,9 +99,8 @@ static inline unsigned short
 read_rreg (unsigned int base_addr, unsigned int reg)
 {
 	unsigned short v;
-	__asm__("
-		strh	%1, [%2]	@ NET_RAP
-		ldrh	%0, [%2, #-4]	@ NET_IDP
+	__asm__("str%?h	%1, [%2]	@ NET_RAP
+		ldr%?h	%0, [%2, #-4]	@ NET_IDP
 		" : "=r" (v): "r" (reg), "r" (0xf0000464));
 	return v;
 }
@@ -120,9 +111,7 @@ am_readword (struct device *dev, unsigned long off)
 	unsigned long address = 0xe0000000 + (off << 1);
 	unsigned short val;
 
-	__asm__("
-		ldrh	%0, [%1]
-		" : "=r" (val): "r" (address));
+	__asm__("ldr%?h	%0, [%1]" : "=r" (val): "r" (address));
 	return val;
 }
 
@@ -134,38 +123,41 @@ am_readbuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsig
 	if ((int)buf & 2) {
 		unsigned int tmp;
 		__asm__ __volatile__("
-			ldrh	%2, [%0], #4
-			strb	%2, [%1], #1
-			mov	%2, %2, lsr #8
-			strb	%2, [%1], #1
+			ldr%?h	%2, [%0], #4
+			str%?b	%2, [%1], #1
+			mov%?	%2, %2, lsr #8
+			str%?b	%2, [%1], #1
 		" : "=&r" (offset), "=&r" (buf), "=r" (tmp): "0" (offset), "1" (buf));
 		length -= 2;
 	}
 	while (length > 8) {
 		unsigned int tmp, tmp2, tmp3;
 		__asm__ __volatile__("
-			ldrh	%2, [%0], #4
-			ldrh	%3, [%0], #4
-			orr	%2, %2, %3, lsl #16
-			ldrh	%3, [%0], #4
-			ldrh	%4, [%0], #4
-			orr	%3, %3, %4, lsl #16
-			stmia	%1!, {%2, %3}
-		" : "=&r" (offset), "=&r" (buf), "=r" (tmp), "=r" (tmp2), "=r" (tmp3)
+			ldr%?h	%2, [%0], #4
+			ldr%?h	%3, [%0], #4
+			orr%?	%2, %2, %3, lsl #16
+			ldr%?h	%3, [%0], #4
+			ldr%?h	%4, [%0], #4
+			orr%?	%3, %3, %4, lsl #16
+			stm%?ia	%1!, {%2, %3}
+		" : "=&r" (offset), "=&r" (buf), "=&r" (tmp), "=&r" (tmp2), "=&r" (tmp3)
 		  : "0" (offset), "1" (buf));
 		length -= 8;
 	}
 	while (length > 0) {
 		unsigned int tmp;
 		__asm__ __volatile__("
-			ldrh	%2, [%0], #4
-			strb	%2, [%1], #1
-			mov	%2, %2, lsr #8
-			strb	%2, [%1], #1
+			ldr%?h	%2, [%0], #4
+			str%?b	%2, [%1], #1
+			mov%?	%2, %2, lsr #8
+			str%?b	%2, [%1], #1
 		" : "=&r" (offset), "=&r" (buf), "=r" (tmp) : "0" (offset), "1" (buf));
 		length -= 2;
 	}
 }
+#else
+#error Not compatable
+#endif
 
 static int
 am79c961_ramtest(struct device *dev, unsigned int val)
@@ -259,7 +251,7 @@ am79c961_init_for_open(struct device *dev)
 	write_rreg (dev->base_addr, SIZERXR, -RX_BUFFERS);
 	write_rreg (dev->base_addr, SIZETXR, -TX_BUFFERS);
 	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
-	write_rreg (dev->base_addr, CSR3, CSR3_IDONM|CSR3_BABLM);
+	write_rreg (dev->base_addr, CSR3, CSR3_IDONM|CSR3_BABLM|CSR3_DXSUFLO);
 	write_rreg (dev->base_addr, CSR0, CSR0_IENA|CSR0_STRT);
 }
 
@@ -304,7 +296,7 @@ am79c961_probe1(struct device *dev)
 	/*
 	 * The PNP initialisation should have been done by the ether bootp loader.
 	 */
-	inb ((dev->base_addr + NET_RESET) >> 1);	/* reset the device */
+	inb((dev->base_addr + NET_RESET) >> 1);	/* reset the device */
 
 	udelay (5);
 
@@ -420,26 +412,105 @@ static struct enet_statistics *am79c961_getstats (struct device *dev)
 	return &priv->stats;
 }
 
+static inline u32 update_crc(u32 crc, u8 byte)
+{
+	int i;
+
+	for (i = 8; i != 0; i--) {
+		byte ^= crc & 1;
+		crc >>= 1;
+
+		if (byte & 1)
+			crc ^= 0xedb88320;
+
+		byte >>= 1;
+	}
+
+	return crc;
+}
+
+static void am79c961_mc_hash(struct dev_mc_list *dmi, unsigned short *hash)
+{
+	if (dmi->dmi_addrlen == ETH_ALEN && dmi->dmi_addr[0] & 0x01) {
+	    	int i, idx, bit;
+		u32 crc;
+
+		crc = 0xffffffff;
+
+		for (i = 0; i < ETH_ALEN; i++)
+			crc = update_crc(crc, dmi->dmi_addr[i]);
+
+		idx = crc >> 30;
+		bit = (crc >> 26) & 15;
+
+		hash[idx] |= 1 << bit;
+	}
+}
+
 /*
  * Set or clear promiscuous/multicast mode filter for this adaptor.
- *
- * We don't attempt any packet filtering.  The card may have a SEEQ 8004
- * in which does not have the other ethernet address registers present...
+ * We don't attempt any packet filtering.
  */
 static void am79c961_setmulticastlist (struct device *dev)
 {
 	unsigned long flags;
-	int i;
+	unsigned short multi_hash[4], mode;
+	int i, stopped;
 
-	dev->flags &= ~IFF_ALLMULTI;
+	mode = MODE_PORT0;
 
-	i = MODE_PORT0;
-	if (dev->flags & IFF_PROMISC)
-		i |= MODE_PROMISC;
+	if (dev->flags & IFF_PROMISC) {
+		mode |= MODE_PROMISC;
+	} else if (dev->flags & IFF_ALLMULTI) {
+		memset(multi_hash, 0xff, sizeof(multi_hash));
+	} else {
+		struct dev_mc_list *dmi;
 
-	save_flags_cli (flags);
-	write_rreg (dev->base_addr, MODE, i);
-	restore_flags (flags);
+		memset(multi_hash, 0x00, sizeof(multi_hash));
+
+		for (dmi = dev->mc_list; dmi; dmi = dmi->next)
+			am79c961_mc_hash(dmi, multi_hash);
+	}
+
+	save_flags_cli(flags);
+
+	stopped = read_rreg(dev->base_addr, CSR0) & CSR0_STOP;
+
+	if (!stopped) {
+		/*
+		 * Put the chip into suspend mode
+		 */
+		write_rreg(dev->base_addr, CTRL1, CTRL1_SPND);
+
+		/*
+		 * Spin waiting for chip to report suspend mode
+		 */
+		while ((read_rreg(dev->base_addr, CTRL1) & CTRL1_SPND) == 0) {
+			restore_flags(flags);
+			nop();
+			save_flags_cli(flags);
+		}
+	}
+
+	/*
+	 * Update the multicast hash table
+	 */
+	for (i = 0; i < sizeof(multi_hash) / sizeof(multi_hash[0]); i++)
+		write_rreg(dev->base_addr, i + LADRL, multi_hash[i]);
+
+	/*
+	 * Write the mode register
+	 */
+	write_rreg(dev->base_addr, MODE, mode);
+
+	if (!stopped) {
+		/*
+		 * Put the chip back into running mode
+		 */
+		write_rreg(dev->base_addr, CTRL1, 0);
+	}
+
+	restore_flags(flags);
 }
 
 /*
@@ -455,17 +526,20 @@ again:
 		if (!test_and_set_bit(0, (void*)&dev->tbusy)) {
 			unsigned int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 			unsigned int hdraddr, bufaddr;
+			unsigned int head;
 			unsigned long flags;
 
-			hdraddr = priv->txhdr + (priv->txhead << 3);
-			bufaddr = priv->txbuffer[priv->txhead];
-			priv->txhead ++;
-			if (priv->txhead >= TX_BUFFERS)
-				priv->txhead = 0;
+			head = priv->txhead;
+			hdraddr = priv->txhdr + (head << 3);
+			bufaddr = priv->txbuffer[head];
+			head += 1;
+			if (head >= TX_BUFFERS)
+				head = 0;
 
 			am_writebuffer (dev, bufaddr, skb->data, length);
 			am_writeword (dev, hdraddr + 4, -length);
 			am_writeword (dev, hdraddr + 2, TMD_OWN|TMD_STP|TMD_ENP);
+			priv->txhead = head;
 
 			save_flags_cli (flags);
 			write_rreg (dev->base_addr, CSR0, CSR0_TDMD|CSR0_IENA);
@@ -483,10 +557,14 @@ again:
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < 5)
 			return 1;
-		printk (KERN_WARNING "%s: transmit timed out, network cable problem?\n", dev->name);
+		printk(KERN_WARNING "%s: transmit timed out, network cable problem?\n", dev->name);
 		/* Try to restart the adaptor. */
+		disable_irq(dev->irq);
+		am79c961_init(dev);
+		am79c961_init_for_open(dev);
 		dev->tbusy = 0;
 		dev->trans_start = jiffies;
+		enable_irq(dev->irq);
 		goto again;
 	}
 }
@@ -613,7 +691,7 @@ am79c961_tx(struct device *dev, struct dev_priv *priv)
 			am_writeword (dev, hdraddr + 6, 0);
 
 			if (status2 & TST_RTRY)
-				priv->stats.collisions += 1;
+				priv->stats.collisions += 16;
 			if (status2 & TST_LCOL)
 				priv->stats.tx_window_errors ++;
 			if (status2 & TST_LCAR)

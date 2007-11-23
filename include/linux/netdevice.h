@@ -30,7 +30,9 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
+#ifdef __KERNEL__
 #include <net/divert.h>
+#endif
 
 #include <asm/atomic.h>
 

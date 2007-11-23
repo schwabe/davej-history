@@ -1825,8 +1825,8 @@ int pc_init(void)
 	/* --------------------------------------------------------------------- 
 	   loops_per_sec hasn't been set at this point :-(, so fake it out... 
 	   I set it, so that I can use the __delay() function.
-	    
-	   Yes it is nowdays
+	   
+	   We don't use __delay(), so we don't need to fake it.
 	   
 	------------------------------------------------------------------------ */
 

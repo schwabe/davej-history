@@ -9806,7 +9806,7 @@ static unsigned char *page_uni2charset[256] = {
 	NULL,   NULL,   NULL,   NULL,   NULL,   NULL,   NULL,   NULL,   
 	NULL,   u2c_F9, u2c_FA, NULL,   NULL,   NULL,   NULL,   u2c_FF, };
 
-static void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int boundlen, int *outlen)
+static void uni2char(const unsigned char ch, unsigned char cl, unsigned char *out, int boundlen, int *outlen)
 {
 	unsigned char *uni2charset;
 
@@ -9844,7 +9844,7 @@ static void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int
 	return;
 }
 
-static void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
+static void char2uni(const unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
 {
 	unsigned char ch, cl;
 	struct nls_unicode *charset2uni;
@@ -9942,7 +9942,7 @@ static void uni2char_euc_jp(unsigned char ch, unsigned char cl, unsigned char * 
 	return;
 }
 
-static void char2uni_euc_jp(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
+static void char2uni_euc_jp(const unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
 {
 	unsigned char ch, cl;
 	unsigned char sjis_temp[2];

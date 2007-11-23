@@ -1230,8 +1230,8 @@ void __init calibrate_delay(void)
 
 /* Round the value and print it */	
 	printk("%lu.%02lu BogoMIPS\n",
-		(loops_per_jiffy+2500)/(500000/HZ),
-		((loops_per_jiffy+2500)/(5000/HZ)) % 100);
+		loops_per_jiffy/(500000/HZ),
+		(loops_per_jiffy/(5000/HZ)) % 100);
 }
 
 /*

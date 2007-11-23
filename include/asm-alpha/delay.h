@@ -40,7 +40,7 @@ __delay(unsigned long loops)
 extern __inline__ void
 __udelay(unsigned long usecs, unsigned long lps)
 {
-	/* compute (usecs * 2**64 / 10**6) * loops_per_sec / 2**64 */
+	/* compute (usecs * 2**64 / 10**6) * loops_per_jiffy * HZ / 2**64 */
 
 	usecs *= 0x000010c6f7a0b5edUL;		/* 2**64 / 1000000 */
 	__asm__("umulh %1,%2,%0" :"=r" (usecs) :"r" (usecs),"r" (lps));
@@ -50,7 +50,7 @@ __udelay(unsigned long usecs, unsigned long lps)
 extern __inline__ void
 __small_const_udelay(unsigned long usecs, unsigned long lps)
 {
-	/* compute (usecs * 2**32 / 10**6) * loops_per_sec / 2**32 */
+	/* compute (usecs * 2**32 / 10**6) * loops_per_jiffy * HZ / 2**32 */
 
         usecs *= 0x10c6;                /* 2^32 / 10^6 */
 	usecs *= lps;
@@ -62,15 +62,16 @@ __small_const_udelay(unsigned long usecs, unsigned long lps)
 #define udelay(usecs)						\
 	(__builtin_constant_p(usecs) && usecs < 0x100000000UL	\
 	 ? __small_const_udelay(usecs,				\
-		cpu_data[smp_processor_id()].loops_per_sec)	\
+		cpu_data[smp_processor_id()].loops_per_jiffy*HZ)	\
 	 : __udelay(usecs,					\
-		cpu_data[smp_processor_id()].loops_per_sec))
+		cpu_data[smp_processor_id()].loops_per_jiffy*HZ))
 #else
 #define udelay(usecs)						\
 	(__builtin_constant_p(usecs) && usecs < 0x100000000UL	\
-	 ? __small_const_udelay(usecs, loops_per_sec)		\
-	 : __udelay(usecs, loops_per_sec))
+	 ? __small_const_udelay(usecs, loops_per_jiffy*HZ)		\
+	 : __udelay(usecs, loops_per_jiffy*HZ))
 #endif
 
 
 #endif /* defined(__ALPHA_DELAY_H) */
+

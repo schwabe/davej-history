@@ -7,7 +7,7 @@
 #include <asm/assembler.h>
 		.text
 
-LC0:		.word	SYMBOL_NAME(loops_per_sec)
+LC0:		.word	SYMBOL_NAME(loops_per_jiffy)
 
 ENTRY(udelay)
 		mov	r2, #0x1000

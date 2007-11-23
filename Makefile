@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre14
+EXTRAVERSION = pre15
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -29,7 +29,7 @@ LD	=$(CROSS_COMPILE)ld
 #	otherwise 'cc'
 #
 CC	=$(shell if [ -n "$(CROSS_COMPILE)" ]; then echo $(CROSS_COMPILE)gcc; else \
-	scripts/kwhich gcc272 2>/dev/null || scripts/kwhich kgcc 2>/dev/null || echo cc; fi) \
+	$(CONFIG_SHELL) scripts/kwhich gcc272 2>/dev/null || $(CONFIG_SHELL) scripts/kwhich kgcc 2>/dev/null || echo cc; fi) \
 	-D__KERNEL__ -I$(HPATH)
 CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar

@@ -20,7 +20,7 @@
  *          Modified by Gerd Knorr <kraxel@cs.tu-berlin.de> to support the
  *          generic cdrom interface
  *
- *       Modified by Jens Axboe <axboe@image.dk> - Uniform sr_packet()
+ *       Modified by Jens Axboe <axboe@suse.de> - Uniform sr_packet()
  *       interface, capabilities probe additions, ioctl cleanups, etc.
  *
  *	Modified by Jens Axboe <axboe@suse.de> - support DVD-RAM

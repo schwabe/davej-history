@@ -344,6 +344,8 @@ static struct pci_id_info pci_tbl[] __initdata = {
 	0x11AD, 0xc115, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
   { "ADMtek AN981 Comet",
 	0x1317, 0x0981, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
+  { "ADMtek AN985 Comet",
+	0x1317, 0x0981, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
   { "Compex RL100-TX",
 	0x11F6, 0x9881, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
   { "Intel 21145 Tulip",

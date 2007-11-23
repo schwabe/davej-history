@@ -468,7 +468,7 @@ S:	Maintained
 
 IDE/ATAPI CDROM DRIVER 
 P:	Jens Axboe
-M:	axboe@image.dk
+M:	axboe@suse.de
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
@@ -943,7 +943,7 @@ S:	Maintained
 
 UNIFORM CDROM DRIVER 
 P:	Jens Axboe
-M:	axboe@image.dk
+M:	axboe@suse.de
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 

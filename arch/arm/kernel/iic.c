@@ -22,8 +22,8 @@
  */
 static void iic_delay(void)
 {
-	extern unsigned long loops_per_sec;
-	if (loops_per_sec != (1 << 12)) {
+	extern unsigned long loops_per_jiffy;
+	if (loops_per_jiffy != (1 << 12)) {
 		udelay(100); /* was 10 */
 		return;
 	} else {

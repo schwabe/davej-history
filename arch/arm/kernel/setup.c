@@ -522,8 +522,8 @@ int get_cpuinfo(char * buffer)
 		     (int)processor_id & 15, elf_platform);
 
 	p += sprintf(p, "BogoMIPS\t: %lu.%02lu\n",
-		     (loops_per_sec+2500) / 500000,
-		     ((loops_per_sec+2500) / 5000) % 100);
+		     (loops_per_jiffy+2500) / (500000/HZ),
+		     ((loops_per_jiffy+2500) / (5000/HZ)) % 100);
 
 	p += sprintf(p, "Hardware\t: %s\n", machine_name);
 

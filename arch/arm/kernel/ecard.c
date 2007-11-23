@@ -140,14 +140,10 @@ ecard_task_reset(struct ecard_request *req)
 		ecard_t *ec;
 
 		for (ec = cards; ec; ec = ec->next) {
-			printk(KERN_DEBUG "Resetting card %d\n",
-			       ec->slot_no);
-
 			if (ec->loader)
 				ecard_loader_reset(POD_INT_ADDR(ec->podaddr),
 						   ec->loader);
 		}
-		printk(KERN_DEBUG "All cards reset\n");
 	} else if (req->ec->loader)
 		ecard_loader_reset(POD_INT_ADDR(req->ec->podaddr),
 				   req->ec->loader);

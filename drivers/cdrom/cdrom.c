@@ -82,17 +82,17 @@
   Thanks to Grant R. Guenther <grant@torque.net> for spotting this bug.
   -- Made a few things more pedanticly correct.
 
-2.50 Oct 19, 1998 - Jens Axboe <axboe@image.dk>
+2.50 Oct 19, 1998 - Jens Axboe <axboe@suse.de>
   -- New maintainers! Erik was too busy to continue the work on the driver,
-  so now Chris Zwilling <chris@cloudnet.com> and Jens Axboe <axboe@image.dk>
+  so now Chris Zwilling <chris@cloudnet.com> and Jens Axboe <axboe@suse.de>
   will do their best to follow in his footsteps
   
-  2.51 Dec 20, 1998 - Jens Axboe <axboe@image.dk>
+  2.51 Dec 20, 1998 - Jens Axboe <axboe@suse.de>
   -- Check if drive is capable of doing what we ask before blindly changing
   cdi->options in various ioctl.
   -- Added version to proc entry.
   
-  2.52 Jan 16, 1999 - Jens Axboe <axboe@image.dk>
+  2.52 Jan 16, 1999 - Jens Axboe <axboe@suse.de>
   -- Fixed an error in open_for_data where we would sometimes not return
   the correct error value. Thanks Huba Gaspar <huba@softcell.hu>.
   -- Fixed module usage count - usage was based on /proc/sys/dev
@@ -101,7 +101,7 @@
   dev would be removed even though it was used. cdrom.c just illuminated
   that bug.
   
-  2.53 Feb 22, 1999 - Jens Axboe <axboe@image.dk>
+  2.53 Feb 22, 1999 - Jens Axboe <axboe@suse.de>
   -- Fixup of several ioctl calls, in particular CDROM_SET_OPTIONS has
   been "rewritten" because capabilities and options aren't in sync. They
   should be...
@@ -111,16 +111,16 @@
   -- Added CDROM_GET_CAPABILITY ioctl. This relieves userspace programs
   from parsing /proc/sys/dev/cdrom/info.
   
-  2.54 Mar 15, 1999 - Jens Axboe <axboe@image.dk>
+  2.54 Mar 15, 1999 - Jens Axboe <axboe@suse.de>
   -- Check capability mask from low level driver when counting tracks as
   per suggestion from Corey J. Scotts <cstotts@blue.weeg.uiowa.edu>.
   
-  2.55 Apr 25, 1999 - Jens Axboe <axboe@image.dk>
+  2.55 Apr 25, 1999 - Jens Axboe <axboe@suse.de>
   -- autoclose was mistakenly checked against CDC_OPEN_TRAY instead of
   CDC_CLOSE_TRAY.
   -- proc info didn't mask against capabilities mask.
   
-  3.00 Aug 5, 1999 - Jens Axboe <axboe@image.dk>
+  3.00 Aug 5, 1999 - Jens Axboe <axboe@suse.de>
   -- Unified audio ioctl handling across CD-ROM drivers. A lot of the
   code was duplicated before. Drives that support the generic packet
   interface are now being fed packets from here instead.
@@ -138,13 +138,13 @@
   -- CDROM_SEND_PACKET ioctl added. The infrastructure was in place for
   doing this anyway, with the generic_packet addition.
   
-  3.01 Aug 6, 1999 - Jens Axboe <axboe@image.dk>
+  3.01 Aug 6, 1999 - Jens Axboe <axboe@suse.de>
   -- Fix up the sysctl handling so that the option flags get set
   correctly.
   -- Fix up ioctl handling so the device specific ones actually get
   called :).
   
-  3.02 Aug 8, 1999 - Jens Axboe <axboe@image.dk>
+  3.02 Aug 8, 1999 - Jens Axboe <axboe@suse.de>
   -- Fixed volume control on SCSI drives (or others with longer audio
   page).
   -- Fixed a couple of DVD minors. Thanks to Andrew T. Veliath
@@ -153,7 +153,7 @@
   DVD patches for ide-cd and while I rearranged and unified them, the
   interface is still the same.
   
-  3.03 Sep 1, 1999 - Jens Axboe <axboe@image.dk>
+  3.03 Sep 1, 1999 - Jens Axboe <axboe@suse.de>
   -- Moved the rest of the audio ioctls from the CD-ROM drivers here. Only
   CDROMREADTOCENTRY and CDROMREADTOCHDR are left.
   -- Moved the CDROMREADxxx ioctls in here.
@@ -164,7 +164,7 @@
   drivers are updated as well.
   -- Various other cleanups.
 
-  3.04 Sep 12, 1999 - Jens Axboe <axboe@image.dk>
+  3.04 Sep 12, 1999 - Jens Axboe <axboe@suse.de>
   -- Fixed a couple of possible memory leaks (if an operation failed and
   we didn't free the buffer before returning the error).
   -- Integrated Uniform CD Changer handling from Richard Sharman
@@ -178,7 +178,7 @@
   -- Export cdrom_mode_sense and cdrom_mode_select.
   -- init_cdrom_command() for setting up a cgc command.
   
-  3.05 Oct 24, 1999 - Jens Axboe <axboe@image.dk>
+  3.05 Oct 24, 1999 - Jens Axboe <axboe@suse.de>
   -- Changed the interface for CDROM_SEND_PACKET. Before it was virtually
   impossible to send the drive data in a sensible way.
   -- Lowered stack usage in mmc_ioctl(), dvd_read_disckey(), and
@@ -187,7 +187,7 @@
   -- Fixed CDDA ripping with cdda2wav - accept much larger requests of
   number of frames and split the reads in blocks of 8.
 
-  3.06 Dec 13, 1999 - Jens Axboe <axboe@image.dk>
+  3.06 Dec 13, 1999 - Jens Axboe <axboe@suse.de>
   -- Added support for changing the region of DVD drives.
   -- Added sense data to generic command.
 
@@ -1106,6 +1106,7 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 		cdinfo(CD_DVD, "entering DVD_LU_SEND_RPC_STATE\n");
 		setup_report_key(&cgc, 0, 8);
 		memset(&rpc_state, 0, sizeof(rpc_state_t));
+		cgc.buffer = (char *) &rpc_state;
 		cgc.buffer = (char *) &rpc_state;
 
 		if ((ret = cdo->generic_packet(cdi, &cgc)))
@@ -2553,6 +2554,7 @@ static struct ctl_table_header *cdrom_sysctl_header;
  * Note: only the top-level directory needs to do this; if
  * a lower level is referenced, the parent will be as well.
  */
+#ifdef CONFIG_PROC_FS
 static void cdrom_procfs_modcount(struct inode *inode, int fill)
 {
 	if (fill) {
@@ -2561,6 +2563,7 @@ static void cdrom_procfs_modcount(struct inode *inode, int fill)
 		MOD_DEC_USE_COUNT;
 	}
 }
+#endif
 
 static void cdrom_sysctl_register(void)
 {
@@ -2570,7 +2573,9 @@ static void cdrom_sysctl_register(void)
 		return;
 
 	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
+#ifdef CONFIG_PROC_FS
 	cdrom_root_table->child->de->fill_inode = &cdrom_procfs_modcount;
+#endif
 
 	/* set the defaults */
 	cdrom_sysctl_settings.autoclose = autoclose;

@@ -40,7 +40,8 @@ struct i2c_device;
 	/* 2 is used in 2.3.x */
 #define I2C_BUSID_BUZ		3	/* I2C bus on a BUZ */
 #define I2C_BUSID_ZORAN		4	/* I2C bus on a Zoran */
-#define I2C_BUSID_SGIVWFB	5	/* Moved to be unique */
+#define I2C_BUSID_CYBER2000	5	/* I2C bus on a Cyber2000 */
+#define I2C_BUSID_SGIVWFB	6	/* Moved to be unique */
 
 /*
  * struct for a driver for a i2c chip (tuner, soundprocessor,

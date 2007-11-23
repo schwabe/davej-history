@@ -6,7 +6,7 @@ struct nls_unicode {
 struct nls_table {
 	char *charset;
 	void (*uni2char) (unsigned char ch, unsigned char cl, unsigned char *out, int boundlen, int *outlen);
-	void (*char2uni) (unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2);
+	void (*char2uni) (const unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2);
 
 	void (*inc_use_count) (void);
 	void (*dec_use_count) (void);

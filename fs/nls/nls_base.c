@@ -380,7 +380,7 @@ void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int boundl
 	return;
 }
 
-void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
+void char2uni(const unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
 {
 	*uni1 = charset2uni[*rawstring].uni1;
 	*uni2 = charset2uni[*rawstring].uni2;

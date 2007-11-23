@@ -14,8 +14,21 @@ SECTIONS
 			*(.proc.info)
 		__proc_info_end = .;
 			*(.data.init)
+		. = ALIGN(16);
+		__setup_start = .;
+			*(.setup.init)
+		__setup_end = .;
+		__initcall_start = .;
+			*(.initcall.init)
+		__initcall_end = .;
 		. = ALIGN(4096);
 		__init_end = .;
+	}
+
+	/DISCARD/ : {			/* Exit code and data		*/
+		*(.text.exit)
+		*(.data.exit)
+		*(.exitcall.exit)
 	}
 
 	__ebsa285_begin = .;

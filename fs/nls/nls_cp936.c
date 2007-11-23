@@ -15609,7 +15609,7 @@ static void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int
 	return;
 }
 
-static void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
+static void char2uni(const unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
 {
 	unsigned char ch, cl;
 	struct nls_unicode *charset2uni;

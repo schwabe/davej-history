@@ -122,7 +122,7 @@ pas2-objs	:= pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
 sb-objs		:= sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o	\
 			   sb_ess.o
 softoss2-objs	:= softoss.o softoss_rs.o
-vidc_mod-objs	:= vidc.o vidc_audio.o vidc_fill.o vidc_mixer.o vidc_synth.o
+vidc_mod-objs	:= vidc.o vidc_fill.o vidc_synth.o
 wavefront-objs  := wavfront.o wf_midi.o yss225.o
 nm256-objs	:= nm256_audio.o ac97.o
 via82cxxx-objs  := via82cxxx_audio.o ac97.o

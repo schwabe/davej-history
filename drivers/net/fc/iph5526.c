@@ -2242,7 +2242,7 @@ static void reset_ichip(struct fc_info *fi)
 	/* (i)chip reset */
 	writel(ICHIP_HCR_RESET, fi->i_r.ptr_ichip_hw_control_reg);
 	/*wait for chip to get reset */
-	udelay(10000);
+	mdelay(10);
 	/*de-assert reset */
 	writel(ICHIP_HCR_DERESET, fi->i_r.ptr_ichip_hw_control_reg);
 	
@@ -3884,7 +3884,7 @@ struct pci_dev *pdev = NULL;
 	/* This is to make sure that the ACC to the PRLI comes in 
 	 * for the last ALPA. 
 	 */
-	udelay(1000000); /* Ugly! Let the Gods forgive me */
+	mdelay(1000); /* Ugly! Let the Gods forgive me */
 
 	DPRINTK1("leaving iph5526_detect\n");
 	return no_of_hosts;

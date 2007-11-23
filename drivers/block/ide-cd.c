@@ -210,17 +210,17 @@
  *                         patch thanks to "Eddie C. Dost" <ecd@skynet.be>
  *
  * 4.50  Oct 19, 1998  -- New maintainers!
- *                         Jens Axboe <axboe@image.dk>
+ *                         Jens Axboe <axboe@suse.de>
  *                         Chris Zwilling <chris@cloudnet.com>
  *
- * 4.51  Dec 23, 1998  -- Jens Axboe <axboe@image.dk>
+ * 4.51  Dec 23, 1998  -- Jens Axboe <axboe@suse.de>
  *                      - ide_cdrom_reset enabled since the ide subsystem
- *                         handles resets fine now. <axboe@image.dk>
+ *                         handles resets fine now. <axboe@suse.de>
  *                      - Transfer size fix for Samsung CD-ROMs, thanks to
  *                        "Ville Hallik" <ville.hallik@mail.ee>.
  *                      - other minor stuff.
  *
- * 4.52  Jan 19, 1999  -- Jens Axboe <axboe@image.dk>
+ * 4.52  Jan 19, 1999  -- Jens Axboe <axboe@suse.de>
  *                      - Detect DVD-ROM/RAM drives
  *
  * 4.53  Feb 22, 1999   - Include other model Samsung and one Goldstar
@@ -1835,9 +1835,9 @@ static int cdrom_play_audio(ide_drive_t *drive, int lba_start, int lba_end)
 	memset(&pc, 0, sizeof (pc));
 	pc.sense = &sense;
 
-	pc.c[0] = GPCMD_PLAY_AUDIO_10;
-	put_unaligned(cpu_to_be32(lba_start), (unsigned int *) &pc.c[2]);
-	put_unaligned(cpu_to_be16(lba_end - lba_start), (unsigned int *) &pc.c[7]);
+	pc.c[0] = GPCMD_PLAY_AUDIO_MSF;
+	lba_to_msf(lba_start, &pc.c[3], &pc.c[4], &pc.c[5]);
+	lba_to_msf(lba_end-1, &pc.c[6], &pc.c[7], &pc.c[8]);
 
 	return cdrom_queue_packet_command(drive, &pc);
 }
@@ -1944,14 +1944,15 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 {
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 	struct cdrom_info *info = drive->driver_data;
+	int stat;
 
 	switch (cmd) {
 	/*
-	 * emulate PLAY_AUDIO_TI command with PLAY_AUDIO_10, since
+	 * emulate PLAY_AUDIO_TI command with PLAY_AUDIO_MSF, since
 	 * atapi doesn't support it
 	 */
 	case CDROMPLAYTRKIND: {
-		int stat, lba_start, lba_end;
+		int lba_start, lba_end;
 		struct cdrom_ti *ti = (struct cdrom_ti *)arg;
 		struct atapi_toc_entry *first_toc, *last_toc;
 
@@ -1975,7 +1976,6 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 	}
 
 	case CDROMREADTOCHDR: {
-		int stat;
 		struct cdrom_tochdr *tochdr = (struct cdrom_tochdr *) arg;
 		struct atapi_toc *toc;
 
@@ -1991,7 +1991,6 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 	}
 
 	case CDROMREADTOCENTRY: {
-		int stat;
 		struct cdrom_tocentry *tocentry = (struct cdrom_tocentry*) arg;
 		struct atapi_toc_entry *toce;
 

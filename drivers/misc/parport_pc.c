@@ -617,7 +617,7 @@ static int irq_probe_ECP(struct parport *pb)
 
 	sti();
 	irqs = probe_irq_on();
-		
+
 	parport_pc_write_econtrol(pb, 0x00);	/* Reset FIFO */
 	parport_pc_write_econtrol(pb, 0xd0);	/* TEST FIFO + nErrIntrEn */
 
@@ -948,6 +948,7 @@ static int parport_pc_init_pci (int irq, int dma)
 		}
 	}
 
+#ifdef CONFIG_PCI
 	/* Look for parallel controllers that we don't know about. */
 	for (pcidev = pci_devices; pcidev; pcidev = pcidev->next) {
 		const int class_noprogif = pcidev->class & ~0xff;
@@ -968,6 +969,7 @@ static int parport_pc_init_pci (int irq, int dma)
 			"tim@cyberelk.demon.co.uk\n",
 			pcidev->vendor, pcidev->device);
 	}
+#endif
 
 	return count;
 }

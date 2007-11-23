@@ -94,7 +94,7 @@ smp_setup(char *str, int *ints)
 static inline void __init
 smp_store_cpu_info(int cpuid)
 {
-	cpu_data[cpuid].loops_per_sec = loops_per_sec;
+	cpu_data[cpuid].loops_per_jiffy = loops_per_jiffy;
 	cpu_data[cpuid].last_asn
 	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
 

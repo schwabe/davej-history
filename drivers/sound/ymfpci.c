@@ -668,10 +668,10 @@ static void ymf_pcm_interrupt(ymfpci_t *codec, ymfpci_voice_t *voice)
 				/*
 				 * Normal end of DMA.
 				 */
-				printk("ymfpci%d: %d: done: delta %d"
-				    " hwptr %d swptr %d distance %d count %d\n",
-				    codec->inst, voice->number, delta,
-				    dmabuf->hwptr, swptr, distance, dmabuf->count);
+//				printk("ymfpci%d: %d: done: delta %d"
+//				    " hwptr %d swptr %d distance %d count %d\n",
+//				    codec->inst, voice->number, delta,
+//				    dmabuf->hwptr, swptr, distance, dmabuf->count);
 			}
 			played = dmabuf->count;
 			if (ypcm->running) {
@@ -826,8 +826,8 @@ static void ymf_pcm_init_voice(ymfpci_voice_t *voice, int stereo,
 		end >>= 1;
 	if (w_16)
 		end >>= 1;
-/* P3 */ printk("ymf_pcm_init_voice: %d: Rate %d Format 0x%08x Delta 0x%x End 0x%x\n",
-  voice->number, rate, format, delta, end);
+/* P3 */ // printk("ymf_pcm_init_voice: %d: Rate %d Format 0x%08x Delta 0x%x End 0x%x\n",
+//  voice->number, rate, format, delta, end);
 	for (nbank = 0; nbank < 2; nbank++) {
 		bank = &voice->bank[nbank];
 		bank->format = format;
@@ -1710,7 +1710,7 @@ static int ymf_ioctl(struct inode *inode, struct file *file,
 	case SNDCTL_DSP_SETFRAGMENT:
 		get_user_ret(val, (int *)arg, -EFAULT);
 	/* P3: these frags are for Doom. Amasingly, it sets [2,2**11]. */
-	/* P3 */ printk("ymfpci: ioctl SNDCTL_DSP_SETFRAGMENT 0x%x\n", val);
+	/* P3 */ // printk("ymfpci: ioctl SNDCTL_DSP_SETFRAGMENT 0x%x\n", val);
 
 		dmabuf->ossfragshift = val & 0xffff;
 		dmabuf->ossmaxfrags = (val >> 16) & 0xffff;

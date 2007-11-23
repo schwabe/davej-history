@@ -9,7 +9,7 @@
 
 /* make a multiple of 64-bytes */
 struct cpuinfo_alpha {
-	unsigned long loops_per_sec;
+	unsigned long loops_per_jiffy;
 	unsigned long last_asn;
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
