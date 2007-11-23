@@ -1079,7 +1079,7 @@ imsttfbcon_clear (struct vc_data *conp, struct display *disp,
 	out_le32(&p->dc_regs[BI], 0xffffffff);
 	out_le32(&p->dc_regs[MBC], 0xffffffff);
 	out_le32(&p->dc_regs[CLR], bgc);
-	out_le32(&p->dc_regs[BLTCTL], 0x200000);
+	out_le32(&p->dc_regs[BLTCTL], 0x840); /* 0x200000 */
 	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
 	while(in_le32(&p->dc_regs[SSTATUS]) & 0x40);
 }

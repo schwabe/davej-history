@@ -109,6 +109,7 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
         ppc_ide_md.fix_driveid(id);
 }
 
+#if 0	/* standard inb/outb is OK now -- paulus */
 #undef inb
 #define inb(port)	in_8((unsigned char *)((port) + ppc_ide_md.io_base))
 #undef inb_p
@@ -119,6 +120,7 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
 	out_8((unsigned char *)((port) + ppc_ide_md.io_base), (val) )
 #undef outb_p
 #define outb_p(val, port)	outb(val, port)
+#endif
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */

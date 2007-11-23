@@ -68,6 +68,8 @@
  *    15.06.99   0.12  Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *    28.06.99   0.13  Add pci_set_master
+ *    21.07.99   0.14  S/PDIF module option for cards revision >= 4. Initial version
+ *                     by Dave Platt <dplatt@snulbug.mtview.ca.us>.
  *
  */
 
@@ -143,6 +145,7 @@
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
+#define CTRL_SPDIFEN_B  0x04000000
 #define CTRL_JOY_SHIFT  24
 #define CTRL_JOY_MASK   3
 #define CTRL_JOY_200    0x00000000  /* joystick base address */
@@ -178,6 +181,9 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
 
 #define STAT_INTR       0x80000000  /* wired or of all interrupt bits */
+#define STAT_EN_SPDIF   0x00040000  /* enable S/PDIF circuitry */
+#define STAT_TS_SPDIF   0x00020000  /* test S/PDIF circuitry */
+#define STAT_TESTMODE   0x00010000  /* test ASIC */
 #define STAT_SYNC_ERR   0x00000100  /* 1 = codec sync error */
 #define STAT_VC         0x000000c0  /* CCB int source, 0=DAC1, 1=DAC2, 2=ADC, 3=undef */
 #define STAT_SH_VC      6
@@ -2701,6 +2707,7 @@ CONFIG_SOUND_ES1371_GAMEPORT
 #else
 static int joystick[NR_DEVICE] = { 0, };
 #endif
+static int spdif[NR_DEVICE] = { 0, };
 
 /* --------------------------------------------------------------------- */
 
@@ -2733,6 +2740,8 @@ __initfunc(int init_es1371(void))
 	struct pci_dev *pcidev = NULL;
 	mm_segment_t fs;
 	int i, val, val2, index = 0;
+	u8 revision;
+	unsigned cssr;
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
@@ -2789,6 +2798,18 @@ __initfunc(int init_es1371(void))
 			}
 		}
 		s->sctrl = 0;
+		cssr = 0;
+		/* check to see if s/pdif mode is being requested */
+		pci_read_config_byte(pcidev, PCI_REVISION_ID, &revision);
+		if (spdif[index]) {
+			if (revision >= 4) {
+				printk(KERN_INFO "es1371: enabling S/PDIF output\n");
+				cssr |= STAT_EN_SPDIF;
+				s->ctrl |= CTRL_SPDIFEN_B;
+			} else {
+				printk(KERN_ERR "es1371: revision %d does not support S/PDIF\n", revision);
+			}
+		}
 		/* initialize the chips */
 		outl(s->ctrl, s->io+ES1371_REG_CONTROL);
 		outl(s->sctrl, s->io+ES1371_REG_SERIAL_CONTROL);
@@ -2863,6 +2884,8 @@ __initfunc(int init_es1371(void))
 			mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
 		}
 		set_fs(fs);
+		/* turn on S/PDIF output driver if requested */
+		outl(cssr, s->io+ES1371_REG_STATUS);
 		/* queue it for later freeing */
 		s->next = devs;
 		devs = s;
@@ -2894,6 +2917,8 @@ __initfunc(int init_es1371(void))
 
 MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(joystick, "sets address and enables joystick interface (still need separate driver)");
+MODULE_PARM(spdif, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(spdif, "if 1 the output is in S/PDIF digital mode");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("ES1371 AudioPCI97 Driver");

@@ -2,7 +2,7 @@
  * acenic.c: Linux driver for the Alteon AceNIC Gigabit Ethernet card
  *           and other Tigon based cards.
  *
- * Copyright 1998 by Jes Sorensen, <Jes.Sorensen@cern.ch>.
+ * Copyright 1998, 1999 by Jes Sorensen, <Jes.Sorensen@cern.ch>.
  *
  * Thanks to Alteon and 3Com for providing hardware and documentation
  * enabling me to write this driver.
@@ -66,6 +66,16 @@
 #ifndef PCI_VENDOR_ID_NETGEAR
 #define PCI_VENDOR_ID_NETGEAR		0x1385
 #define PCI_DEVICE_ID_NETGEAR_GA620	0x620a
+#endif
+/*
+ * They used the DEC vendor ID by mistake
+ */
+#ifndef PCI_DEVICE_ID_FARALLON_PN9000SX
+#define PCI_DEVICE_ID_FARALLON_PN9000SX 0x1a
+#endif
+#ifndef PCI_VENDOR_ID_SGI
+#define PCI_VENDOR_ID_SGI             0x10a9
+#define PCI_DEVICE_ID_SGI_ACENIC      0x0009
 #endif
 
 /*
@@ -171,7 +181,7 @@ static int max_tx_desc[8] = {0, };
 static int max_rx_desc[8] = {0, };
 static int tx_ratio[8] = {0, };
 
-static const char __initdata *version = "acenic.c: v0.32 03/15/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char __initdata *version = "acenic.c: v0.33 07/20/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static struct device *root_dev = NULL;
 
@@ -208,7 +218,15 @@ __initfunc(int acenic_probe (struct device *dev))
 		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
 		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_NETGEAR) &&
-		      (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620)))
+		      (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620)) &&
+		/*
+		 * Farallon used the DEC vendor ID on their cards by
+		 * mistake for a while
+		 */
+		    !((pdev->vendor == PCI_VENDOR_ID_DEC) &&
+		      (pdev->device == PCI_DEVICE_ID_FARALLON_PN9000SX)) &&
+		    !((pdev->vendor == PCI_VENDOR_ID_SGI) &&
+		      (pdev->device == PCI_DEVICE_ID_SGI_ACENIC)))
 			continue;
 
 		dev = init_etherdev(dev, sizeof(struct ace_private));
@@ -281,6 +299,18 @@ __initfunc(int acenic_probe (struct device *dev))
 		case PCI_VENDOR_ID_NETGEAR:
 			sprintf(ap->name, "NetGear GA620 Gigabit Ethernet");
 			printk(KERN_INFO "%s: NetGear GA620 ", dev->name);
+			break;
+		case PCI_VENDOR_ID_DEC:
+			if (pdev->device == PCI_DEVICE_ID_FARALLON_PN9000SX) {
+				sprintf(ap->name, "Farallon PN9000-SX "
+					"Gigabit Ethernet");
+				printk(KERN_INFO "%s: Farallon PN9000-SX ",
+				       dev->name);
+				break;
+			}
+		case PCI_VENDOR_ID_SGI:
+			sprintf(ap->name, "SGI AceNIC Gigabit Ethernet");
+			printk(KERN_INFO "%s: SGI AceNIC ", dev->name);
 			break;
 		default:
 			sprintf(ap->name, "Unknown AceNIC based Gigabit Ethernet");
@@ -569,7 +599,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	 * and the control blocks for the transmit and receive rings
 	 * as they need to be setup once and for all.
 	 */
-	if (!(info = kmalloc(sizeof(struct ace_info), GFP_KERNEL | GFP_DMA))){
+	if (!(info = kmalloc(sizeof(struct ace_info), GFP_KERNEL))){
 		free_irq(dev->irq, dev);
 		return -EAGAIN;
 	}
@@ -1162,6 +1192,12 @@ static int ace_rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
 
+#if 0
+		/*
+		 * This was never actually enabled in the RX descriptors
+		 * anyway - it requires a bit more testing before enabling
+		 * it again.
+		 */
 		/*
 		 * If the checksum is correct and this is not a
 		 * fragment, tell the stack that the data is correct.
@@ -1172,7 +1208,7 @@ static int ace_rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		else
 			skb->ip_summed = CHECKSUM_NONE;
-
+#endif
 		netif_rx(skb);		/* send it up */
 
 		ap->stats.rx_packets++;

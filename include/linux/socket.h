@@ -261,4 +261,20 @@ extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
 extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
 #endif
 #endif /* not kernel and not glibc */
+
+#if !defined(__KERNEL__) && (!defined(__GLIBC__) || (__GLIBC__ < 2))
+
+/* Socket types for libc5 compatibility -- KTK */
+
+#define SOCK_STREAM    1		/* stream (connection) socket	*/
+#define SOCK_DGRAM     2		/* datagram (conn.less) socket	*/
+#define SOCK_RAW       3		/* raw socket			*/
+#define SOCK_RDM       4		/* reliably-delivered message	*/
+#define SOCK_SEQPACKET 5		/* sequential packet socket	*/
+#define SOCK_PACKET    10		/* linux specific way of	*/
+					/* getting packets at the dev	*/
+					/* level.  For writing rarp and */
+					/* other similar things on the	*/
+					/* user level.			*/
+#endif /* libc<=5 && !kernel */
 #endif /* _LINUX_SOCKET_H */

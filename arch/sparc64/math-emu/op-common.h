@@ -1,6 +1,5 @@
-
 #define _FP_DECL(wc, X)			\
-  _FP_I_TYPE X##_c, X##_s, X##_e;	\
+  _FP_I_TYPE X##_c, X##_s, X##_e, X##_r=0;	\
   _FP_FRAC_DECL_##wc(X)
 
 /*
@@ -8,6 +7,7 @@
  * of fp value and normalizing both the exponent and the fraction.
  */
 
+#ifndef _FP_UNPACK_CANONICAL
 #define _FP_UNPACK_CANONICAL(fs, wc, X)					\
 do {									\
   switch (X##_e)							\
@@ -23,15 +23,8 @@ do {									\
     if (_FP_FRAC_ZEROP_##wc(X))						\
       X##_c = FP_CLS_ZERO;						\
     else								\
-      {									\
-	/* a denormalized number */					\
-	_FP_I_TYPE _shift;						\
-	_FP_FRAC_CLZ_##wc(_shift, X);					\
-	_shift -= _FP_FRACXBITS_##fs;					\
-	_FP_FRAC_SLL_##wc(X, (_shift+_FP_WORKBITS));			\
-	X##_e -= _FP_EXPBIAS_##fs - 1 + _shift;				\
-	X##_c = FP_CLS_NORMAL;						\
-      }									\
+      /* a denormalized number */					\
+      __FP_UNPACK_DENORM(fs, wc, X)					\
     break;								\
 									\
   case _FP_EXPMAX_##fs:							\
@@ -43,6 +36,7 @@ do {									\
     break;								\
   }									\
 } while (0)
+#endif /* _FP_UNPACK_CANONICAL */
 
 
 /*
@@ -52,15 +46,16 @@ do {									\
  * extracted -- but that is ok, we can regenerate them now.
  */
 
+#ifndef _FP_PACK_CANONICAL
 #define _FP_PACK_CANONICAL(fs, wc, X)				\
-({int __ret = 0;						\
+({int __pk__ret = X##_r;					\
   switch (X##_c)						\
   {								\
   case FP_CLS_NORMAL:						\
     X##_e += _FP_EXPBIAS_##fs;					\
     if (X##_e > 0)						\
       {								\
-	__ret |= _FP_ROUND(wc, X);				\
+	__pk__ret |= _FP_ROUND(wc, X);				\
 	if (_FP_FRAC_OVERP_##wc(fs, X))				\
 	  {							\
 	    _FP_FRAC_SRL_##wc(X, (_FP_WORKBITS+1));		\
@@ -73,7 +68,7 @@ do {									\
 	    /* overflow to infinity */				\
 	    X##_e = _FP_EXPMAX_##fs;				\
 	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
-            __ret |= EFLAG_OVERFLOW;				\
+            __pk__ret |= EFLAG_OVERFLOW;			\
 	  }							\
       }								\
     else							\
@@ -83,7 +78,7 @@ do {									\
 	if (X##_e <= _FP_WFRACBITS_##fs)			\
 	  {							\
 	    _FP_FRAC_SRS_##wc(X, X##_e, _FP_WFRACBITS_##fs);	\
-	    __ret |= _FP_ROUND(wc, X);				\
+	    __pk__ret |= _FP_ROUND(wc, X);			\
 	    _FP_FRAC_SLL_##wc(X, 1);				\
 	    if (_FP_FRAC_OVERP_##wc(fs, X))			\
 	      {							\
@@ -94,7 +89,7 @@ do {									\
 	      {							\
 		X##_e = 0;					\
 		_FP_FRAC_SRL_##wc(X, _FP_WORKBITS+1);		\
-                __ret |= EFLAG_UNDERFLOW;			\
+                __pk__ret |= EFLAG_UNDERFLOW;			\
 	      }							\
 	  }							\
 	else							\
@@ -102,7 +97,7 @@ do {									\
 	    /* underflow to zero */				\
 	    X##_e = 0;						\
 	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
-            __ret |= EFLAG_UNDERFLOW;				\
+            __pk__ret |= EFLAG_UNDERFLOW;			\
 	  }							\
       }								\
     break;							\
@@ -128,16 +123,18 @@ do {									\
       _FP_FRAC_HIGH_##wc(X) |= _FP_QNANBIT_##fs;		\
     break;							\
   }								\
-  __ret;							\
+  __pk__ret;							\
 })
-
+#endif /* _FP_PACK_CANONICAL */
 
 /*
  * Main addition routine.  The input values should be cooked.
  */
-
+#ifndef _FP_ADD
 #define _FP_ADD(fs, wc, R, X, Y)					     \
 do {									     \
+  /* Propagate any flags that may have been set during unpacking */	     \
+  R##_r |= (X##_r | Y##_r);						     \
   switch (_FP_CLS_COMBINE(X##_c, Y##_c))				     \
   {									     \
   case _FP_CLS_COMBINE(FP_CLS_NORMAL,FP_CLS_NORMAL):			     \
@@ -150,8 +147,10 @@ do {									     \
 	  diff = -diff;							     \
 	  if (diff <= _FP_WFRACBITS_##fs)				     \
 	    _FP_FRAC_SRS_##wc(X, diff, _FP_WFRACBITS_##fs);		     \
-	  else if (!_FP_FRAC_ZEROP_##wc(X))				     \
+	  else if (!_FP_FRAC_ZEROP_##wc(X)) {				     \
 	    _FP_FRAC_SET_##wc(X, _FP_MINFRAC_##wc);			     \
+	    R_r |= EFLAG_INEXACT;					     \
+	  }								     \
 	  else								     \
 	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);			     \
 	  R##_e = Y##_e;						     \
@@ -162,8 +161,10 @@ do {									     \
 	    {								     \
 	      if (diff <= _FP_WFRACBITS_##fs)				     \
 	        _FP_FRAC_SRS_##wc(Y, diff, _FP_WFRACBITS_##fs);		     \
-	      else if (!_FP_FRAC_ZEROP_##wc(Y))				     \
+	      else if (!_FP_FRAC_ZEROP_##wc(Y))	{			     \
 	        _FP_FRAC_SET_##wc(Y, _FP_MINFRAC_##wc);			     \
+	         R_r |= EFLAG_INEXACT;					     \
+	      }								     \
 	      else							     \
 	        _FP_FRAC_SET_##wc(Y, _FP_ZEROFRAC_##wc);		     \
 	    }								     \
@@ -247,6 +248,7 @@ do {									     \
 	_FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);				     \
 	R##_s = X##_s ^ Y##_s;						     \
 	R##_c = FP_CLS_NAN;						     \
+	R##_r |= EFLAG_INVALID;
 	break;								     \
       }									     \
     /* FALLTHRU */							     \
@@ -276,28 +278,33 @@ do {									     \
     abort();								     \
   }									     \
 } while (0)
+#endif /* _FP_ADD */
 
 
 /*
  * Main negation routine.  FIXME -- when we care about setting exception
  * bits reliably, this will not do.  We should examine all of the fp classes.
  */
-
+#ifndef _FP_NEG
 #define _FP_NEG(fs, wc, R, X)		\
   do {					\
+    R##_r |= X##_r;			\
     _FP_FRAC_COPY_##wc(R, X);		\
     R##_c = X##_c;			\
     R##_e = X##_e;			\
     R##_s = 1 ^ X##_s;			\
   } while (0)
+#endif /* _FP_NEG */
 
 
 /*
  * Main multiplication routine.  The input values should be cooked.
  */
-
+#ifndef _FP_MUL
 #define _FP_MUL(fs, wc, R, X, Y)			\
 do {							\
+  /* Propagate any flags that may have been set during unpacking */	     \
+  R##_r |= (X##_r | Y##_r);						     \
   R##_s = X##_s ^ Y##_s;				\
   switch (_FP_CLS_COMBINE(X##_c, Y##_c))		\
   {							\
@@ -351,14 +358,17 @@ do {							\
     abort();						\
   }							\
 } while (0)
+#endif /* _FP_MUL */
 
 
 /*
  * Main division routine.  The input values should be cooked.
  */
-
+#ifndef _FP_DIV
 #define _FP_DIV(fs, wc, R, X, Y)			\
 do {							\
+  /* Propagate any flags that may have been set during unpacking */	     \
+  R##_r |= (X##_r | Y##_r);						     \
   R##_s = X##_s ^ Y##_s;				\
   switch (_FP_CLS_COMBINE(X##_c, Y##_c))		\
   {							\
@@ -411,13 +421,14 @@ do {							\
     abort();						\
   }							\
 } while (0)
+#endif _FP_DIV
 
 
 /*
  * Main differential comparison routine.  The inputs should be raw not
  * cooked.  The return is -1,0,1 for normal values, 2 otherwise.
  */
-
+#ifndef _FP_CMP
 #define _FP_CMP(fs, wc, ret, X, Y, un)					\
   do {									\
     /* NANs are unordered */						\
@@ -426,6 +437,18 @@ do {							\
       {									\
 	ret = un;							\
       }									\
+    /* Deal with infinities */						\
+    else if (X##_c == FP_CLS_INF) {					\
+	if(Y##_c == FP_CLS_INF) {					\
+	    ret = Y##_s - X##_s;					\
+	}								\
+	else {								\
+	    ret = X##_s ? -1 : 1; 					\
+	}								\
+    }									\
+    else if(Y##_c == FP_CLS_INF) {					\
+	ret = Y##_s ? 1 : -1;						\
+    }									\
     else								\
       {									\
 	int __is_zero_x;						\
@@ -454,10 +477,12 @@ do {							\
 	  ret = 0;							\
       }									\
   } while (0)
+#endif /* _FP_CMP */
 
 
 /* Simplification for strict equality.  */
 
+#ifndef _FP_CMP_EQ
 #define _FP_CMP_EQ(fs, wc, ret, X, Y)					  \
   do {									  \
     /* NANs are unordered */						  \
@@ -473,21 +498,21 @@ do {							\
 		&& (X##_s == Y##_s || !X##_e && _FP_FRAC_ZEROP_##wc(X))); \
       }									  \
   } while (0)
+#endif /* _FP_CMP_EQ */
 
 /*
  * Main square root routine.  The input value should be cooked.
  */
-
+#ifndef _FP_SQRT
 #define _FP_SQRT(fs, wc, R, X)						\
 do {									\
     _FP_FRAC_DECL_##wc(T); _FP_FRAC_DECL_##wc(S);			\
     _FP_W_TYPE q;							\
+    R##_r |= X##_r;							\
     switch (X##_c)							\
     {									\
     case FP_CLS_NAN:							\
-    	R##_s = 0;							\
-    	R##_c = FP_CLS_NAN;						\
-    	_FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);			\
+        _FP_CHOOSENAN_SQRT(fs, wc, R, X);			        \
     	break;								\
     case FP_CLS_INF:							\
     	if (X##_s)							\
@@ -524,6 +549,7 @@ do {									\
         _FP_FRAC_SRL_##wc(R, 1);					\
     }									\
   } while (0)
+#endif /* FP_SQRT */
 
 /*
  * Convert from FP to integer
@@ -552,56 +578,60 @@ do {									\
  * in r be signed or unsigned?'. r is always(?) declared unsigned.
  * Comments below are mine, BTW -- PMM 
  */
-#define _FP_TO_INT(fs, wc, r, X, rsize, rsigned)				\
-  do {										\
-    switch (X##_c)								\
-      {										\
-      case FP_CLS_NORMAL:							\
-	if (X##_e < 0)								\
-	  {									\
-	  /* case FP_CLS_NAN: see above! */					\
-	  case FP_CLS_ZERO:							\
-	    r = 0;								\
-	  }									\
-	else if (X##_e >= rsize - (rsigned != 0))				\
-	  {	/* overflow */							\
-	  case FP_CLS_NAN:                                                      \
-          case FP_CLS_INF:							\
-	    if (rsigned)							\
-	      {									\
-		r = 1;								\
-		r <<= rsize - 1;						\
-		r -= 1 - X##_s;							\
-	      }									\
-	    else								\
-	      {									\
-		r = 0;								\
-		if (!X##_s)							\
-		  r = ~r;							\
-	      }									\
-	  }									\
-	else									\
-	  {									\
-	    if (_FP_W_TYPE_SIZE*wc < rsize)					\
-	      {									\
-		_FP_FRAC_ASSEMBLE_##wc(r, X, rsize);				\
-		r <<= X##_e - _FP_WFRACBITS_##fs;				\
-	      }									\
-	    else								\
-	      {									\
-		if (X##_e >= _FP_WFRACBITS_##fs)				\
-		  _FP_FRAC_SLL_##wc(X, (X##_e - _FP_WFRACBITS_##fs + 1));	\
-		else								\
-		  _FP_FRAC_SRL_##wc(X, (_FP_WFRACBITS_##fs - X##_e - 1));	\
-		_FP_FRAC_ASSEMBLE_##wc(r, X, rsize);				\
-	      }									\
-	    if (rsigned && X##_s)						\
-	      r = -r;								\
-	  }									\
-	break;									\
-      }										\
+#ifndef _FP_TO_INT
+#define _FP_TO_INT(fs, wc, r, X, rsize, rsigned)		\
+  do {								\
+    switch (X##_c)						\
+      {								\
+      case FP_CLS_NORMAL:					\
+	if (X##_e < 0)						\
+	  {							\
+	  /* case FP_CLS_NAN: see above! */			\
+	  case FP_CLS_ZERO:					\
+	    r = 0;						\
+	  }							\
+	else if (X##_e >= rsize - (rsigned != 0))		\
+	  {	/* overflow */					\
+	  case FP_CLS_NAN:                                      \
+          case FP_CLS_INF:					\
+	    if (rsigned)					\
+	      {							\
+		r = 1;						\
+		r <<= rsize - 1;				\
+		r -= 1 - X##_s;					\
+	      }							\
+	    else						\
+	      {							\
+		r = 0;						\
+		if (!X##_s)					\
+		  r = ~r;					\
+	      }							\
+	  }							\
+	else							\
+	  {							\
+	    if (_FP_W_TYPE_SIZE*wc < rsize)			\
+	      {							\
+		_FP_FRAC_ASSEMBLE_##wc(r, X, rsize);		\
+		r <<= X##_e - _FP_WFRACBITS_##fs;		\
+	      }							\
+	    else						\
+	      {							\
+		if (X##_e >= _FP_WFRACBITS_##fs)		\
+		  _FP_FRAC_SLL_##wc(X, (X##_e - _FP_WFRACBITS_##fs + 1)); \
+		else						\
+		  _FP_FRAC_SRL_##wc(X, (_FP_WFRACBITS_##fs - X##_e - 1)); \
+		_FP_FRAC_ASSEMBLE_##wc(r, X, rsize);		\
+	      }							\
+	    if (rsigned && X##_s)				\
+	      r = -r;						\
+	  }							\
+	break;							\
+      }								\
   } while (0)
 
+#endif /* _FP_TO_INT */
+
+#ifndef _FP_FROM_INT
 #define _FP_FROM_INT(fs, wc, X, r, rsize, rtype)			\
   do {									\
     if (r)								\
@@ -633,15 +663,18 @@ do {									\
 	X##_c = FP_CLS_ZERO, X##_s = 0;					\
       }									\
   } while (0)
+#endif /* FP_FROM_INT */
 
-
+#ifndef FP_CONV
 #define FP_CONV(dfs,sfs,dwc,swc,D,S)			\
   do {							\
     _FP_FRAC_CONV_##dwc##_##swc(dfs, sfs, D, S);	\
     D##_e = S##_e;					\
     D##_c = S##_c;					\
     D##_s = S##_s;					\
+    D##_r |= S##_r;					\
   } while (0)
+#endif FP_CONV
 
 /*
  * Helper primitives.

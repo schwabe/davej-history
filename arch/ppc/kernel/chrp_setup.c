@@ -295,7 +295,7 @@ __initfunc(void
 		struct property *p;
 		device = find_devices("rtas");
 		for ( p = device->properties;
-		      strncmp(p->name, "rtas-event-scan-rate", 20) && p ;
+		      p && strncmp(p->name, "rtas-event-scan-rate", 20);
 		      p = p->next )
 			/* nothing */ ;
 		if ( p && *(unsigned long *)p->value )
@@ -331,12 +331,8 @@ void
 chrp_power_off(void)
 {
 	/* allow power on only with power button press */
-#define	PWR_FIELD(x) (0x8000000000000000 >> ((x)-96))
 	printk("RTAS power-off returned %d\n",
-	       call_rtas("power-off", 2, 1, NULL,
-			 ((PWR_FIELD(96)|PWR_FIELD(97))>>32)&0xffffffff,
-			 (PWR_FIELD(96)|PWR_FIELD(97))&0xffffffff));
-#undef PWR_FIELD	
+	       call_rtas("power-off", 2, 1, NULL,0xffffffff,0xffffffff));
 	for (;;);
 }
 
@@ -475,6 +471,45 @@ __initfunc(void
 
 	/* Should this be here? - Corey */
 	pmac_nvram_init();
+
+#ifdef CONFIG_VT
+#ifdef CONFIG_MAC_KEYBOARD
+	if ( adb_hardware == ADB_NONE )
+	{
+		ppc_md.kbd_setkeycode    = pckbd_setkeycode;
+		ppc_md.kbd_getkeycode    = pckbd_getkeycode;
+		ppc_md.kbd_translate     = pckbd_translate;
+		ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
+		ppc_md.kbd_leds          = pckbd_leds;
+		ppc_md.kbd_init_hw       = pckbd_init_hw;
+#ifdef CONFIG_MAGIC_SYSRQ
+		ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+#endif		
+	}
+	else
+	{
+		ppc_md.kbd_setkeycode    = mackbd_setkeycode;
+		ppc_md.kbd_getkeycode    = mackbd_getkeycode;
+		ppc_md.kbd_translate     = mackbd_translate;
+		ppc_md.kbd_unexpected_up = mackbd_unexpected_up;
+		ppc_md.kbd_leds          = mackbd_leds;
+		ppc_md.kbd_init_hw       = mackbd_init_hw;
+#ifdef CONFIG_MAGIC_SYSRQ
+		ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+#endif		
+	}
+#else
+	ppc_md.kbd_setkeycode    = pckbd_setkeycode;
+	ppc_md.kbd_getkeycode    = pckbd_getkeycode;
+	ppc_md.kbd_translate     = pckbd_translate;
+	ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
+	ppc_md.kbd_leds          = pckbd_leds;
+	ppc_md.kbd_init_hw       = pckbd_init_hw;
+#ifdef CONFIG_MAGIC_SYSRQ
+	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+#endif
+#endif
+#endif
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
@@ -584,10 +619,10 @@ __initfunc(void
 	chrp_setup_pci_ptrs();
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* take care of initrd if we have one */
-	if ( r3 )
+	if ( r6 )
 	{
-		initrd_start = r3 + KERNELBASE;
-		initrd_end = r3 + r4 + KERNELBASE;
+		initrd_start = r6 + KERNELBASE;
+		initrd_end = r6 + r7 + KERNELBASE;
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
@@ -614,44 +649,6 @@ __initfunc(void
 	ppc_md.get_rtc_time   = chrp_get_rtc_time;
 	ppc_md.calibrate_decr = chrp_calibrate_decr;
 
-#ifdef CONFIG_VT
-#ifdef CONFIG_MAC_KEYBOAD
-	if ( adb_hardware == ADB_NONE )
-	{
-		ppc_md.kbd_setkeycode    = pckbd_setkeycode;
-		ppc_md.kbd_getkeycode    = pckbd_getkeycode;
-		ppc_md.kbd_translate     = pckbd_translate;
-		ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
-		ppc_md.kbd_leds          = pckbd_leds;
-		ppc_md.kbd_init_hw       = pckbd_init_hw;
-#ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-#endif		
-	}
-	else
-	{
-		ppc_md.kbd_setkeycode    = mackbd_setkeycode;
-		ppc_md.kbd_getkeycode    = mackbd_getkeycode;
-		ppc_md.kbd_translate     = mackbd_translate;
-		ppc_md.kbd_unexpected_up = mackbd_unexpected_up;
-		ppc_md.kbd_leds          = mackbd_leds;
-		ppc_md.kbd_init_hw       = mackbd_init_hw;
-#ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
-#endif		
-	}
-#else
-	ppc_md.kbd_setkeycode    = pckbd_setkeycode;
-	ppc_md.kbd_getkeycode    = pckbd_getkeycode;
-	ppc_md.kbd_translate     = pckbd_translate;
-	ppc_md.kbd_unexpected_up = pckbd_unexpected_up;
-	ppc_md.kbd_leds          = pckbd_leds;
-	ppc_md.kbd_init_hw       = pckbd_init_hw;
-#ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-#endif
-#endif
-#endif
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
         ppc_ide_md.insw = chrp_ide_insw;
@@ -675,8 +672,6 @@ __initfunc(void
 
 void chrp_progress(char *s)
 {
-	extern unsigned int rtas_data;
-	
 	if ( (_machine != _MACH_chrp) || !rtas_data )
 		return;
 	call_rtas( "display-character", 1, 1, NULL, '\r' );

@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-10 March 1999
+9 May 1999
 ===============================================================================
 
 1.  Introduction
@@ -736,6 +736,13 @@ Fix up PCI configuration space
 Serial NVRAM
     nvram:n     do not look for serial NVRAM
     nvram:y     test controllers for onboard serial NVRAM
+    (alternate binary form)
+    mvram=<bits options>
+      0x01   look for NVRAM  (equivalent to nvram=y)
+      0x02   ignore NVRAM "Synchronous negotiation" parameters for all devices
+      0x04   ignore NVRAM "Wide negotiation"  parameter for all devices
+      0x08   ignore NVRAM "Scan at boot time" parameter for all devices
+      0x80   also attach controllers set to OFF in the NVRAM (sym53c8xx only)
 
 Check SCSI BUS 
     buschk:<option bits>
@@ -745,12 +752,22 @@ Check SCSI BUS
         0x1:   Check and donnot attach the controller on error.  
         0x2:   Check and just warn on error.
 
-Exclude hosts from being attached
+Exclude a host from being attached
     excl=<io_address>
 
     Prevent host at a given io address from being attached.
-    For example 'ncr53c8xx=excl:0xb400,excl:0xc000' indicate to the 
+    For example 'ncr53c8xx=excl:0xb400,excl:0xc000' indicates to the 
     ncr53c8xx driver not to attach hosts at address 0xb400 and 0xc000.
+
+Suggest a default SCSI id for hosts
+    hostid:255	no id suggested.
+    hostid:#x   (0 < x < 7) x suggested for hosts SCSI id.
+
+    If a host SCSI id is available from the NVRAM, the driver will ignore 
+    any value suggested as boot option. Otherwise, if a suggested value 
+    different from 255 has been supplied, it will use it. Otherwise, it will 
+    try to deduce the value previously set in the hardware and use value 
+    7 if the hardware value is zero.
 
 Boot fail safe
     safe:y	load the following assumed fail safe initial setup
@@ -837,7 +854,11 @@ use them too.
 nvram:n     do not look for serial NVRAM
 nvram:y     test controllers for onboard serial NVRAM
 
-This option is described below (see 17. Serial NVRAM support).
+This option can also been entered as an hexadecimal value that allows 
+to control what information the driver will get from the NVRAM and what 
+information it will ignore.
+For details see '17. Serial NVRAM support'.
+
 When this option is enabled, the driver tries to detect all boards using 
 a Serial NVRAM. This memory is used to hold user set up parameters.
 
@@ -873,12 +894,17 @@ mvram=<bits options>
       0x02   ignore NVRAM "Synchronous negotiation" parameters for all devices
       0x04   ignore NVRAM "Wide negotiation"  parameter for all devices
       0x08   ignore NVRAM "Scan at boot time" parameter for all devices
+      0x80   also attach controllers set to OFF in the NVRAM (sym53c8xx only)
 
-My Atlas Wide only boots cleanly in 8 bits asynchronous data transfer 
-mode. However, it works flawlessly at 20 MB/second with the driver.
-Using "nvram=0x7" allows me to boot in 8 bits/async and to let the driver 
-use its setup for synchronous and wide negotiations.
+Option 0x80 is only supported by the sym53c8xx driver and is disabled by 
+default. Result is that, by default (option not set), the sym53c8xx driver 
+will not attach controllers set to OFF in the NVRAM.
 
+The ncr53c8xx always tries to attach all the controllers. Option 0x80 has 
+not been added to the ncr53c8xx driver, since it has been reported to 
+confuse users who use this driver since a long time. If you desire a 
+controller not to be attached by the ncr53c8xx driver at Linux boot, you 
+must use the 'excl' driver boot option.
 
 10.6 SCSI BUS checking boot option.
 

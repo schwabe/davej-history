@@ -527,8 +527,6 @@ alpha_switch_to:
 	call_pal PAL_swpctx
 	unop
 	bsr	$1,undo_switch_stack
-	lda	$8,0x3fff
-	bic	$30,$8,$8
 	mov	$17,$0
 	ret	$31,($26),1
 .end alpha_switch_to

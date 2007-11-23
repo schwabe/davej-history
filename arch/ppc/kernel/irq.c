@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.105.2.1 1999/05/29 19:10:05 cort Exp $
+ * $Id: irq.c,v 1.105.2.2 1999/06/17 01:16:10 paulus Exp $
  *
  *  arch/ppc/kernel/irq.c
  *
@@ -50,6 +50,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
+#include <asm/bitops.h>
 #include <asm/gg2.h>
 #include <asm/cache.h>
 #include <asm/prom.h>
@@ -186,6 +187,12 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 void free_irq(unsigned int irq, void *dev_id)
 {
 	request_irq(irq, NULL, 0, NULL, dev_id);
+}
+
+/* XXX should implement irq disable depth like on intel */
+void disable_irq_nosync(unsigned int irq_nr)
+{
+	mask_irq(irq_nr);
 }
 
 void disable_irq(unsigned int irq_nr)

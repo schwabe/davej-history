@@ -4037,7 +4037,13 @@ CONFIG_SCSI_NCR53C8XX
   MB/s with wide FAST-40 LVD devices and controllers.
 
   Recent versions of the 53C8XX chips are better supported by the
-  option "SYM53C8XX SCSI support", below.
+  option "SYM53C8XX SCSI support", below. This option will configure 
+  a different driver.
+
+  If you want the kernel to select the recommended driver for each of 
+  of your NCR/SYM53C8XX controllers you may just configure both the 
+  NCR53C8XX and the SYM53C8XX options to Y, or if modules are preferred, 
+  load first the sym53c8xx.o module and then the ncr53c8xx.o module.
 
   Note: there is yet another driver for the 53c8xx family of controllers
   ("NCR53c7,8xx SCSI support" above). If you want to use them both,

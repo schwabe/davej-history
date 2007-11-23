@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.130.2.1 1999/05/29 19:09:59 cort Exp $
+ *  $Id: head.S,v 1.130.2.2 1999/06/30 04:53:21 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -300,7 +300,7 @@ __secondary_start:
 	oris	r21,r11,(KERNELBASE+0x20000000)@h
 	mtspr	DBAT2L,r18		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT2U,r21		/* bit in upper BAT register */
-	mtspr	IBAT2L,r28
+	mtspr	IBAT2L,r18
 	mtspr	IBAT2U,r21
 #endif /* CONFIG_PPC64 */
 #endif

@@ -303,6 +303,9 @@ int inet_listen(struct socket *sock, int backlog)
 			}
 			sk->sport = htons(sk->num);
 			add_to_prot_sklist(sk);
+		} else {
+			if (sk->prev)
+				((struct tcp_bind_bucket*)sk->prev)->fastreuse = 0;
 		}
 
 		dst_release(xchg(&sk->dst_cache, NULL));

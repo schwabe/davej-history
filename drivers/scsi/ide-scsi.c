@@ -219,7 +219,7 @@ static inline void idescsi_transform_pc2 (ide_drive_t *drive, idescsi_pc_t *pc)
 
 	if (!test_bit(PC_TRANSFORM, &pc->flags))
 		return;
-	if (drive->media == ide_cdrom || drive->media == ide_optical) {
+	if (!pc->scsi_cmd->use_sg && (drive->media == ide_cdrom || drive->media == ide_optical)) {
 		if (pc->c[0] == MODE_SENSE_10 && sc[0] == MODE_SENSE) {
 			scsi_buf[0] = atapi_buf[1];		/* Mode data length */
 			scsi_buf[1] = atapi_buf[2];		/* Medium type */

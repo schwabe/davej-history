@@ -5,7 +5,24 @@
 
 #include <asm/uaccess.h>
 
-#include "ieee-math.h"
+#include "soft-fp.h"
+
+extern int CMPTXX(void *, void *, void *, int);
+extern int FXTOS(void *, void *);
+extern int FXTOD(void *, void *);
+extern int FDTOS(void *, void *);
+extern int FSTOD(void *, void *);
+extern int FDIVS(void *, void *, void *);
+extern int FDIVD(void *, void *, void *);
+extern int FMULS(void *, void *, void *);
+extern int FMULD(void *, void *, void *);
+extern int FSUBS(void *, void *, void *);
+extern int FSUBD(void *, void *, void *);
+extern int FADDS(void *, void *, void *);
+extern int FADDD(void *, void *, void *);
+extern int FDTOX(void *, void *);
+extern int FSQRTS(void *, void *);
+extern int FSQRTD(void *, void *);
 
 #define	OPC_PAL		0x00
 
@@ -59,6 +76,8 @@
 
 extern unsigned long alpha_read_fp_reg (unsigned long reg);
 extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
+extern unsigned long alpha_read_fp_reg_s (unsigned long reg);
+extern void alpha_write_fp_reg_s (unsigned long reg, unsigned long val);
 
 
 #ifdef MODULE
@@ -118,43 +137,58 @@ alpha_fp_emul (unsigned long pc)
 	fb     = (insn >> 16) &  0x1f;
 	fa     = (insn >> 21) &  0x1f;
 	func   = (insn >>  5) & 0x7ff;
-	mode   = (insn >>  5) & 0xc0;
+	mode   = (insn >>  11) & 0x3;
 	op_fun = insn & OP_FUN(0x3f, 0x3f);
 	
-	va = alpha_read_fp_reg(fa);
-	vb = alpha_read_fp_reg(fb);
 	fpcr = rdfpcr();
 
 	/*
 	 * Try the operation in software.  First, obtain the rounding
-	 * mode...
+	 * mode and set it in the task struct
 	 */
-	if (mode == 0xc0) {
+	current->tss.flags &= ~IEEE_CURRENT_RM_MASK;
+	if (mode == 3) {
 	    /* dynamic---get rounding mode from fpcr: */
-	    mode = ((fpcr & FPCR_DYN_MASK) >> FPCR_DYN_SHIFT) << ROUND_SHIFT;
+	    current->tss.flags |= 
+		(((fpcr&FPCR_DYN_MASK)>>FPCR_DYN_SHIFT)<<IEEE_CURRENT_RM_SHIFT);
 	}
-	mode |= (fpcw & IEEE_TRAP_ENABLE_MASK);
+	else {
+	    current->tss.flags |= (mode << IEEE_CURRENT_RM_SHIFT);
+	}
 
-	if ((IEEE_TRAP_ENABLE_MASK & 0xc0)) {
+	/* JRP - What is this test supposed to check for? */
+	if ((IEEE_TRAP_ENABLE_MASK & 0x80 /* was 0xc0 */)) {
 		extern int something_is_wrong (void);
 		something_is_wrong();
 	}
 
 	switch (op_fun) {
 	      case FLTI_FUNC_CMPTEQ:
-		res = ieee_CMPTEQ(va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = CMPTXX(&vc, &vb, &va, CMPTXX_EQ);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CMPTLT:
-		res = ieee_CMPTLT(va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = CMPTXX(&vc, &vb, &va, CMPTXX_LT);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CMPTLE:
-		res = ieee_CMPTLE(va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = CMPTXX(&vc, &vb, &va, CMPTXX_LE);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CMPTUN:
-		res = ieee_CMPTUN(va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = CMPTXX(&vc, &vb, &va, CMPTXX_UN);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTL_FUNC_CVTQL:
@@ -164,17 +198,23 @@ alpha_fp_emul (unsigned long pc)
 		 * ops.  We return the result the hw would have
 		 * computed.
 		 */
+		vb = alpha_read_fp_reg(fb);
 		vc = ((vb & 0xc0000000) << 32 |	/* sign and msb */
 		      (vb & 0x3fffffff) << 29);	/* rest of the integer */
-		res = FPCR_INV;
+		res = EFLAG_INVALID;
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CVTQS:
-		res = ieee_CVTQS(mode, vb, &vc);
+		vb = alpha_read_fp_reg(fb);
+		res = FXTOS(&vc, &vb);
+		alpha_write_fp_reg_s(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CVTQT:
-		res = ieee_CVTQT(mode, vb, &vc);
+		vb = alpha_read_fp_reg(fb);
+		res = FXTOD(&vc, &vb);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CVTTS_or_CVTST:
@@ -184,54 +224,88 @@ alpha_fp_emul (unsigned long pc)
 			 * qualifier isn't set, we wouldn't be here in
 			 * the first place...
 			 */
-			res = ieee_CVTST(mode, vb, &vc);
+			vb = alpha_read_fp_reg_s(fb);
+			res = FSTOD(&vc, &vb);
+			alpha_write_fp_reg(fc, vc);
 		} else {
-			res = ieee_CVTTS(mode, vb, &vc);
+			vb = alpha_read_fp_reg(fb);
+			res = FDTOS(&vc, &vb);
+			alpha_write_fp_reg_s(fc, vc);
 		}
 		break; 
 
 	      case FLTI_FUNC_DIVS:
-		res = ieee_DIVS(mode, va, vb, &vc);
+		va = alpha_read_fp_reg_s(fa);
+		vb = alpha_read_fp_reg_s(fb);
+		res = FDIVS(&vc, &vb, &va);
+		alpha_write_fp_reg_s(fc, vc);
 		break;
 
 	      case FLTI_FUNC_DIVT:
-		res = ieee_DIVT(mode, va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = FDIVD(&vc, &vb, &va);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_MULS:
-		res = ieee_MULS(mode, va, vb, &vc);
+		va = alpha_read_fp_reg_s(fa);
+		vb = alpha_read_fp_reg_s(fb);
+		res = FMULS(&vc, &vb, &va);
+		alpha_write_fp_reg_s(fc, vc);
 		break;
 
 	      case FLTI_FUNC_MULT:
-		res = ieee_MULT(mode, va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = FMULD(&vc, &vb, &va);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_SUBS:
-		res = ieee_SUBS(mode, va, vb, &vc);
+		va = alpha_read_fp_reg_s(fa);
+		vb = alpha_read_fp_reg_s(fb);
+		res = FSUBS(&vc, &vb, &va);
+		alpha_write_fp_reg_s(fc, vc);
 		break;
 
 	      case FLTI_FUNC_SUBT:
-		res = ieee_SUBT(mode, va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = FSUBD(&vc, &vb, &va);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_ADDS:
-		res = ieee_ADDS(mode, va, vb, &vc);
+		va = alpha_read_fp_reg_s(fa);
+		vb = alpha_read_fp_reg_s(fb);
+		res = FADDS(&vc, &vb, &va);
+		alpha_write_fp_reg_s(fc, vc);
 		break;
 
 	      case FLTI_FUNC_ADDT:
-		res = ieee_ADDT(mode, va, vb, &vc);
+		va = alpha_read_fp_reg(fa);
+		vb = alpha_read_fp_reg(fb);
+		res = FADDD(&vc, &vb, &va);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTI_FUNC_CVTTQ:
-		res = ieee_CVTTQ(mode, vb, &vc);
+		vb = alpha_read_fp_reg(fb);
+		res = FDTOX(&vc, &vb);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      case FLTC_FUNC_SQRTS:
-		res = ieee_SQRTS(mode, vb, &vc);
+		vb = alpha_read_fp_reg_s(fb);
+		res = FSQRTS(&vc, &vb);
+		alpha_write_fp_reg_s(fc, vc);
 		break;
 
 	      case FLTC_FUNC_SQRTT:
-		res = ieee_SQRTT(mode, vb, &vc);
+		vb = alpha_read_fp_reg(fb);
+		res = FSQRTD(&vc, &vb);
+		alpha_write_fp_reg(fc, vc);
 		break;
 
 	      default:
@@ -255,7 +329,7 @@ alpha_fp_emul (unsigned long pc)
 	 */
 	if (res) {
 		/* Record exceptions in software control word.  */
-		current->tss.flags = fpcw |= res >> 35;
+		current->tss.flags = fpcw |= (res << IEEE_STATUS_TO_EXCSUM_SHIFT);
 
 		/* Update hardware control register */
 		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
@@ -263,18 +337,17 @@ alpha_fp_emul (unsigned long pc)
 		wrfpcr(fpcr);
 
 		/* Do we generate a signal?  */
-		if (res >> 51 & fpcw & IEEE_TRAP_ENABLE_MASK) {
+		if (res & fpcw & IEEE_TRAP_ENABLE_MASK) {
 			MOD_DEC_USE_COUNT;
 			return 0;
 		}
 	}
 
-	/*
-	 * Whoo-kay... we got this far, and we're not generating a signal
-	 * to the translated program.  All that remains is to write the
-	 * result:
+	/* We used to write the destination register here, but
+	 * DEC FORTRAN requires that the result *always* be
+	 * written... so we do the write immediately after
+	 * the operations above.
 	 */
-	alpha_write_fp_reg(fc, vc);
 
 	MOD_DEC_USE_COUNT;
 	return 1;

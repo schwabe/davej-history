@@ -73,7 +73,7 @@
 */
 
 /*
-**	March 7 1999, version 3.2
+**	July 20 1999, version 3.2a-2
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -91,6 +91,8 @@
 **		53C860		(8 bits, Fast 20,     no rom BIOS)
 **		53C875		(Wide,   Fast 20,     on board rom BIOS)
 **		53C895		(Wide,   Fast 40,     on board rom BIOS)
+**		53C895A		(Wide,   Fast 40,     on board rom BIOS)
+**		53C896		(Wide,   Fast 40,     on board rom BIOS)
 **
 **	Other features:
 **		Memory mapped IO (linux-1.3.X and above only)
@@ -101,7 +103,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2"
+#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2a-2"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 
@@ -737,34 +739,6 @@ static int ncr53c8xx_proc_info(char *buffer, char **start, off_t offset,
 **	This structure is initialized from linux config options.
 **	It can be overridden at boot-up by the boot command line.
 */
-#define SCSI_NCR_MAX_EXCLUDES 8
-struct ncr_driver_setup {
-	u_char	master_parity;
-	u_char	scsi_parity;
-	u_char	disconnection;
-	u_char	special_features;
-	u_char	ultra_scsi;
-	u_char	force_sync_nego;
-	u_char	reverse_probe;
-	u_char	pci_fix_up;
-	u_char	use_nvram;
-	u_char	verbose;
-	u_char	default_tags;
-	u_short	default_sync;
-	u_short	debug;
-	u_char	burst_max;
-	u_char	led_pin;
-	u_char	max_wide;
-	u_char	settle_delay;
-	u_char	diff_support;
-	u_char	irqm;
-	u_char	bus_check;
-	u_char	optimize;
-	u_char	recovery;
-	u_int	excludes[SCSI_NCR_MAX_EXCLUDES];
-	char	tag_ctrl[100];
-};
-
 static struct ncr_driver_setup
 	driver_setup			= SCSI_NCR_DRIVER_SETUP;
 
@@ -794,108 +768,7 @@ static void ncr53c8xx_timeout(unsigned long np);
 #define bootverbose (np->verbose)
 
 #ifdef SCSI_NCR_NVRAM_SUPPORT
-/*
-**	Symbios NvRAM data format
-*/
-#define SYMBIOS_NVRAM_SIZE 368
-#define SYMBIOS_NVRAM_ADDRESS 0x100
-
-struct Symbios_nvram {
-/* Header 6 bytes */
-	u_short start_marker;	/* 0x0000 */
-	u_short byte_count;	/* excluding header/trailer */
-	u_short checksum;
-
-/* Controller set up 20 bytes */
-	u_short	word0;		/* 0x3000 */
-	u_short	word2;		/* 0x0000 */
-	u_short	word4;		/* 0x0000 */
-	u_short	flags;
-#define SYMBIOS_SCAM_ENABLE	(1)
-#define SYMBIOS_PARITY_ENABLE	(1<<1)
-#define SYMBIOS_VERBOSE_MSGS	(1<<2)
-#define SYMBIOS_CHS_MAPPING	(1<<3)
-	u_short	flags1;
-#define SYMBIOS_SCAN_HI_LO	(1)
-	u_short	word10;		/* 0x00 */
-	u_short	flags3;		/* 0x00 */
-#define SYMBIOS_REMOVABLE_FLAGS	(3)		/* 0=none, 1=bootable, 2=all */
-	u_char	host_id;
-	u_char	byte15;		/* 0x04 */
-	u_short	word16;		/* 0x0410 */
-	u_short	word18;		/* 0x0000 */
-
-/* Boot order 14 bytes * 4 */
-	struct Symbios_host{
-		u_char	word0;		/* 0x0004:ok / 0x0000:nok */
-		u_short	device_id;	/* PCI device id */
-		u_short	vendor_id;	/* PCI vendor id */
-		u_char	byte6;		/* 0x00 */
-		u_char	device_fn;	/* PCI device/function number << 3*/
-		u_short	word8;
-		u_short	flags;
-#define	SYMBIOS_INIT_SCAN_AT_BOOT	(1)
-		u_short	io_port;	/* PCI io_port address */
-	} host[4];
-
-/* Targets 8 bytes * 16 */
-	struct Symbios_target {
-		u_short	flags;
-#define SYMBIOS_DISCONNECT_ENABLE	(1)
-#define SYMBIOS_SCAN_AT_BOOT_TIME	(1<<1)
-#define SYMBIOS_SCAN_LUNS		(1<<2)
-#define SYMBIOS_QUEUE_TAGS_ENABLED	(1<<3)
-		u_char	bus_width;	/* 0x08/0x10 */
-		u_char	sync_offset;
-		u_char	sync_period;	/* 4*period factor */
-		u_char	byte6;		/* 0x00 */
-		u_short	timeout;
-	} target[16];
-	u_char	spare_devices[19*8];
-	u_char	trailer[6];		/* 0xfe 0xfe 0x00 0x00 0x00 0x00 */
-};
-typedef struct Symbios_nvram	Symbios_nvram;
-typedef struct Symbios_host	Symbios_host;
-typedef struct Symbios_target	Symbios_target;
-
-/*
-**	Tekram NvRAM data format.
-*/
-#define TEKRAM_NVRAM_SIZE 64
-#define TEKRAM_NVRAM_ADDRESS 0
-
-struct Tekram_nvram {
-	struct Tekram_target {
-		u_char	flags;
-#define	TEKRAM_PARITY_CHECK		(1)
-#define TEKRAM_SYNC_NEGO		(1<<1)
-#define TEKRAM_DISCONNECT_ENABLE	(1<<2)
-#define	TEKRAM_START_CMD		(1<<3)
-#define TEKRAM_TAGGED_COMMANDS		(1<<4)
-#define TEKRAM_WIDE_NEGO		(1<<5)
-		u_char	sync_index;
-		u_short	word2;
-	} target[16];
-	u_char	host_id;
-	u_char	flags;
-#define TEKRAM_MORE_THAN_2_DRIVES	(1)
-#define TEKRAM_DRIVES_SUP_1GB		(1<<1)
-#define	TEKRAM_RESET_ON_POWER_ON	(1<<2)
-#define TEKRAM_ACTIVE_NEGATION		(1<<3)
-#define TEKRAM_IMMEDIATE_SEEK		(1<<4)
-#define	TEKRAM_SCAN_LUNS		(1<<5)
-#define	TEKRAM_REMOVABLE_FLAGS		(3<<6)	/* 0: disable; 1: boot device; 2:all */
-	u_char	boot_delay_index;
-	u_char	max_tags_index;
-	u_short	flags1;
-#define TEKRAM_F2_F6_ENABLED		(1)
-	u_short	spare[29];
-};
-typedef struct Tekram_nvram	Tekram_nvram;
-typedef struct Tekram_target	Tekram_target;
-
 static u_char Tekram_sync[12] __initdata = {25,31,37,43,50,62,75,125,12,15,18,21};
-
 #endif /* SCSI_NCR_NVRAM_SUPPORT */
 
 /*
@@ -934,6 +807,7 @@ typedef struct {
 	ncr_slot  slot;
 	ncr_chip  chip;
 	ncr_nvram *nvram;
+	u_char	  host_id;
 	int attach_done;
 } ncr_device;
 
@@ -4246,9 +4120,11 @@ static int ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 	/*
 	**  Get SCSI addr of host adapter (set by bios?).
 	*/
-	if (!np->myaddr) np->myaddr = INB(nc_scid) & 0x07;
-	if (!np->myaddr) np->myaddr = SCSI_NCR_MYADDR;
-
+	if (np->myaddr == 255) {
+		np->myaddr = INB(nc_scid) & 0x07;
+		if (!np->myaddr)
+			np->myaddr = SCSI_NCR_MYADDR;
+	}
 
 #endif /* SCSI_NCR_TRUST_BIOS_SETTING */
 
@@ -4520,6 +4396,7 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	np->clock_divn	= device->chip.nr_divisor;
 	np->maxoffs	= device->chip.offset_max;
 	np->maxburst	= device->chip.burst_max;
+	np->myaddr	= device->host_id;
 
 	np->script0  = (struct script *)
 		(((u_long) &host_data->script_data) & CACHE_LINE_MASK);
@@ -4607,6 +4484,7 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	**	Fill Linux host instance structure
 	*/
 	instance->max_channel	= 0;
+	instance->this_id       = np->myaddr;
 	instance->max_id	= np->maxwide ? 16 : 8;
 	instance->max_lun	= SCSI_NCR_MAX_LUN;
 #ifndef NCR_IOMAPPED
@@ -9324,6 +9202,8 @@ void ncr53c8xx_setup(char *str, int *ints)
 			if (xi < SCSI_NCR_MAX_EXCLUDES)
 				driver_setup.excludes[xi++] = val;
 		}
+		else if	(!strncmp(cur, "hostid:", 7))
+			driver_setup.host_id	= val;
 		else
 			printk("ncr53c8xx_setup: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
 
@@ -10974,8 +10854,8 @@ static int ncr_get_Symbios_nvram (ncr_slot *np, Symbios_nvram *nvram)
 	nvram_stop(np, &gpreg);
 	
 #ifdef SCSI_NCR_DEBUG_NVRAM
-printk("ncr53c8xx: NvRAM marker=%x trailer=%x %x %x %x %x %x byte_count=%d/%d checksum=%x/%x\n",
-	nvram->start_marker,
+printk("ncr53c8xx: NvRAM type=%x trailer=%x %x %x %x %x %x byte_count=%d/%d checksum=%x/%x\n",
+	nvram->type,
 	nvram->trailer[0], nvram->trailer[1], nvram->trailer[2],
 	nvram->trailer[3], nvram->trailer[4], nvram->trailer[5],
 	nvram->byte_count, sizeof(*nvram) - 12,
@@ -10983,7 +10863,7 @@ printk("ncr53c8xx: NvRAM marker=%x trailer=%x %x %x %x %x %x byte_count=%d/%d ch
 #endif
 
 	/* check valid NVRAM signature, verify byte count and checksum */
-	if (nvram->start_marker == 0 &&
+	if (nvram->type == 0 &&
 	    !memcmp(nvram->trailer, Symbios_trailer, 6) &&
 	    nvram->byte_count == sizeof(*nvram) - 12 &&
 	    csum == nvram->checksum)

@@ -61,30 +61,39 @@ struct notifier_block idepmac_sleep_notifier = {
 void
 pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
-	int i, r;
+	int i, ix;
 
 	*p = 0;
 	if (base == 0)
 		return;
+
+	for (ix = 0; ix < MAX_HWIFS; ++ix)
+		if (base == pmac_ide_regbase[ix])
+			break;
+
+	if (ix >= MAX_HWIFS) {
+		/* Probably a PCI interface... */
+		for (i = 0; i < 8; ++i)
+			*p++ = base + i;
+		/* XXX is this right? */
+		*p = 0;
+		if (irq != 0)
+			*irq = 0;
+		return;
+	}
+
 	/* we check only for -EINVAL meaning that we have found a matching
 	   bay but with the wrong device type */ 
 
-	r = check_media_bay_by_base(base, MB_CD);
-	if (r == -EINVAL)
+	i = check_media_bay_by_base(base, MB_CD);
+	if (i == -EINVAL)
 		return;
 		
 	for (i = 0; i < 8; ++i)
 		*p++ = base + i * 0x10;
 	*p = base + 0x160;
-	if (irq != NULL) {
-		*irq = 0;
-		for (i = 0; i < MAX_HWIFS; ++i) {
-			if (base == pmac_ide_regbase[i]) {
-				*irq = pmac_ide_irq[i];
-				break;
-			}
-		}
-	}
+	if (irq != NULL)
+		*irq = pmac_ide_irq[ix];
 }
 
 void pmac_ide_tuneproc(ide_drive_t *drive, byte pio)
@@ -96,10 +105,10 @@ void pmac_ide_tuneproc(ide_drive_t *drive, byte pio)
 	pio = ide_get_best_pio_mode(drive, pio, 4, &d);
 	switch (pio) {
 	case 4:
-		out_le32((unsigned *)(IDE_DATA_REG + 0x200), 0x211025);
+		out_le32((unsigned *)(IDE_DATA_REG + 0x200 + _IO_BASE), 0x211025);
 		break;
 	default:
-		out_le32((unsigned *)(IDE_DATA_REG + 0x200), 0x2f8526);
+		out_le32((unsigned *)(IDE_DATA_REG + 0x200 + _IO_BASE), 0x2f8526);
 		break;
 	}
 }
@@ -142,14 +151,36 @@ pmac_ide_probe(void))
 	*pp = removables;
 
 	for (i = 0, np = atas; i < MAX_HWIFS && np != NULL; np = np->next) {
+		struct device_node *tp;
+
+		/*
+		 * If this node is not under a mac-io or dbdma node,
+		 * leave it to the generic PCI driver.
+		 */
+		for (tp = np->parent; tp != 0; tp = tp->parent)
+			if (tp->type && (strcmp(tp->type, "mac-io") == 0
+					 || strcmp(tp->type, "dbdma") == 0))
+				break;
+		if (tp == 0)
+			continue;
+
 		if (np->n_addrs == 0) {
 			printk(KERN_WARNING "ide: no address for device %s\n",
 			       np->full_name);
 			continue;
 		}
-		
-		base = (unsigned long) ioremap(np->addrs[0].address, 0x200);
-		
+
+		/*
+		 * If this slot is taken (e.g. by ide-pci.c) try the next one.
+		 */
+		while (i < MAX_HWIFS
+		       && ide_hwifs[i].io_ports[IDE_DATA_OFFSET] != 0)
+			++i;
+		if (i >= MAX_HWIFS)
+			break;
+
+		base = (unsigned long) ioremap(np->addrs[0].address, 0x200) - _IO_BASE;
+
 		/* XXX This is bogus. Should be fixed in the registry by checking
 		   the kind of host interrupt controller, a bit like gatwick
 		   fixes in irq.c

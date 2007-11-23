@@ -727,7 +727,6 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		inode->i_ino);
 	status = nfs_proc_getattr(server, NFS_FH(dentry), &fattr);
 	if (status) {
-		int error;
 		u32 *fh;
 		struct nfs_fh fhandle;
 		dfprintk(PAGECACHE, "nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
@@ -742,10 +741,10 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		fh = (u32 *) NFS_FH(dentry);
 		dfprintk(PAGECACHE, "NFS: bad fh %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
-		error = nfs_proc_lookup(server, NFS_FH(dentry->d_parent), 
+		status = nfs_proc_lookup(server, NFS_FH(dentry->d_parent), 
 					dentry->d_name.name, &fhandle, &fattr);
-		if (error) {
-			dfprintk(PAGECACHE, "NFS: lookup failed, error=%d\n", error);
+		if (status) {
+			dfprintk(PAGECACHE, "NFS: lookup failed, error=%d\n", status);
 			goto out;
 		}
 		fh = (u32 *) &fhandle;

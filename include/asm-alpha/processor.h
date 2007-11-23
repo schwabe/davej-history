@@ -48,9 +48,12 @@ struct thread_struct {
 	/*
 	 * The fields below are Linux-specific:
 	 *
-	 * bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h)
-	 * bit 6..8: UAC bits (see sysinfo.h)
-	 * bit 17..21: IEEE_STATUS_MASK bits (see fpu.h)
+	 * bit 1..6: IEEE_TRAP_ENABLE bits (see fpu.h)
+	 * bit 7..8: IEEE_MAP_XXX bits (see fpu.h)
+	 * bit 14..16: UAC bits (see sysinfo.h)
+	 * bit 17..22: IEEE_STATUS_MASK bits (see fpu.h)
+	 * bit 32..33: Current IEEE rounding mode (only used
+	 *             during floating emulation - see fpu.h)
 	 * bit 63: die_if_kernel recursion lock
 	 */
 	unsigned long flags;

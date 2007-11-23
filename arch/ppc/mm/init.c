@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.164.2.2 1999/06/03 03:03:53 paulus Exp $
+ *  $Id: init.c,v 1.164.2.4 1999/06/17 19:05:21 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -268,9 +268,12 @@ void show_mem(void)
 	{	
 		printk("%-8.8s %3d %3d %8ld %8ld %8ld %c%08lx %08lx ",
 		       p->comm,p->pid,
-		       atomic_read(&p->mm->count),p->mm->context,
-		       p->mm->context<<4, p->tss.last_syscall,
-		       user_mode(p->tss.regs) ? 'u' : 'k', p->tss.regs->nip,
+		       (p->mm)?atomic_read(&p->mm->count):0,
+		       (p->mm)?p->mm->context:0,
+		       (p->mm)?(p->mm->context<<4):0,
+		       p->tss.last_syscall,
+		       (p->tss.regs)?user_mode(p->tss.regs) ? 'u' : 'k' : '?',
+		       (p->tss.regs)?p->tss.regs->nip:0,
 		       (ulong)p);
 		{
 			int iscur = 0;
@@ -1301,7 +1304,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	int i;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (768<<20)
+#define RAM_LIMIT (256<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {

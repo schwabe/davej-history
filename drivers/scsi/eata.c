@@ -1,6 +1,10 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      22 Jul 1999 Rev. 5.00 for linux 2.2.10 and 2.3.11
+ *        + Removed pre-2.2 source code compatibility.
+ *        + Added call to pci_set_master.
+ *
  *      26 Jul 1998 Rev. 4.33 for linux 2.0.35 and 2.1.111
  *        + Added command line option (rs:[y|n]) to reverse the scan order
  *          of PCI boards. The default is rs:y, which reverses the BIOS order
@@ -181,7 +185,7 @@
  *          This driver is based on the CAM (Common Access Method Committee)
  *          EATA (Enhanced AT Bus Attachment) rev. 2.0A, using DMA protocol.
  *
- *  Copyright (C) 1994-1998 Dario Ballabio (dario@milano.europe.dg.com)
+ *  Copyright (C) 1994-1999 Dario Ballabio (dario@milano.europe.dg.com)
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that redistributions of source
@@ -272,7 +276,7 @@
  *  After the optional list of detection probes, other possible command line
  *  options are:
  *
- *  eh:y  use new scsi code (linux 2.2 only);
+ *  eh:y  use new scsi code;
  *  eh:n  use old scsi code;
  *  et:y  force use of extended translation (255 heads, 63 sectors);
  *  et:n  use disk geometry detected by scsicam_bios_param;
@@ -359,7 +363,6 @@
 #if defined(MODULE)
 #include <linux/module.h>
 
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,26)
 MODULE_PARM(io_port, "1-" __MODULE_STRING(MAX_INT_PARAM) "i");
 MODULE_PARM(linked_comm, "i");
 MODULE_PARM(tagged_comm, "i");
@@ -370,7 +373,6 @@ MODULE_PARM(use_new_eh_code, "i");
 MODULE_PARM(ext_tran, "i");
 MODULE_PARM(rev_scan, "i");
 MODULE_AUTHOR("Dario Ballabio");
-#endif
 
 #endif
 
@@ -393,46 +395,17 @@ MODULE_AUTHOR("Dario Ballabio");
 #include <linux/stat.h>
 #include <linux/config.h>
 #include <linux/pci.h>
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,93)
-#include <linux/bios32.h>
-#endif
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,36)
 #include <linux/init.h>
-#else
-#define __initfunc(A) A
-#define __initdata
-#define __init
-#endif
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
 #include <asm/spinlock.h>
-#define IRQ_FLAGS
-#define IRQ_LOCK
-#define IRQ_LOCK_SAVE
-#define IRQ_UNLOCK
-#define IRQ_UNLOCK_RESTORE
+
 #define SPIN_FLAGS unsigned long spin_flags;
 #define SPIN_LOCK spin_lock_irq(&io_request_lock);
 #define SPIN_LOCK_SAVE spin_lock_irqsave(&io_request_lock, spin_flags);
 #define SPIN_UNLOCK spin_unlock_irq(&io_request_lock);
 #define SPIN_UNLOCK_RESTORE \
                   spin_unlock_irqrestore(&io_request_lock, spin_flags);
+
 static int use_new_eh_code = TRUE;
-#else
-#define IRQ_FLAGS unsigned long irq_flags;
-#define IRQ_LOCK cli();
-#define IRQ_LOCK_SAVE do {save_flags(irq_flags); cli();} while (0);
-#define IRQ_UNLOCK sti();
-#define IRQ_UNLOCK_RESTORE do {restore_flags(irq_flags);} while (0);
-#define SPIN_FLAGS
-#define SPIN_LOCK
-#define SPIN_LOCK_SAVE
-#define SPIN_UNLOCK
-#define SPIN_UNLOCK_RESTORE
-static int use_new_eh_code = FALSE;
-#endif
 
 struct proc_dir_entry proc_scsi_eata2x = {
     PROC_SCSI_EATA2X, 6, "eata2x",
@@ -727,9 +700,7 @@ static int max_queue_depth = MAX_CMD_PER_LUN;
 static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
    Scsi_Device *dev;
    int j, ntag = 0, nuntag = 0, tqd, utqd;
-   IRQ_FLAGS
 
-   IRQ_LOCK_SAVE
    j = ((struct hostdata *) host->hostdata)->board_number;
 
    for(dev = devlist; dev; dev = dev->next) {
@@ -782,7 +753,6 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
              dev->queue_depth, link_suffix, tag_suffix);
       }
 
-   IRQ_UNLOCK_RESTORE
    return;
 }
 
@@ -829,12 +799,42 @@ static inline int read_pio(unsigned long iobase, ushort *start, ushort *end) {
    return FALSE;
 }
 
+__initfunc (static inline void tune_pci_port(unsigned long port_base)) {
+
+#if defined(CONFIG_PCI)
+
+   unsigned int addr, k;
+   struct pci_dev *dev = NULL;
+
+   if (!pci_present()) return;
+
+   for (k = 0; k < MAX_PCI; k++) {
+
+      if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
+
+      if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
+
+#if defined(DEBUG_PCI_DETECT)
+      printk("%s: tune_pci_port, bus %d, devfn 0x%x, addr 0x%x.\n",
+             driver_name, dev->bus->number, dev->devfn, addr);
+#endif
+
+      if ((addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0 == port_base) {
+         pci_set_master(dev);
+         return;
+         }
+
+      }
+
+#endif /* end CONFIG_PCI */
+
+   return;
+}
+
 __initfunc (static inline int
             get_pci_irq(unsigned long port_base, unsigned char *apic_irq)) {
 
 #if defined(CONFIG_PCI)
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
 
    unsigned int addr;
    struct pci_dev *dev = NULL;
@@ -850,17 +850,12 @@ __initfunc (static inline int
              driver_name, dev->bus->number, dev->devfn, addr, dev->irq);
 #endif
 
-      if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
-             continue;
-
       if ((addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0 == port_base) {
          *apic_irq = dev->irq;
          return TRUE;
          }
 
       }
-
-#endif /* end new style PCI code */
 
 #endif /* end CONFIG_PCI */
 
@@ -1106,14 +1101,10 @@ __initfunc (static inline int port_detect \
       }
    else                                 tag_type = 'n';
 
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
    sh[j]->hostt->use_new_eh_code = use_new_eh_code;
-#else
-   use_new_eh_code = FALSE;
-#endif
 
    if (j == 0) {
-      printk("EATA/DMA 2.0x: Copyright (C) 1994-1998 Dario Ballabio.\n");
+      printk("EATA/DMA 2.0x: Copyright (C) 1994-1999 Dario Ballabio.\n");
       printk("%s config options -> tc:%c, lc:%c, mq:%d, eh:%c, rs:%c, et:%c.\n",
              driver_name, tag_type, YESNO(linked_comm), max_queue_depth,
              YESNO(use_new_eh_code), YESNO(rev_scan), YESNO(ext_tran));
@@ -1149,6 +1140,7 @@ __initfunc (static inline int port_detect \
              info.pci, info.eisa, info.raidnum);
 #endif
 
+   tune_pci_port(sh[j]->io_port);
    return TRUE;
 }
 
@@ -1194,8 +1186,6 @@ __initfunc (static void add_pci_ports(void)) {
 
    unsigned int addr, k;
 
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
-
    struct pci_dev *dev = NULL;
 
    if (!pci_present()) return;
@@ -1219,36 +1209,6 @@ __initfunc (static void add_pci_ports(void)) {
              (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
       }
 
-#else  /* else old style PCI code */
-
-   unsigned short i = 0;
-   unsigned char bus, devfn;
-
-   if (!pcibios_present()) return;
-
-   for (k = 0; k < MAX_PCI; k++) {
-
-      if (pcibios_find_class(PCI_CLASS_STORAGE_SCSI << 8, i++, &bus, &devfn)
-             != PCIBIOS_SUCCESSFUL) break;
-
-      if (pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &addr)
-             != PCIBIOS_SUCCESSFUL) continue;
-
-#if defined(DEBUG_PCI_DETECT)
-      printk("%s: detect, seq. %d, bus %d, devfn 0x%x, addr 0x%x.\n",
-             driver_name, k, bus, devfn, addr);
-#endif
-
-      if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
-             continue;
-
-      /* Order addresses according to rev_scan value */
-      io_port[MAX_INT_PARAM + (rev_scan ? (MAX_PCI - k) : (1 + k))] =
-             (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
-      }
-
-#endif /* end old style PCI code */
-
 #endif /* end CONFIG_PCI */
 
    return;
@@ -1256,9 +1216,7 @@ __initfunc (static void add_pci_ports(void)) {
 
 __initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
    unsigned int j = 0, k;
-   IRQ_FLAGS
 
-   IRQ_LOCK_SAVE
    tpnt->proc_dir = &proc_scsi_eata2x;
 
 #if defined(MODULE)
@@ -1281,7 +1239,6 @@ __initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
       }
 
    num_boards = j;
-   IRQ_UNLOCK_RESTORE
    return j;
 }
 
@@ -1439,11 +1396,8 @@ static inline int do_qcomm(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 
 int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    int rtn;
-   IRQ_FLAGS
 
-   IRQ_LOCK_SAVE
    rtn = do_qcomm(SCpnt, done);
-   IRQ_UNLOCK_RESTORE
    return rtn;
 }
 
@@ -1515,15 +1469,10 @@ static inline int do_old_abort(Scsi_Cmnd *SCarg) {
 
 int eata2x_old_abort(Scsi_Cmnd *SCarg) {
    int rtn;
-   IRQ_FLAGS
 
-   IRQ_LOCK_SAVE
    rtn = do_old_abort(SCarg);
-   IRQ_UNLOCK_RESTORE
    return rtn;
 }
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
 
 static inline int do_abort(Scsi_Cmnd *SCarg) {
    unsigned int i, j;
@@ -1601,8 +1550,6 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
 
    return do_abort(SCarg);
 }
-
-#endif /* new_eh_code */
 
 static inline int do_old_reset(Scsi_Cmnd *SCarg) {
    unsigned int i, j, time, k, c, limit = 0;
@@ -1690,10 +1637,8 @@ static inline int do_old_reset(Scsi_Cmnd *SCarg) {
 
    HD(j)->in_reset = TRUE;
    SPIN_UNLOCK
-   IRQ_UNLOCK
    time = jiffies;
    while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
-   IRQ_LOCK
    SPIN_LOCK
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
@@ -1729,7 +1674,6 @@ static inline int do_old_reset(Scsi_Cmnd *SCarg) {
          continue;
 
       SCpnt->scsi_done(SCpnt);
-      IRQ_LOCK
       }
 
    HD(j)->in_reset = FALSE;
@@ -1747,15 +1691,10 @@ static inline int do_old_reset(Scsi_Cmnd *SCarg) {
 
 int eata2x_old_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
    int rtn;
-   IRQ_FLAGS
 
-   IRQ_LOCK_SAVE
    rtn = do_old_reset(SCarg);
-   IRQ_UNLOCK_RESTORE
    return rtn;
 }
-
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
 
 static inline int do_reset(Scsi_Cmnd *SCarg) {
    unsigned int i, j, time, k, c, limit = 0;
@@ -1837,10 +1776,8 @@ static inline int do_reset(Scsi_Cmnd *SCarg) {
 
    HD(j)->in_reset = TRUE;
    SPIN_UNLOCK
-   IRQ_UNLOCK
    time = jiffies;
    while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
-   IRQ_LOCK
    SPIN_LOCK
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
@@ -1876,7 +1813,6 @@ static inline int do_reset(Scsi_Cmnd *SCarg) {
          continue;
 
       SCpnt->scsi_done(SCpnt);
-      IRQ_LOCK
       }
 
    HD(j)->in_reset = FALSE;
@@ -1892,8 +1828,6 @@ int eata2x_reset(Scsi_Cmnd *SCarg) {
 
    return do_reset(SCarg);
 }
-
-#endif /* new_eh_code */
 
 int eata2x_biosparam(Disk *disk, kdev_t dev, int *dkinfo) {
    int size = disk->capacity;
@@ -2290,24 +2224,18 @@ static inline void ihdlr(int irq, unsigned int j) {
 
 static void do_interrupt_handler(int irq, void *shap, struct pt_regs *regs) {
    unsigned int j;
-   IRQ_FLAGS
    SPIN_FLAGS
 
    /* Check if the interrupt must be processed by this handler */
    if ((j = (unsigned int)((char *)shap - sha)) >= num_boards) return;
 
    SPIN_LOCK_SAVE
-   IRQ_LOCK_SAVE
    ihdlr(irq, j);
-   IRQ_UNLOCK_RESTORE
    SPIN_UNLOCK_RESTORE
 }
 
 int eata2x_release(struct Scsi_Host *shpnt) {
    unsigned int i, j;
-   IRQ_FLAGS
-
-   IRQ_LOCK_SAVE
 
    for (j = 0; sh[j] != NULL && sh[j] != shpnt; j++);
 
@@ -2323,7 +2251,6 @@ int eata2x_release(struct Scsi_Host *shpnt) {
 
    release_region(sh[j]->io_port, sh[j]->n_io_port);
    scsi_unregister(sh[j]);
-   IRQ_UNLOCK_RESTORE
    return FALSE;
 }
 

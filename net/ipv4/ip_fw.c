@@ -37,6 +37,9 @@
  * 19-May-1999: Star Wars: The Phantom Menace opened.  Rule num
  *		printed in log (modified from Michael Hasenstein's patch).
  *		Added SYN in log message. --RR
+ * 23-Jul-1999: Fixed small fragment security exposure opened on 15-May-1998.
+ *              John McDonald <jm@dataprotect.com>
+ *              Thomas Lopatic <tl@dataprotect.com>
  */
 
 /*
@@ -608,6 +611,17 @@ ip_fw_check(struct iphdr *ip,
 
 	offset = ntohs(ip->frag_off) & IP_OFFSET;
 	
+	/* If it is a truncated first fragment then it can be
+	 * used to rewrite port information, and thus should
+	 * be blocked.
+	 */
+	if (offset && (ntohs(ip->frag_off) & IP_MF)) {
+		if (!testing && net_ratelimit()) {
+			/*printk(KERN_ERR "Suspect short first fragment.\n");*/
+			dump_packet(ip,rif,NULL,NULL,0,0,0,0);
+		}
+		return FW_BLOCK;
+	}
 	/*
 	 *	Don't allow a fragment of TCP 8 bytes in. Nobody
 	 *	normal causes this. Its a cracker trying to break

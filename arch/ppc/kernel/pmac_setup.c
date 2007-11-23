@@ -41,6 +41,7 @@
 #include <linux/blk.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
+#include <linux/pci.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -48,7 +49,6 @@
 #include <asm/io.h>
 #include <asm/pci-bridge.h>
 #include <asm/adb.h>
-#include <asm/dma.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
 #include <asm/ohare.h>
@@ -98,6 +98,7 @@ extern char saved_command_line[];
 
 extern void zs_kgdb_hook(int tty_num);
 static void ohare_init(void);
+static void init_p2pbridge(void);
 
 __pmac
 int
@@ -255,6 +256,7 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	ohare_init();
 
 	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+	init_p2pbridge();
 
 	/* Checks "l2cr-value" property in the registry */
 	if ( (_get_PVR() >> 16) == 8) {
@@ -297,6 +299,31 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	else
 #endif
 		ROOT_DEV = to_kdev_t(DEFAULT_ROOT_DEVICE);
+}
+
+/*
+ * Tweak the PCI-PCI bridge chip on the blue & white G3s.
+ */
+__initfunc(static void init_p2pbridge(void))
+{
+	struct device_node *p2pbridge;
+	unsigned char bus, devfn;
+	unsigned short val;
+
+	/* XXX it would be better here to identify the specific
+	   PCI-PCI bridge chip we have. */
+	if ((p2pbridge = find_devices("pci-bridge")) == 0
+	    || p2pbridge->parent == NULL
+	    || strcmp(p2pbridge->parent->name, "pci") != 0)
+		return;
+
+	if (pci_device_loc(p2pbridge, &bus, &devfn) < 0)
+		return;
+
+	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
+	val &= ~PCI_BRIDGE_CTL_MASTER_ABORT;
+	pcibios_write_config_word(bus, devfn, PCI_BRIDGE_CONTROL, val);
+	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
 }
 
 __initfunc(static void ohare_init(void))
@@ -488,13 +515,13 @@ pmac_halt(void)
 void
 pmac_ide_insw(ide_ioreg_t port, void *buf, int ns)
 {
-	ide_insw(port, buf, ns);
+	ide_insw(port+_IO_BASE, buf, ns);
 }
 
 void
 pmac_ide_outsw(ide_ioreg_t port, void *buf, int ns)
 {
-	ide_outsw(port, buf, ns);
+	ide_outsw(port+_IO_BASE, buf, ns);
 }
 
 int
@@ -601,7 +628,9 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.fix_driveid = pmac_ide_fix_driveid;
         ppc_ide_md.ide_init_hwif = pmac_ide_init_hwif_ports;
 
-        ppc_ide_md.io_base = 0;
+	/* _IO_BASE isn't set yet, so it's just as well that
+	   ppc_ide_md.io_base isn't used any more. :-) */
+        ppc_ide_md.io_base = _IO_BASE;
 #endif		
 }
 

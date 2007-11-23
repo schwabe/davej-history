@@ -40,7 +40,7 @@
 #define SO_DETACH_FILTER        27
 
 /* Nasty libc5 fixup - bletch */
-#if defined(__KERNEL__) || (LIBC_VERSION < 6)
+#if defined(__KERNEL__)
 /* Socket types. */
 #define SOCK_STREAM	1		/* stream (connection) socket	*/
 #define SOCK_DGRAM	2		/* datagram (conn.less) socket	*/

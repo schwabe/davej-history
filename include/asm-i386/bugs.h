@@ -46,7 +46,7 @@ static char __initdata fpu_error = 0;
 __initfunc(static void copro_timeout(void))
 {
 	fpu_error = 1;
-	timer_table[COPRO_TIMER].expires = jiffies+100;
+	timer_table[COPRO_TIMER].expires = jiffies+HZ;
 	timer_active |= 1<<COPRO_TIMER;
 	printk(KERN_ERR "387 failed: trying to reset\n");
 	send_sig(SIGFPE, current, 1);
@@ -104,7 +104,7 @@ __initfunc(static void check_fpu(void))
 	 * should get there first..
 	 */
 	printk(KERN_INFO "Checking 386/387 coupling... ");
-	timer_table[COPRO_TIMER].expires = jiffies+50;
+	timer_table[COPRO_TIMER].expires = jiffies+HZ/2;
 	timer_table[COPRO_TIMER].fn = copro_timeout;
 	timer_active |= 1<<COPRO_TIMER;
 	__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));

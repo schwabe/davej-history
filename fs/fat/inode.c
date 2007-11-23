@@ -515,7 +515,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 
 		/* Must be FAT32 */
 		fat32 = 1;
-		MSDOS_SB(sb)->fat_length= CF_LE_W(b->fat32_length)*sector_mult;
+		MSDOS_SB(sb)->fat_length= CF_LE_L(b->fat32_length)*sector_mult;
 		MSDOS_SB(sb)->root_cluster = CF_LE_L(b->root_cluster);
 
 		/* MC - if info_sector is 0, don't multiply by 0 */

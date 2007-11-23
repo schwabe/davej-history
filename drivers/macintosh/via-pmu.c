@@ -21,6 +21,7 @@
 #include <linux/blkdev.h>
 #include <linux/pci.h>
 #include <linux/malloc.h>
+#include <linux/poll.h>
 #include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/pmu.h>
@@ -112,6 +113,9 @@ static void pmu_done(struct adb_request *req);
 static void pmu_handle_data(unsigned char *data, int len,
 			    struct pt_regs *regs);
 static void set_volume(int level);
+#ifdef CONFIG_PMAC_PBOOK
+static void pmu_pass_intr(unsigned char *data, int len);
+#endif
 
 static struct adb_controller	pmu_controller = {
 	ADB_VIAPMU,
@@ -729,21 +733,32 @@ pmu_handle_data(unsigned char *data, int len, struct pt_regs *regs)
 			}
 			pmu_done(req);
 		} else {
-			adb_input(data+1, len-1, regs, 1);
+			/*
+			 * XXX the PMU gives us an up event for keycodes
+			 * 0x74 or 0x75 when the PC card eject buttons
+			 * are released, so we ignore those events.
+			 */
+			if (!(len == 4 && data[1] == 0x2c && data[3] == 0xff
+			      && (data[2] & ~1) == 0xf4))
+				adb_input(data+1, len-1, regs, 1);
 		}
+	} else if (data[0] == 0x08 && len == 3) {
+		/* sound/brightness buttons pressed */
+		pmu_set_brightness(data[1] >> 3);
+		set_volume(data[2]);
 	} else {
-		if (data[0] == 0x08 && len == 3) {
-			/* sound/brightness buttons pressed */
-			pmu_set_brightness(data[1] >> 3);
-			set_volume(data[2]);
-		} else if (show_pmu_ints
-			   && !(data[0] == PMU_INT_TICK && len == 1)) {
+#ifdef CONFIG_PMAC_PBOOK
+		pmu_pass_intr(data, len);
+#else
+		if (show_pmu_ints
+		    && !(data[0] == PMU_INT_TICK && len == 1)) {
 			int i;
 			printk(KERN_DEBUG "pmu intr");
 			for (i = 0; i < len; ++i)
 				printk(" %.2x", data[i]);
 			printk("\n");
 		}
+#endif
 	}
 }
 
@@ -1064,20 +1079,147 @@ int __openfirmware powerbook_sleep(void)
 /*
  * Support for /dev/pmu device
  */
+#define RB_SIZE		10
+struct pmu_private {
+	struct list_head list;
+	int	rb_get;
+	int	rb_put;
+	struct rb_entry {
+		unsigned short len;
+		unsigned char data[16];
+	}	rb_buf[RB_SIZE];
+	struct wait_queue *wait;
+	spinlock_t lock;
+};
+
+static LIST_HEAD(all_pmu_pvt);
+static spinlock_t all_pvt_lock = SPIN_LOCK_UNLOCKED;
+
+static void pmu_pass_intr(unsigned char *data, int len)
+{
+	struct pmu_private *pp;
+	struct list_head *list;
+	int i;
+	unsigned long flags;
+
+	if (len > sizeof(pp->rb_buf[0].data))
+		len = sizeof(pp->rb_buf[0].data);
+	spin_lock_irqsave(&all_pvt_lock, flags);
+	for (list = &all_pmu_pvt; (list = list->next) != &all_pmu_pvt; ) {
+		pp = list_entry(list, struct pmu_private, list);
+		i = pp->rb_put + 1;
+		if (i >= RB_SIZE)
+			i = 0;
+		if (i != pp->rb_get) {
+			struct rb_entry *rp = &pp->rb_buf[pp->rb_put];
+			rp->len = len;
+			memcpy(rp->data, data, len);
+			pp->rb_put = i;
+			wake_up_interruptible(&pp->wait);
+		}
+	}
+	spin_unlock_irqrestore(&all_pvt_lock, flags);
+}
+
 static int __openfirmware pmu_open(struct inode *inode, struct file *file)
 {
+	struct pmu_private *pp;
+	unsigned long flags;
+
+	pp = kmalloc(sizeof(struct pmu_private), GFP_KERNEL);
+	if (pp == 0)
+		return -ENOMEM;
+	pp->rb_get = pp->rb_put = 0;
+	spin_lock_init(&pp->lock);
+	pp->wait = 0;
+	spin_lock_irqsave(&all_pvt_lock, flags);
+	list_add(&pp->list, &all_pmu_pvt);
+	spin_unlock_irqrestore(&all_pvt_lock, flags);
+	file->private_data = pp;
 	return 0;
 }
 
 static ssize_t __openfirmware pmu_read(struct file *file, char *buf,
 			size_t count, loff_t *ppos)
 {
-	return 0;
+	struct pmu_private *pp = file->private_data;
+	struct wait_queue wait = { current, NULL };
+	int ret;
+
+	if (count < 1 || pp == 0)
+		return -EINVAL;
+	ret = verify_area(VERIFY_WRITE, buf, count);
+	if (ret)
+		return ret;
+
+	add_wait_queue(&pp->wait, &wait);
+	current->state = TASK_INTERRUPTIBLE;
+
+	for (;;) {
+		ret = -EAGAIN;
+		spin_lock(&pp->lock);
+		if (pp->rb_get != pp->rb_put) {
+			int i = pp->rb_get;
+			struct rb_entry *rp = &pp->rb_buf[i];
+			ret = rp->len;
+			if (ret > count)
+				ret = count;
+			if (ret > 0 && copy_to_user(buf, rp->data, ret))
+				ret = -EFAULT;
+			if (++i >= RB_SIZE)
+				i = 0;
+			pp->rb_get = i;
+		}
+		spin_unlock(&pp->lock);
+		if (ret >= 0)
+			break;
+
+		if (file->f_flags & O_NONBLOCK)
+			break;
+		ret = -ERESTARTSYS;
+		if (signal_pending(current))
+			break;
+		schedule();
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&pp->wait, &wait);
+
+	return ret;
 }
 
 static ssize_t __openfirmware pmu_write(struct file *file, const char *buf,
 			 size_t count, loff_t *ppos)
 {
+	return 0;
+}
+
+static unsigned int pmu_fpoll(struct file *filp, poll_table *wait)
+{
+	struct pmu_private *pp = filp->private_data;
+	unsigned int mask = 0;
+
+	if (pp == 0)
+		return 0;
+	poll_wait(filp, &pp->wait, wait);
+	spin_lock(&pp->lock);
+	if (pp->rb_get != pp->rb_put)
+		mask |= POLLIN;
+	spin_unlock(&pp->lock);
+	return mask;
+}
+
+static int pmu_release(struct inode *inode, struct file *file)
+{
+	struct pmu_private *pp = file->private_data;
+	unsigned long flags;
+
+	if (pp != 0) {
+		file->private_data = 0;
+		spin_lock_irqsave(&all_pvt_lock, flags);
+		list_del(&pp->list);
+		spin_unlock_irqrestore(&all_pvt_lock, flags);
+		kfree(pp);
+	}
 	return 0;
 }
 
@@ -1089,18 +1231,18 @@ static int /*__openfirmware*/ pmu_ioctl(struct inode * inode, struct file *filp,
 	__u32 value;
 
 	switch (cmd) {
-	    case PMU_IOC_SLEEP:
+	case PMU_IOC_SLEEP:
 	    	if (pmu_kind != PMU_OHARE_BASED)
 	    		return -ENOSYS;
 		return powerbook_sleep();
-	    case PMU_IOC_GET_BACKLIGHT:
+	case PMU_IOC_GET_BACKLIGHT:
 		return put_user(backlight_level, (__u32 *)arg);
-	    case PMU_IOC_SET_BACKLIGHT:
+	case PMU_IOC_SET_BACKLIGHT:
 		error = get_user(value, (__u32 *)arg);
 		if (!error)
 			pmu_set_brightness(value);
 		return error;
-	    case PMU_IOC_GET_MODEL:
+	case PMU_IOC_GET_MODEL:
 	    	return put_user(pmu_kind, (__u32 *)arg);
 	}
 	return -EINVAL;
@@ -1111,12 +1253,12 @@ static struct file_operations pmu_device_fops = {
 	pmu_read,
 	pmu_write,
 	NULL,		/* no readdir */
-	NULL,		/* no poll yet */
+	pmu_fpoll,
 	pmu_ioctl,
 	NULL,		/* no mmap */
 	pmu_open,
 	NULL,		/* flush */
-	NULL		/* no release */
+	pmu_release,
 };
 
 static struct miscdevice pmu_device = {

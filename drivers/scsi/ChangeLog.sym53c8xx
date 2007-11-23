@@ -1,3 +1,40 @@
+Sat Jul 24  12:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.3g
+	- merge of driver 1.3f with linux-2.2.11-pre3
+	- remove the broken testing of the chip being connected to SCSI 
+	  from the SCSI interrupt handling code.   
+
+Sun May 9  15:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.3f
+	- Fix the misdetection of SYM53C875E (was detected as a 876).
+	- Fix the misdetection of SYM53C810 not A (was detected as a 810A).
+	- Support for the 53C895A by Pamela Delaney <pam.delaney@lsil.com>
+	  The 53C895A contains all of the features of the 896 but has only 
+	  one channel and has a 32 bit PCI bus. It does 64 bit PCI addressing 
+	  using dual cycle PCI data transfers.
+	- Call request_region() event if MMIO is used and not normal IO.
+	  This allows sym and the ncr driver to be loaded in any order 
+	  without any risk of attaching the same device.
+	- Set the actual host ID used for each host in the scsi host data 
+	  structure. The mid-layer SCSI driver needs this information.
+	- Miscellaneous minor fixes.
+
+Tue Apr 15  10:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.3e
+	- Support for any number of LUNs (64) (SPI2-compliant).
+	  (Btw, this may only be ever usefull under linux-2.2 ;-))
+
+Sun Apr 11  10:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.3d
+	- Add 'hostid:#id' boot option. This option allows to change the 
+	  default SCSI id the driver uses for controllers.
+	- Make SCRIPTS not use self-mastering for PCI.
+	  There were still 2 places the driver used this feature of the 
+	  53C8XX family.
+	- Move some data structures (nvram layouts and driver set-up) to 
+	  the sym53c8xx_defs.h file. So, the both drivers will share them.
+	- Set MAX LUNS to 16 (instead of 8).
+
 Sat Mar 20  21:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.3b
 	- Add support for NCR PQS PDS.

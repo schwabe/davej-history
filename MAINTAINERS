@@ -847,7 +847,8 @@ S:     Supported
 
 WAVELAN NETWORK DRIVER & WIRELESS EXTENSIONS
 P:	Jean Tourrilhes
-M:	jt@hplb.hpl.hp.com
+M:	jt@hpl.hp.com
+W:	http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/
 S:	Maintained
 
 WD7000 SCSI DRIVER

@@ -55,7 +55,7 @@
 */
 
 /*
-**	April 2 1999, sym53c8xx version 1.3c
+**	July 24 1999, sym53c8xx version 1.3g
 **
 **	Supported SCSI features:
 **	    Synchronous data transfers
@@ -71,6 +71,7 @@
 **		53C875	  (Wide,   Fast 20,	 on-board rom BIOS)
 **		53C876	  (Wide,   Fast 20 Dual, on-board rom BIOS)
 **		53C895	  (Wide,   Fast 40,	 on-board rom BIOS)
+**		53C895A	  (Wide,   Fast 40,	 on-board rom BIOS)
 **		53C896	  (Wide,   Fast 40 Dual, on-board rom BIOS)
 **
 **	Other features:
@@ -82,7 +83,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.3c"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.3g"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -289,6 +290,21 @@ static inline struct xpt_quehead *xpt_remque_tail(struct xpt_quehead *head)
 
 /*==========================================================
 **
+**	This driver ensures that no PCI self-mastering will 
+**	be attempted by the PCI chip at any time, provided 
+**	that we can load the on-chip RAM from the C code.
+**	For now, I can only check that on x86, and the 
+**	the SCSI_NCR_PCI_MEM_NOT_SUPPORTED option is here 
+**	to provide previous behaviour for other platforms.
+**
+**==========================================================
+*/
+#if	!defined(__i386__)
+#define	SCSI_NCR_PCI_MEM_NOT_SUPPORTED
+#endif
+
+/*==========================================================
+**
 **	Configuration and Debugging
 **
 **==========================================================
@@ -354,7 +370,7 @@ typedef u_int32 tagmap_t;
 */
 
 #ifdef SCSI_NCR_MAX_LUN
-#define MAX_LUN    SCSI_NCR_MAX_LUN
+#define MAX_LUN    64
 #else
 #define MAX_LUN    (1)
 #endif
@@ -421,7 +437,7 @@ typedef u_int32 tagmap_t;
 **    Io mapped or memory mapped.
 */
 
-#if defined(SCSI_NCR_IOMAPPED)
+#if defined(SCSI_NCR_IOMAPPED) || defined(SCSI_NCR_PCI_MEM_NOT_SUPPORTED)
 #define NCR_IOMAPPED
 #endif
 
@@ -569,15 +585,19 @@ spinlock_t sym53c8xx_lock;
 #endif
 
 #ifdef __sparc__
-#define remap_pci_mem(base, size)	((u_long) __va(base))
-#define unmap_pci_mem(vaddr, size)
-#define pcivtobus(p)			((p) & pci_dvma_mask)
+#  define ioremap(base, size)		((u_long) __va(base))
+#  define iounmap(vaddr)
+#  define pcivtobus(p)			((p) & pci_dvma_mask)
+#  define memcpy_to_pci(a, b, c)	memcpy_toio((u_long) (a), (b), (c))
 #elif defined(__alpha__)
-#define pcivtobus(p)			((p) & 0xfffffffful)
-#else	/* __sparc__ */
-#define pcivtobus(p)			(p)
+#  define pcivtobus(p)			((p) & 0xfffffffful)
+#  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
+#else	/* others */
+#  define pcivtobus(p)			(p)
+#  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
+#endif
 
-#if !defined(NCR_IOMAPPED) || defined(__i386__)
+#ifndef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 __initfunc(
 static u_long remap_pci_mem(u_long base, u_long size)
 )
@@ -596,8 +616,8 @@ static void unmap_pci_mem(u_long vaddr, u_long size)
 	if (vaddr)
 		iounmap((void *) (vaddr & PAGE_MASK));
 }
-#endif	/* !NCR_IOMAPPED || __i386__ */
-#endif	/* __sparc__ */
+
+#endif /* not def SCSI_NCR_PCI_MEM_NOT_SUPPORTED */
 
 /*
 **	Insert a delay in micro-seconds and milli-seconds.
@@ -768,7 +788,7 @@ static void *m_calloc(int size, char *name, int uflags)
 	NCR_UNLOCK_DRIVER(flags);
 
 	if (DEBUG_FLAGS & DEBUG_ALLOC)
-		printk ("new %s[%d] @%p.\n", name, size, p);
+		printk ("new %-10s[%4d] @%p.\n", name, size, p);
 
 	if (p)
 		memset(p, 0, size);
@@ -783,7 +803,7 @@ static void m_free(void *ptr, int size, char *name)
 	u_long flags;
 
 	if (DEBUG_FLAGS & DEBUG_ALLOC)
-		printk ("freeing %s[%d] @%p.\n", name, size, ptr);
+		printk ("freeing %-10s[%4d] @%p.\n", name, size, ptr);
 
 	NCR_LOCK_DRIVER(flags);
 	__m_free(ptr, size);
@@ -839,34 +859,6 @@ static int sym53c8xx_proc_info(char *buffer, char **start, off_t offset,
 **	This structure is initialized from linux config options.
 **	It can be overridden at boot-up by the boot command line.
 */
-#define SCSI_NCR_MAX_EXCLUDES 8
-struct ncr_driver_setup {
-	u_char	master_parity;
-	u_char	scsi_parity;
-	u_char	disconnection;
-	u_char	special_features;
-	u_char	ultra_scsi;
-	u_char	force_sync_nego;
-	u_char	reverse_probe;
-	u_char	pci_fix_up;
-	u_char	use_nvram;
-	u_char	verbose;
-	u_char	default_tags;
-	u_short	default_sync;
-	u_short	debug;
-	u_char	burst_max;
-	u_char	led_pin;
-	u_char	max_wide;
-	u_char	settle_delay;
-	u_char	diff_support;
-	u_char	irqm;
-	u_char	bus_check;
-	u_char	optimize;
-	u_char	recovery;
-	u_int	excludes[SCSI_NCR_MAX_EXCLUDES];
-	char	tag_ctrl[100];
-};
-
 static struct ncr_driver_setup
 	driver_setup			= SCSI_NCR_DRIVER_SETUP;
 
@@ -896,134 +888,7 @@ static void sym53c8xx_timeout(unsigned long np);
 #define bootverbose (np->verbose)
 
 #ifdef SCSI_NCR_NVRAM_SUPPORT
-/*
-**	Symbios NvRAM data format
-*/
-#define SYMBIOS_NVRAM_SIZE 368
-#define SYMBIOS_NVRAM_ADDRESS 0x100
-
-struct Symbios_nvram {
-/* Header 6 bytes */
-	u_short type;		/* 0x0000 */
-	u_short byte_count;	/* excluding header/trailer */
-	u_short checksum;
-
-/* Controller set up 20 bytes */
-	u_char	v_major;	/* 0x00 */
-	u_char	v_minor;	/* 0x30 */
-	u_int32	boot_crc;
-	u_short	flags;
-#define SYMBIOS_SCAM_ENABLE	(1)
-#define SYMBIOS_PARITY_ENABLE	(1<<1)
-#define SYMBIOS_VERBOSE_MSGS	(1<<2)
-#define SYMBIOS_CHS_MAPPING	(1<<3)
-#define SYMBIOS_NO_NVRAM	(1<<3)	/* ??? */
-	u_short	flags1;
-#define SYMBIOS_SCAN_HI_LO	(1)
-	u_short	term_state;
-#define SYMBIOS_TERM_CANT_PROGRAM	(0)
-#define SYMBIOS_TERM_ENABLED		(1)
-#define SYMBIOS_TERM_DISABLED		(2)
-	u_short	rmvbl_flags;
-#define SYMBIOS_RMVBL_NO_SUPPORT	(0)
-#define SYMBIOS_RMVBL_BOOT_DEVICE	(1)
-#define SYMBIOS_RMVBL_MEDIA_INSTALLED	(2)
-	u_char	host_id;
-	u_char	num_hba;	/* 0x04 */
-	u_char	num_devices;	/* 0x10 */
-	u_char	max_scam_devices;	/* 0x04 */
-	u_char	num_valid_scam_devives;	/* 0x00 */
-	u_char	rsvd;
-
-/* Boot order 14 bytes * 4 */
-	struct Symbios_host{
-		u_short	type;		/* 4:8xx / 0:nok */
-		u_short	device_id;	/* PCI device id */
-		u_short	vendor_id;	/* PCI vendor id */
-		u_char	bus_nr;		/* PCI bus number */
-		u_char	device_fn;	/* PCI device/function number << 3*/
-		u_short	word8;
-		u_short	flags;
-#define	SYMBIOS_INIT_SCAN_AT_BOOT	(1)
-		u_short	io_port;	/* PCI io_port address */
-	} host[4];
-
-/* Targets 8 bytes * 16 */
-	struct Symbios_target {
-		u_char	flags;
-#define SYMBIOS_DISCONNECT_ENABLE	(1)
-#define SYMBIOS_SCAN_AT_BOOT_TIME	(1<<1)
-#define SYMBIOS_SCAN_LUNS		(1<<2)
-#define SYMBIOS_QUEUE_TAGS_ENABLED	(1<<3)
-		u_char	rsvd;
-		u_char	bus_width;	/* 0x08/0x10 */
-		u_char	sync_offset;
-		u_short	sync_period;	/* 4*period factor */
-		u_short	timeout;
-	} target[16];
-/* Scam table 8 bytes * 4 */
-	struct Symbios_scam {
-		u_short	id;
-		u_short	method;
-#define SYMBIOS_SCAM_DEFAULT_METHOD	(0)
-#define SYMBIOS_SCAM_DONT_ASSIGN	(1)
-#define SYMBIOS_SCAM_SET_SPECIFIC_ID	(2)
-#define SYMBIOS_SCAM_USE_ORDER_GIVEN	(3)
-		u_short status;
-#define SYMBIOS_SCAM_UNKNOWN		(0)
-#define SYMBIOS_SCAM_DEVICE_NOT_FOUND	(1)
-#define SYMBIOS_SCAM_ID_NOT_SET		(2)
-#define SYMBIOS_SCAM_ID_VALID		(3)
-		u_char	target_id;
-		u_char	rsvd;
-	} scam[4];
-
-	u_char	spare_devices[15*8];
-	u_char	trailer[6];		/* 0xfe 0xfe 0x00 0x00 0x00 0x00 */
-};
-typedef struct Symbios_nvram	Symbios_nvram;
-typedef struct Symbios_host	Symbios_host;
-typedef struct Symbios_target	Symbios_target;
-typedef struct Symbios_scam	Symbios_scam;
-
-/*
-**	Tekram NvRAM data format.
-*/
-#define TEKRAM_NVRAM_SIZE 64
-#define TEKRAM_NVRAM_ADDRESS 0
-
-struct Tekram_nvram {
-	struct Tekram_target {
-		u_char	flags;
-#define	TEKRAM_PARITY_CHECK		(1)
-#define TEKRAM_SYNC_NEGO		(1<<1)
-#define TEKRAM_DISCONNECT_ENABLE	(1<<2)
-#define	TEKRAM_START_CMD		(1<<3)
-#define TEKRAM_TAGGED_COMMANDS		(1<<4)
-#define TEKRAM_WIDE_NEGO		(1<<5)
-		u_char	sync_index;
-		u_short	word2;
-	} target[16];
-	u_char	host_id;
-	u_char	flags;
-#define TEKRAM_MORE_THAN_2_DRIVES	(1)
-#define TEKRAM_DRIVES_SUP_1GB		(1<<1)
-#define	TEKRAM_RESET_ON_POWER_ON	(1<<2)
-#define TEKRAM_ACTIVE_NEGATION		(1<<3)
-#define TEKRAM_IMMEDIATE_SEEK		(1<<4)
-#define	TEKRAM_SCAN_LUNS		(1<<5)
-#define	TEKRAM_REMOVABLE_FLAGS		(3<<6)	/* 0: disable; 1: boot device; 2:all */
-	u_char	boot_delay_index;
-	u_char	max_tags_index;
-	u_short	flags1;
-#define TEKRAM_F2_F6_ENABLED		(1)
-	u_short	spare[29];
-};
-typedef struct Tekram_nvram	Tekram_nvram;
-typedef struct Tekram_target	Tekram_target;
-
 static u_char Tekram_sync[12] __initdata = {25,31,37,43,50,62,75,125,12,15,18,21};
-
 #endif /* SCSI_NCR_NVRAM_SUPPORT */
 
 /*
@@ -1451,8 +1316,10 @@ struct tcb {
 	*/
 	u_int32		*luntbl;	/* lcbs bus address table	*/
 	u_int32		b_luntbl;	/* bus address of this table	*/
-	lcb_p		lp[MAX_LUN];	/* The lcb's of this tcb	*/
-
+	lcb_p		l0p;		/* lcb of LUN #0 (normal case)	*/
+#if MAX_LUN > 1
+	lcb_p		*lmp;		/* Other lcb's [1..MAX_LUN]	*/
+#endif
 	/*----------------------------------------------------------------
 	**	Target capabilities.
 	**----------------------------------------------------------------
@@ -1647,6 +1514,18 @@ struct head {
 	u_char		scr_st[4];	/* script status		*/
 	u_char		status[4];	/* host status			*/
 };
+
+/*
+**	LUN control block lookup.
+**	We use a direct pointer for LUN #0, and a table of pointers 
+**	which is only allocated for devices that support LUN(s) > 0.
+*/
+#if MAX_LUN <= 1
+#define ncr_lp(np, tp, lun) (!lun) ? (tp)->l0p : 0
+#else
+#define ncr_lp(np, tp, lun) \
+	(!lun) ? (tp)->l0p : (tp)->lmp ? (tp)->lmp[(lun)] : 0
+#endif
 
 /*
 **	The status bytes are used by the host and the script processor.
@@ -1907,11 +1786,15 @@ struct ncb {
 	**	Virtual and physical bus addresses of the chip.
 	**----------------------------------------------------------------
 	*/
+#ifndef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 	u_long		base_va;	/* MMIO base virtual address	*/
+	u_long		base2_va;	/* On-chip RAM virtual address	*/
+#endif
 	u_long		base_ba;	/* MMIO base bus address	*/
 	u_long		base_io;	/* IO space base address	*/
 	u_long		base_ws;	/* (MM)IO window size		*/
-	u_long		base2_ba;	/* On-chip RAM bus address.	*/
+	u_long		base2_ba;	/* On-chip RAM bus address	*/
+	u_long		base2_ws;	/* On-chip RAM window size	*/
 	u_int		irq;		/* IRQ number			*/
 	volatile			/* Pointer to volatile for 	*/
 	struct ncr_reg	*reg;		/*  memory mapped IO.		*/
@@ -2111,12 +1994,6 @@ struct script {
 	ncrcmd  data_out2	[  4];
 	ncrcmd  pm0_data	[ 16];
 	ncrcmd  pm1_data	[ 16];
-
-	/* Data area */
-	ncrcmd	saved_dsa	[  1];
-	ncrcmd	done_pos	[  1];
-	ncrcmd	startpos	[  1];
-	ncrcmd	targtbl		[  1];
 };
 
 /*
@@ -2170,16 +2047,20 @@ struct scripth {
 	/* Data area */
 	ncrcmd	pm0_data_addr	[  1];
 	ncrcmd	pm1_data_addr	[  1];
+	ncrcmd	saved_dsa	[  1];
+	ncrcmd	done_pos	[  1];
+	ncrcmd	startpos	[  1];
+	ncrcmd	targtbl		[  1];
 	/* End of data area */
 
+#ifdef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 	ncrcmd	start_ram	[  1];
 	ncrcmd	script0_ba	[  4];
-
 	ncrcmd	start_ram64	[  3];
 	ncrcmd	script0_ba64	[  3];
 	ncrcmd	scripth0_ba64	[  6];
 	ncrcmd	ram_seg64	[  1];
-
+#endif
 	ncrcmd	snooptest	[  6];
 	ncrcmd	snoopend	[  2];
 };
@@ -2351,14 +2232,14 @@ static	struct script script0 __initdata = {
 	**	and the the next queue position points to the next JOB.
 	*/
 	SCR_LOAD_ABS (scratcha, 4),
-		PADDR (startpos),
+		PADDRH (startpos),
 	SCR_LOAD_ABS (dsa, 4),
-		PADDR (startpos),
+		PADDRH (startpos),
 	SCR_LOAD_REL (temp, 4),
 		4,
 }/*-------------------------< GETJOB_BEGIN >------------------*/,{
 	SCR_STORE_ABS (temp, 4),
-		PADDR (startpos),
+		PADDRH (startpos),
 	SCR_LOAD_REL (dsa, 4),
 		0,
 }/*-------------------------< GETJOB_END >--------------------*/,{
@@ -2525,7 +2406,7 @@ static	struct script script0 __initdata = {
 	SCR_FROM_REG (sstat0),
 		0,
 	SCR_JUMPR ^ IFTRUE (MASK (IRST, IRST)),
-		-8,
+		-16,
 	SCR_JUMP,
 		PADDR (start),
 }/*-------------------------< CLRACK >----------------------*/,{
@@ -2668,11 +2549,11 @@ static	struct script script0 __initdata = {
 	**	the completed CCB will be lost.
 	*/
 	SCR_STORE_ABS (dsa, 4),
-		PADDR (saved_dsa),
+		PADDRH (saved_dsa),
 	SCR_LOAD_ABS (dsa, 4),
-		PADDR (done_pos),
+		PADDRH (done_pos),
 	SCR_LOAD_ABS (scratcha, 4),
-		PADDR(saved_dsa),
+		PADDRH (saved_dsa),
 	SCR_STORE_REL (scratcha, 4),
 		0,
 	/*
@@ -2687,7 +2568,7 @@ static	struct script script0 __initdata = {
 	SCR_INT_FLY,
 		0,
 	SCR_STORE_ABS (temp, 4),
-		PADDR (done_pos),
+		PADDRH (done_pos),
 }/*------------------------< DONE_END >-----------------*/,{
 	SCR_JUMP,
 		PADDR (start),
@@ -2809,7 +2690,7 @@ static	struct script script0 __initdata = {
 	SCR_LOAD_REG (dsa, 0xff),
 		0,
 	SCR_STORE_ABS (scratcha, 4),
-		PADDR (startpos),
+		PADDRH (startpos),
 }/*-------------------------< RESELECT >--------------------*/,{
 	/*
 	**	make the host status invalid.
@@ -2842,7 +2723,7 @@ static	struct script script0 __initdata = {
 	**	load the target control block address
 	*/
 	SCR_LOAD_ABS (dsa, 4),
-		PADDR (targtbl),
+		PADDRH (targtbl),
 	SCR_SFBR_REG (dsa, SCR_SHL, 0),
 		0,
 	SCR_REG_REG (dsa, SCR_SHL, 0),
@@ -3082,16 +2963,7 @@ static	struct script script0 __initdata = {
 		offsetof (struct ccb, phys.pm1.ret),
 	SCR_RETURN,
 		0,
-
-}/*-------------------------< SAVED_DSA >-------------------*/,{
-	SCR_DATA_ZERO,
-}/*-------------------------< DONE_POS >--------------------*/,{
-	SCR_DATA_ZERO,
-}/*-------------------------< STARTPOS >--------------------*/,{
-	SCR_DATA_ZERO,
-}/*-------------------------< TARGTBL >---------------------*/,{
-	SCR_DATA_ZERO,
-}/*--------------------------------------------------------*/
+}/*---------------------------------------------------------*/
 };
 
 static	struct scripth scripth0 __initdata = {
@@ -3596,7 +3468,7 @@ static	struct scripth scripth0 __initdata = {
 	**	call the C code.
 	*/
 	SCR_LOAD_ABS (scratcha, 4),
-		PADDR (startpos),
+		PADDRH (startpos),
 	SCR_INT ^ IFTRUE (DATA (S_QUEUE_FULL)),
 		SIR_BAD_STATUS,
 	SCR_INT ^ IFTRUE (DATA (S_CHECK_COND)),
@@ -3737,6 +3609,25 @@ static	struct scripth scripth0 __initdata = {
 	SCR_DATA_ZERO,
 }/*-------------------------< PM1_DATA_ADDR >---------------*/,{
 	SCR_DATA_ZERO,
+}/*-------------------------< SAVED_DSA >-------------------*/,{
+	SCR_DATA_ZERO,
+}/*-------------------------< DONE_POS >--------------------*/,{
+	SCR_DATA_ZERO,
+}/*-------------------------< STARTPOS >--------------------*/,{
+	SCR_DATA_ZERO,
+}/*-------------------------< TARGTBL >---------------------*/,{
+	SCR_DATA_ZERO,
+
+
+/*
+** We may use MEMORY MOVE instructions to load the on chip-RAM,
+** if it happens that mapping PCI memory is not possible.
+** But writing the RAM from the CPU is the preferred method, 
+** since PCI 2.2 seems to disallow PCI self-mastering.
+*/
+
+#ifdef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
+
 }/*-------------------------< START_RAM >-------------------*/,{
 	/*
 	**	Load the script into on-chip RAM, 
@@ -3776,6 +3667,9 @@ static	struct scripth scripth0 __initdata = {
 		PADDRH (start64),
 }/*-------------------------< RAM_SEG64 >--------------------*/,{
 		0,
+
+#endif /* SCSI_NCR_PCI_MEM_NOT_SUPPORTED */
+
 }/*-------------------------< SNOOPTEST >-------------------*/,{
 	/*
 	**	Read the variable.
@@ -4793,11 +4687,22 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	if (np->base2_ba) {
 		np->p_script	= pcivtobus(np->base2_ba);
 		if (np->features & FE_RAM8K) {
+			np->base2_ws = 8192;
 			np->p_scripth = np->p_script + 4096;
 #if BITS_PER_LONG > 32
 			np->scr_ram_seg = cpu_to_scr(np->base2_ba >> 32);
 #endif
 		}
+		else
+			np->base2_ws = 4096;
+#ifndef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
+		np->base2_va = remap_pci_mem(np->base2_ba, np->base2_ws);
+		if (!np->base2_va) {
+			printk(KERN_ERR "%s: can't map PCI MEMORY region\n",
+			       ncr_name(np));
+			goto attach_error;
+		}
+#endif
 	}
 
 	ncr_script_copy_and_bind (np, (ncrcmd *) &script0, (ncrcmd *) np->script0, sizeof(struct script));
@@ -4811,11 +4716,12 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	np->scripth0->pm1_data_addr[0] = 
 			cpu_to_scr(NCB_SCRIPT_PHYS(np, pm1_data));
 
+#ifdef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 	np->scripth0->script0_ba[0]	= cpu_to_scr(vtobus(np->script0));
 	np->scripth0->script0_ba64[0]	= cpu_to_scr(vtobus(np->script0));
 	np->scripth0->scripth0_ba64[0]	= cpu_to_scr(vtobus(np->scripth0));
 	np->scripth0->ram_seg64[0]	= np->scr_ram_seg;
-
+#endif
 	/*
 	**	Prepare the idle and invalid task actions.
 	*/
@@ -4851,7 +4757,7 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	/*
 	**	Prepare the target bus address array.
 	*/
-	np->script0->targtbl[0] = cpu_to_scr(vtobus(np->targtbl));
+	np->scripth0->targtbl[0] = cpu_to_scr(vtobus(np->targtbl));
 	for (i = 0 ; i < MAX_TARGET ; i++) {
 		np->targtbl[i] = cpu_to_scr(vtobus(&np->target[i]));
 		np->target[i].b_luntbl = cpu_to_scr(vtobus(np->badluntbl));
@@ -4981,8 +4887,9 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	**	and return success.
 	*/
 	instance->max_channel	= 0;
+	instance->this_id	= np->myaddr;
 	instance->max_id	= np->maxwide ? 16 : 8;
-	instance->max_lun	= SCSI_NCR_MAX_LUN;
+	instance->max_lun	= MAX_LUN;
 #ifndef NCR_IOMAPPED
 	instance->base		= (char *) np->reg;
 #endif
@@ -5026,9 +4933,11 @@ static void ncr_free_resources(ncb_p np)
 		free_irq(np->irq, np);
 	if (np->base_io)
 		release_region(np->base_io, np->base_ws);
-#ifndef NCR_IOMAPPED
+#ifndef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 	if (np->base_va)
 		unmap_pci_mem(np->base_va, np->base_ws);
+	if (np->base2_va)
+		unmap_pci_mem(np->base2_va, np->base2_ws);
 #endif
 	if (np->scripth0)
 		m_free(np->scripth0, sizeof(struct scripth), "SCRIPTH");
@@ -5050,13 +4959,17 @@ static void ncr_free_resources(ncb_p np)
 	for (target = 0; target < MAX_TARGET ; target++) {
 		tp = &np->target[target];
 		for (lun = 0 ; lun < MAX_LUN ; lun++) {
-			lp = tp->lp[lun];
+			lp = ncr_lp(np, tp, lun);
 			if (!lp)
 				continue;
 			if (lp->tasktbl != &lp->tasktbl_0)
 				m_free(lp->tasktbl, 256, "TASKTBL");
 			m_free(lp, sizeof(*lp), "LCB");
 		}
+#if MAX_LUN > 1
+		if (tp->lmp)
+			m_free(tp->lmp, MAX_LUN * sizeof(lcb_p), "LMP");
+#endif 
 	}
 
 	m_free(np, sizeof(*np), "NCB");
@@ -5112,7 +5025,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 {
 /*	Scsi_Device        *device    = cmd->device; */
 	tcb_p tp                      = &np->target[cmd->target];
-	lcb_p lp		      = tp->lp[cmd->lun];
+	lcb_p lp		      = ncr_lp(np, tp, cmd->lun);
 	ccb_p cp;
 
 	int	segments;
@@ -5941,7 +5854,7 @@ void ncr_complete (ncb_p np, ccb_p cp)
 	cmd = cp->cmd;
 	cp->cmd = NULL;
 	tp = &np->target[cp->target];
-	lp = tp->lp[cp->lun];
+	lp = ncr_lp(np, tp, cp->lun);
 
 	/*
 	**	We donnot queue more than 1 ccb per target 
@@ -6274,7 +6187,7 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 	**	Start at first entry.
 	*/
 	np->squeueput = 0;
-	np->script0->startpos[0] = cpu_to_scr(phys);
+	np->scripth0->startpos[0] = cpu_to_scr(phys);
 
 	/*
 	**	Clear Done Queue
@@ -6289,7 +6202,7 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 	/*
 	**	Start at first entry.
 	*/
-	np->script0->done_pos[0] = cpu_to_scr(phys);
+	np->scripth0->done_pos[0] = cpu_to_scr(phys);
 	np->dqueueget = 0;
 
 	/*
@@ -6414,17 +6327,35 @@ void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 	}
 
 	/*
-	**    Start script processor.
+	**    Download SCSI SCRIPTS to on-chip RAM if present,
+	**    and start script processor.
+	**    We do the download preferently from the CPU.
+	**    For platforms that may not support PCI memory mapping,
+	**    we use a simple SCRIPTS that performs MEMORY MOVEs.
 	*/
 	MEMORY_BARRIER();
 	if (np->base2_ba) {
 		if (bootverbose)
 			printk ("%s: Downloading SCSI SCRIPTS.\n",
 				ncr_name(np));
-		if (np->features & FE_RAM8K)
+#ifdef SCSI_NCR_PCI_MEM_NOT_SUPPORTED
+		if (np->base2_ws == 8192)
 			phys = NCB_SCRIPTH0_PHYS (np, start_ram64);
 		else
 			phys = NCB_SCRIPTH_PHYS (np, start_ram);
+#else
+		if (np->base2_ws == 8192) {
+			memcpy_to_pci(np->base2_va + 4096,
+					np->scripth0, sizeof(struct scripth));
+			OUTL (nc_mmws, np->scr_ram_seg);
+			OUTL (nc_mmrs, np->scr_ram_seg);
+			OUTL (nc_sfs,  np->scr_ram_seg);
+			phys = NCB_SCRIPTH_PHYS (np, start64);
+		}
+		else
+			phys = NCB_SCRIPT_PHYS (np, init);
+		memcpy_to_pci(np->base2_va, np->script0, sizeof(struct script));
+#endif /* SCSI_NCR_PCI_MEM_NOT_SUPPORTED */
 	}
 	else
 		phys = NCB_SCRIPT_PHYS (np, init);
@@ -6729,7 +6660,7 @@ static void ncr_setwide (ncb_p np, ccb_p cp, u_char wide, u_char ack)
 static void ncr_setup_tags (ncb_p np, u_char tn, u_char ln)
 {
 	tcb_p tp = &np->target[tn];
-	lcb_p lp = tp->lp[ln];
+	lcb_p lp = ncr_lp(np, tp, ln);
 	u_char   reqtags, maxdepth;
 
 	/*
@@ -6844,7 +6775,7 @@ static void ncr_usercmd (ncb_p np)
 			if (!((np->user.target>>t)&1)) continue;
 			np->target[t].usrtags = np->user.data;
 			for (ln = 0; ln < MAX_LUN; ln++) {
-				lcb_p lp = np->target[t].lp[ln];
+				lcb_p lp = ncr_lp(np, &np->target[t], ln);
 				if (!lp)
 					continue;
 				lp->maxtags = lp->numtags = np->user.data;
@@ -7339,15 +7270,7 @@ static void ncr_recover_scsi_int (ncb_p np, u_char hsts)
 {
 	u_int32	dsp	= INL (nc_dsp);
 	u_int32	dsa	= INL (nc_dsa);
-	u_char	scntl1	= INB (nc_scntl1);
 	ccb_p cp	= ncr_ccb_from_dsa(np, dsa);
-
-	/*
-	**	If we are connected to the SCSI BUS, we only 
-	**	can reset the BUS.
-	*/
-	if (scntl1 & ISCON)
-		goto reset_all;
 
 	/*
 	**	If we haven't been interrupted inside the SCRIPTS 
@@ -7920,7 +7843,7 @@ static void ncr_sir_to_redo(ncb_p np, int num, ccb_p cp)
 {
 	Scsi_Cmnd *cmd	= cp->cmd;
 	tcb_p tp	= &np->target[cp->target];
-	lcb_p lp	= tp->lp[cp->lun];
+	lcb_p lp	= ncr_lp(np, tp, cp->lun);
 	ccb_p		cp2;
 	int		busyccbs = 1;
 	u_int32		startp;
@@ -8167,8 +8090,8 @@ void ncr_int_sir (ncb_p np)
 		**	message still exist, this should help.
 		**	We just assume lun=0, 1 CCB, no tag.
 		*/
-		if (tp->lp[0]) { 
-			OUTL (nc_dsa, scr_to_cpu(tp->lp[0]->tasktbl[0]));
+		if (tp->l0p) { 
+			OUTL (nc_dsa, scr_to_cpu(tp->l0p->tasktbl[0]));
 			OUTL (nc_dsp, NCB_SCRIPT_PHYS (np, resel_go));
 			return;
 		}
@@ -8623,7 +8546,7 @@ out_stuck:
 static	ccb_p ncr_get_ccb (ncb_p np, u_char tn, u_char ln)
 {
 	tcb_p tp = &np->target[tn];
-	lcb_p lp = tp->lp[ln];
+	lcb_p lp = ncr_lp(np, tp, ln);
 	u_char tag = NO_TAG;
 	XPT_QUEHEAD *qp;
 	ccb_p cp = (ccb_p) 0;
@@ -8715,7 +8638,7 @@ out_free:
 static void ncr_free_ccb (ncb_p np, ccb_p cp)
 {
 	tcb_p tp = &np->target[cp->target];
-	lcb_p lp = tp->lp[cp->lun];
+	lcb_p lp = ncr_lp(np, tp, cp->lun);
 
 	if (DEBUG_FLAGS & DEBUG_TAGS) {
 		PRINT_LUN(np, cp->target, cp->lun);
@@ -8882,7 +8805,7 @@ static void ncr_init_tcb (ncb_p np, u_char tn)
 static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 {
 	tcb_p tp = &np->target[tn];
-	lcb_p lp = tp->lp[ln];
+	lcb_p lp = ncr_lp(np, tp, ln);
 
 	/*
 	**	Already done, return.
@@ -8898,12 +8821,24 @@ static lcb_p ncr_alloc_lcb (ncb_p np, u_char tn, u_char ln)
 		goto fail;
 
 	/*
+	**	Allocate the table of pointers for LUN(s) > 0, if needed.
+	*/
+	if (ln && !tp->lmp) {
+		tp->lmp = m_calloc(MAX_LUN * sizeof(lcb_p), "LMP", MEMO_WARN);
+		if (!tp->lmp)
+			goto fail;
+	}
+
+	/*
 	**	Allocate the lcb.
 	*/
 	lp = m_calloc(sizeof(struct lcb), "LCB", MEMO_WARN);
 	if (!lp)
 		goto fail;
-	tp->lp[ln] = lp;
+	if (ln)
+		tp->lmp[ln] = lp;
+	else
+		tp->l0p = lp;
 
 	/*
 	**	Make it available to the chip.
@@ -8948,7 +8883,7 @@ fail:
 static lcb_p ncr_setup_lcb (ncb_p np, u_char tn, u_char ln, u_char *inq_data)
 {
 	tcb_p tp = &np->target[tn];
-	lcb_p lp = tp->lp[ln];
+	lcb_p lp = ncr_lp(np, tp, ln);
 	u_char inq_byte7;
 	int i;
 
@@ -9624,6 +9559,7 @@ static void ncr_getclock (ncb_p np, int mult)
 #define OPT_SAFE_SETUP		22
 #define OPT_USE_NVRAM		23
 #define OPT_EXCLUDE		24
+#define OPT_HOST_ID		25
 
 static char setup_token[] __initdata = 
 	"tags:"   "mpar:"
@@ -9638,7 +9574,7 @@ static char setup_token[] __initdata =
 	"buschk:" "optim:"
 	"recovery:"
 	"safe:"   "nvram:"
-	"excl:";
+	"excl:"   "hostid:";
 
 #ifdef MODULE
 #define	ARG_SEP	' '
@@ -9771,6 +9707,9 @@ void sym53c8xx_setup(char *str, int *ints)
 		case OPT_EXCLUDE:
 			if (xi < SCSI_NCR_MAX_EXCLUDES)
 				driver_setup.excludes[xi++] = val;
+			break;
+		case OPT_HOST_ID:
+			driver_setup.host_id = val;
 			break;
 		default:
 			printk("sym53c8xx_setup: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
@@ -9988,7 +9927,7 @@ if (sym53c8xx)
 		}
 		++index;
 		devp = &devtbl[count];
-		devp->host_id = 255;
+		devp->host_id = driver_setup.host_id;
 		devp->attach_done = 0;
 		if (sym53c8xx_pci_init(tpnt, bus, device_fn, devp)) {
 			continue;
@@ -10221,18 +10160,18 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		if (revision > ncr_chip_table[i].revision_id)
 			continue;
 		if (!(ncr_chip_table[i].features & FE_LDSTR))
-			continue;
+			break;
 		chip = &device->chip;
 		memcpy(chip, &ncr_chip_table[i], sizeof(*chip));
 		chip->revision_id = revision;
 		break;
 	}
 
-#if defined(__i386__)
 	/*
 	**	Ignore Symbios chips controlled by SISL RAID controller.
 	**	This controller sets value 0x52414944 at RAM end - 16.
 	*/
+#if defined(__i386__) && !defined(SCSI_NCR_PCI_MEM_NOT_SUPPORTED)
 	if (chip && (base_2 & PCI_BASE_ADDRESS_MEM_MASK)) {
 		unsigned int ram_size, ram_val;
 		u_long ram_ptr;
@@ -10254,7 +10193,7 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 			}
 		}
 	}
-#endif
+#endif /* not def SCSI_NCR_PCI_MEM_NOT_SUPPORTED */
 
 	if (!chip) {
 		printk(NAME53C8XX ": not initializing, device not supported\n");
@@ -10341,8 +10280,15 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	/*
 	**    Check availability of IO space, memory space.
 	**    Enable master capability if not yet.
+	**
+	**    We shouldn't have to care about the IO region when 
+	**    we are using MMIO. But calling check_region() from 
+	**    both the ncr53c8xx and the sym53c8xx drivers prevents 
+	**    from attaching devices from the both drivers.
+	**    If you have a better idea, let me know.
 	*/
-#ifdef NCR_IOMAPPED
+/* #ifdef NCR_IOMAPPED */
+#if 1
 	if (!(command & PCI_COMMAND_IO) || !(io_port & 1)) { 
 		printk(NAME53C8XX ": I/O base address (0x%lx) disabled.\n",
 			(long) io_port);
@@ -10358,7 +10304,8 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	base	&= PCI_BASE_ADDRESS_MEM_MASK;
 	base_2	&= PCI_BASE_ADDRESS_MEM_MASK;
 
-#ifdef NCR_IOMAPPED
+/* #ifdef NCR_IOMAPPED */
+#if 1
 	if (io_port && check_region (io_port, 128)) {
 		printk(NAME53C8XX ": IO region 0x%lx[0..127] is in use\n",
 			(long) io_port);
@@ -10366,7 +10313,8 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 	if (!io_port)
 		return -1;
-#else
+#endif
+#ifndef NCR_IOMAPPED
 	if (!base) {
 		printk(NAME53C8XX ": MMIO base address disabled.\n");
 		return -1;
@@ -10583,7 +10531,7 @@ static void sym53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 
 		np = ((struct host_data *) host->hostdata)->ncb;
 		tp = &np->target[device->id];
-		lp = tp->lp[device->lun];
+		lp = ncr_lp(np, tp, device->lun);
 
 		/*
 		**	Select queue depth from driver setup.
@@ -11403,8 +11351,8 @@ static int ncr_get_Symbios_nvram (ncr_slot *np, Symbios_nvram *nvram)
 	nvram_stop(np, &gpreg);
 	
 #ifdef SCSI_NCR_DEBUG_NVRAM
-printk("sym53c8xx: NvRAM marker=%x trailer=%x %x %x %x %x %x byte_count=%d/%d checksum=%x/%x\n",
-	nvram->start_marker,
+printk("sym53c8xx: NvRAM type=%x trailer=%x %x %x %x %x %x byte_count=%d/%d checksum=%x/%x\n",
+	nvram->type,
 	nvram->trailer[0], nvram->trailer[1], nvram->trailer[2],
 	nvram->trailer[3], nvram->trailer[4], nvram->trailer[5],
 	nvram->byte_count, sizeof(*nvram) - 12,

@@ -34,6 +34,11 @@
 #define _FP_NANFRAC_D		_FP_QNANBIT_D
 #define _FP_NANFRAC_Q		_FP_QNANBIT_Q, 0
 
+/* On some architectures float-to-int conversions return a result
+ * code.  On others (e.g. Sparc) they return 0
+ */
+#define _FTOI_RESULT		0
+
 #define _FP_KEEPNANFRACP 1
 #define _FP_CHOOSENAN(fs, wc, R, X, Y)				\
   do {								\
@@ -41,6 +46,25 @@
     _FP_FRAC_COPY_##wc(R,Y);					\
     R##_c = FP_CLS_NAN;						\
   } while (0)
+
+#define _FP_CHOOSENAN_SQRT(fs, wc, R, X)			\
+  do {								\
+    	R##_s = 0;						\
+    	R##_c = FP_CLS_NAN;					\
+    	_FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);		\
+  } while (0)
+
+
+#define __FP_UNPACK_DENORM(fs, wc, X)				\
+    {								\
+	_FP_I_TYPE _shift;					\
+	_FP_FRAC_CLZ_##wc(_shift, X);				\
+	_shift -= _FP_FRACXBITS_##fs;				\
+	_FP_FRAC_SLL_##wc(X, (_shift+_FP_WORKBITS));		\
+	X##_e -= _FP_EXPBIAS_##fs - 1 + _shift;			\
+	X##_c = FP_CLS_NORMAL;					\
+    }
+
 
 #define __FP_UNPACK_RAW_1(fs, X, val)				\
   do {								\

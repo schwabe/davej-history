@@ -563,7 +563,7 @@ static struct tvcard tvcards[] =
         /* MIRO PCTV pro */
         { 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
 	/* ADS Technologies Channel Surfer TV (and maybe TV+FM) */
-	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
+	{ 3, 4, 2, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* AVerMedia TVCapture 98 */
 	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* Aimslab VHX */
@@ -577,7 +577,7 @@ static struct tvcard tvcards[] =
         /* AVEC Intercapture */
         { 3, 1, 9, 2, 0, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
        /* LifeView FlyKit w/o Tuner */
-       { 3, 1, -1, 2, 0xc00, { 0, 3, 1, 1}}
+       { 3, 1, -1, -1, 0x8dff00, { 2, 3, 1, 1}}
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -3148,7 +3148,7 @@ static void idcard(int i)
                         break;
 	}
 	printk("%s\n",btv->video_dev.name);
-	audio(btv, AUDIO_MUTE);
+	audio(btv, AUDIO_INTERN);
 }
 
 

@@ -720,9 +720,11 @@ __initfunc(void control_of_init(struct device_node *dp))
 	p->total_vram = (bank1 + bank2) * 0x200000;
 	/* If we don't have bank 1 installed, we hope we have bank 2 :-) */
 	p->control_use_bank2 = !bank1;
-	if (p->control_use_bank2)
+	if (p->control_use_bank2) {
 		p->frame_buffer += 0x600000;
-
+		p->frame_buffer_phys += 0x600000;
+	}
+	
 	init_control(p);
 }
 

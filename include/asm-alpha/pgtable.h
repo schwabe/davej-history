@@ -70,7 +70,7 @@ ev4_flush_tlb_current_page(struct mm_struct * mm,
 			   struct vm_area_struct *vma,
 			   unsigned long addr)
 {
-	tbi(((vma->vm_flags & VM_EXEC) != 0) ? 3 : 2, addr);
+	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
 }
 
 __EXTERN_INLINE void

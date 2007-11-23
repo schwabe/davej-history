@@ -1,3 +1,22 @@
+Wed Jul 21 1999 23:00 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2a-2
+	- merge of driver 3.2a-1 with linux-2.3.11-pre3
+
+Sun May 9  15:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2a-1
+	- Fix the misdetection of SYM53C875E (was detected as a 876).
+	- Set the actual host ID used for each host in the scsi host data 
+	  structure. The mid-layer SCSI driver needs this information.
+
+Sun Apr 11  10:00 1999 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2a
+	- Add 'hostid:#id' boot option. This option allows to change the 
+	  default SCSI id the driver uses for controllers.
+	- Remove nvram layouts and driver set-up structures from the C source,
+	  and use the one defined in sym53c8xx_defs.h file.
+	  (shared by both drivers).
+	- Set for now MAX LUNS to 16 (instead of 8).
+
 Thu Mar 11  23:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2	  (8xx-896 driver bundle)
 	- Only define the host template in ncr53c8xx.h and include the 

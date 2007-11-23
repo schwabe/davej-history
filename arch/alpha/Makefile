@@ -116,9 +116,11 @@ archclean:
 	@$(MAKEBOOT) clean
 
 archmrproper:
+	-$(MAKE) -C arch/alpha/math-emu cleansymlinks
 
 archdep:
 	@$(MAKEBOOT) dep
+	-$(MAKE) -C arch/alpha/math-emu symlinks
 
 bootpfile:
 	@$(MAKEBOOT) bootpfile

@@ -144,6 +144,8 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/jensen.h>
 #elif defined(CONFIG_ALPHA_RX164)
 # include <asm/core_polaris.h>
+#elif defined(CONFIG_ALPHA_LX164)
+# include <asm/core_pyxis.h>
 #else
 #error "What system is this?"
 #endif

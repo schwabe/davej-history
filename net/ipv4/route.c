@@ -957,7 +957,7 @@ void ip_rt_get_source(u8 *addr, struct rtable *rt)
 
 	if (rt->key.iif == 0)
 		src = rt->rt_src;
-	else if (fib_lookup(&rt->key, &res) == 0)
+	else if (fib_lookup(&rt->key, &res) == 0 && res.type != RTN_NAT)
 		src = FIB_RES_PREFSRC(res);
 	else
 		src = inet_select_addr(rt->u.dst.dev, rt->rt_gateway, RT_SCOPE_UNIVERSE);
