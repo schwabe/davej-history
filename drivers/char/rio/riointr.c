@@ -86,6 +86,8 @@ static char *_riointr_c_sccs_ = "@(#)riointr.c	1.2";
 #include "rioioctl.h"
 
 
+
+
 /*
 ** riopoll is called every clock tick. Once the /dev/rio device has been
 ** opened, and polldistributed( ) has been called, this routine is called
@@ -223,11 +225,11 @@ char *		en;
        we're done! */
     if (c == 0) break;
 
-    memcpy_toio ((caddr_t)PacketP->data, 
+    rio_memcpy_toio (PortP->HostP->Caddr, (caddr_t)PacketP->data, 
 		 PortP->gs.xmit_buf + PortP->gs.xmit_tail, c);
     /*    udelay (1); */
 
-    PacketP->len = c;
+    writeb (c, &(PacketP->len));
     if (!( PortP->State & RIO_DELETED ) ) {
       add_transmit ( PortP );
       /*
@@ -838,7 +840,7 @@ struct Port *		PortP;
 #endif
 	  ptr = (uchar *) PacketP->data + PortP->RxDataStart;
 
-	  memcpy_fromio (TtyP->flip.char_buf_ptr, ptr, transCount);
+	  rio_memcpy_fromio (TtyP->flip.char_buf_ptr, ptr, transCount);
 	  memset(TtyP->flip.flag_buf_ptr, TTY_NORMAL, transCount);
 
 #ifdef STATS

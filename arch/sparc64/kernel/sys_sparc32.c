@@ -3150,7 +3150,7 @@ qm_deps(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
 
 	if (mod->next == NULL)
 		return -EINVAL;
-	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+	if (!MOD_CAN_QUERY(mod))
 		if (put_user(0, ret))
 			return -EFAULT;
 		else
@@ -3194,7 +3194,7 @@ qm_refs(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
 
 	if (mod->next == NULL)
 		return -EINVAL;
-	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+	if (!MOD_CAN_QUERY(mod))
 		if (put_user(0, ret))
 			return -EFAULT;
 		else
@@ -3238,7 +3238,7 @@ qm_symbols(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret
 	char *strings;
 	unsigned *vals;
 
-	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+	if (!MOD_CAN_QUERY(mod))
 		if (put_user(0, ret))
 			return -EFAULT;
 		else

@@ -22,6 +22,7 @@
 
     Paul Gortmaker  : multiple card support for module users.
     David Weis      : Micro Channel-ized it.
+    David Monro     : More MCA support 19/01/2000 davidm@amberdata.demon.co.uk
 
 */
 
@@ -74,24 +75,35 @@ __initfunc(int ultramca_probe(struct device *dev))
 	char slot;
 	unsigned char pos2, pos3, pos4, pos5;
 	int i;
+	char *adapter_name;
+	struct ei_device *ei_local;
 
-	/* Look for two flavors of SMC Elite/A (3013EP/A) -jeh- */
-	if(( (slot=mca_find_adapter(0x61c8,0)) != MCA_NOTFOUND) ||
-            ((slot=mca_find_adapter(0xefd5,0)) != MCA_NOTFOUND) )
-
+	/* Look for five types of adapters - thanks to
+	 * Zunfire@mail.bip.net for the IDs. */
+	if( (slot=mca_find_adapter(0x61c8,0)) != MCA_NOTFOUND)
 	{
-#ifndef MODULE
-		mca_set_adapter_name( slot, "SMC Elite/A (8013EP/A)" );
-#endif
+		adapter_name = "SMC/WD EtherCard PLUS Elite/A (8013EP/A)";
 	}
 	else if( (slot=mca_find_adapter(0x61c9,0)) != MCA_NOTFOUND)
 	{
-#ifndef MODULE
-		mca_set_adapter_name( slot, "SMC Elite10T/A (8013WP/A)" );
-#endif
+		adapter_name = "SMC/WD EtherCard PLUS Elite 10T/A (8013WP/A)";
+	}
+	else if( (slot=mca_find_adapter(0xefd4,0)) != MCA_NOTFOUND)
+	{
+		adapter_name = "IBM Adapter/A for Ethernet UTP/AUI (8013WP/A)";
+	}
+	else if( (slot=mca_find_adapter(0xefd5,0)) != MCA_NOTFOUND)
+	{
+		adapter_name = "IBM Adapter/A for Ethernet BNC/AUI (8013EP/A)";
+	}
+	else if( (slot=mca_find_adapter(0xefe5,0)) != MCA_NOTFOUND)
+	{
+		adapter_name = "IBM Adapter/A for Ethernet";
 	}
 	else
 		return -ENODEV;
+
+	mca_set_adapter_name(slot, adapter_name);
 
 	pos2 = mca_read_stored_pos(slot, 2);     /* IO range */
 	pos3 = mca_read_stored_pos(slot, 3);     /* shared mem */
@@ -121,7 +133,7 @@ __initfunc(int ultramca_probe(struct device *dev))
 	if (load_8390_module("wd.c"))
 		return -ENOSYS;
 
-	printk("%s: SMC Ultra MCA at %#3x,", dev->name, ioaddr);
+	printk("%s: %s at %#3x,", dev->name, adapter_name, ioaddr);
 
 	for (i = 0; i < 6; i++)
 		printk(" %2.2X", dev->dev_addr[i] = inb(ioaddr + 8 + i));
@@ -159,6 +171,16 @@ __initfunc(int ultramca_probe(struct device *dev))
 	/*
 	 *	OK, we are certain this is going to work.  Setup the device.
 	 */
+
+	/*
+	 * We store the MCA slot number in the driver-private part of
+	 * the structure 8390.c attaches to dev->priv so we can release
+	 * it later if needed.
+	 */
+	
+	ei_local = (struct ei_device *) dev->priv;
+	ei_local->priv = slot;
+	mca_mark_as_used(slot);
 
 	request_region(ioaddr, ULTRA_IO_EXTENT, "smc-mca");
 
@@ -372,9 +394,15 @@ void cleanup_module(void)
         	if (dev->priv != NULL)
         	{
 			void *priv = dev->priv;
+			/* Need this to find the mca slot number we
+			 * stored in it earlier */
+			struct ei_device *ei_local = (struct ei_device *) dev->priv;
 			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
 			release_region(ioaddr, ULTRA_IO_EXTENT);
+			/* Tell the mca subsystem we have finished with
+			 * the card */
+			mca_mark_as_unused(ei_local->priv);
 			unregister_netdev(dev);
 			kfree(priv);
 		}

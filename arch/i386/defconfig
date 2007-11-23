@@ -96,8 +96,10 @@ CONFIG_IDEDMA_AUTO=y
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
+# CONFIG_BLK_DEV_DAC960 is not set
 CONFIG_PARIDE_PARPORT=y
 # CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -131,6 +133,12 @@ CONFIG_SKB_LARGE=y
 # CONFIG_ATALK is not set
 
 #
+# Telephony Support
+#
+# CONFIG_PHONE is not set
+# CONFIG_PHONE_IXJ is not set
+
+#
 # SCSI support
 #
 CONFIG_SCSI=y
@@ -159,6 +167,7 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
 # CONFIG_SCSI_AIC7XXX is not set
+# CONFIG_SCSI_IPS is not set
 # CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_AM53C974 is not set
@@ -175,6 +184,7 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_INIA100 is not set
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_SYM53C416 is not set
+# CONFIG_SCSI_SIM710 is not set
 # CONFIG_SCSI_NCR53C7xx is not set
 # CONFIG_SCSI_NCR53C8XX is not set
 CONFIG_SCSI_SYM53C8XX=y
@@ -201,9 +211,18 @@ CONFIG_SCSI_NCR53C8XX_SYNC=20
 # Network device support
 #
 CONFIG_NETDEVICES=y
+
+#
+# ARCnet devices
+#
 # CONFIG_ARCNET is not set
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
+# CONFIG_NET_SB1000 is not set
+
+#
+# Ethernet (10 or 100Mbit)
+#
 CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
@@ -214,27 +233,43 @@ CONFIG_NET_EISA=y
 # CONFIG_PCNET32 is not set
 # CONFIG_APRICOT is not set
 # CONFIG_CS89x0 is not set
+# CONFIG_DM9102 is not set
 # CONFIG_DE4X5 is not set
 # CONFIG_DEC_ELCP is not set
+# CONFIG_DEC_ELCP_OLD is not set
 # CONFIG_DGRS is not set
 CONFIG_EEXPRESS_PRO100=y
 # CONFIG_NE2K_PCI is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
+# CONFIG_SIS900 is not set
 # CONFIG_NET_POCKET is not set
+
+#
+# Ethernet (1000 Mbit)
+#
+# CONFIG_SK98LIN is not set
 # CONFIG_FDDI is not set
-# CONFIG_DLCI is not set
 # CONFIG_PPP is not set
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
+
+#
+# Token ring devices
+#
 # CONFIG_TR is not set
+# CONFIG_NET_FC is not set
+
+#
+# Wan interfaces
+#
 # CONFIG_HOSTESS_SV11 is not set
 # CONFIG_COSA is not set
 # CONFIG_SEALEVEL_4021 is not set
-# CONFIG_RCPCI is not set
+# CONFIG_COMX is not set
+# CONFIG_DLCI is not set
 # CONFIG_WAN_DRIVERS is not set
-# CONFIG_LAPBETHER is not set
-# CONFIG_X25_ASY is not set
+# CONFIG_SBNI is not set
 
 #
 # Amateur Radio support
@@ -242,7 +277,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_HAMRADIO is not set
 
 #
-# IrDA subsystem support
+# IrDA (infrared) support
 #
 # CONFIG_IRDA is not set
 
@@ -278,6 +313,11 @@ CONFIG_MOUSE=y
 CONFIG_PSMOUSE=y
 CONFIG_82C710_MOUSE=y
 # CONFIG_PC110_PAD is not set
+
+#
+# Joysticks
+#
+# CONFIG_JOYSTICK is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_NVRAM is not set
@@ -287,11 +327,6 @@ CONFIG_82C710_MOUSE=y
 # Video For Linux
 #
 # CONFIG_VIDEO_DEV is not set
-
-#
-# Joystick support
-#
-# CONFIG_JOYSTICK is not set
 # CONFIG_DTLK is not set
 
 #
@@ -327,7 +362,6 @@ CONFIG_EXT2_FS=y
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
-# CONFIG_NFSD_SUN is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set

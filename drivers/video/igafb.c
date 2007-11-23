@@ -659,11 +659,11 @@ __initfunc(void igafb_init(void))
 	info->frame_buffer_phys = addr & PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc__
-	
-	info->io_base_phys = info->frame_buffer_phys;
-	
-	/* Obtain virtual address and correct physical by PCIC shift */
-	info->io_base = pcic_alloc_io(&info->io_base_phys);
+
+	info->io_base_phys = 0x30000000;
+
+	info->io_base = sparc_alloc_io(info->io_base_phys,
+	    NULL, 0x1000, "iga", 0, 0);
 	if (!info->io_base) {
 		return;
 	}

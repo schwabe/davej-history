@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 15
-EXTRAVERSION = pre3
+EXTRAVERSION = pre4
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -313,7 +313,7 @@ ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
 
-modules: $(patsubst %, _mod_%, $(SUBDIRS))
+modules: include/config/MARKER $(patsubst %, _mod_%, $(SUBDIRS))  
 
 $(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h
 	$(MAKE) -C $(patsubst _mod_%, %, $@) CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules

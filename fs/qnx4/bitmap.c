@@ -117,7 +117,7 @@ int qnx4_is_free(struct super_block *sb, long block)
 	return ret;
 }
 
-int qnx4_set_bitmap(struct super_block *sb, int block, int busy)
+int qnx4_set_bitmap(struct super_block *sb, long block, int busy)
 {
 	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
 	int size = sb->u.qnx4_sb.BitMap->di_size;

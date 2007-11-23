@@ -1343,10 +1343,82 @@ int rio_init(void)
 #else
     }  /* Emacs from getting confused we have two closing braces too. */
 #endif
+    
 
+    /* Then look for the older PCI card.... : */
+#ifndef TWO_ZERO
+
+  /* These older PCI cards have problems (only byte-mode access is
+     supported), which makes them a bit awkward to support. 
+     They also have problems sharing interrupts. Be careful. 
+     (The driver now refuses to share interrupts for these
+     cards. This should be sufficient).
+  */
+
+    /* Then look for the older RIO/PCI devices: */
+    while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
+                                    PCI_DEVICE_ID_SPECIALIX_RIO, 
+                                    pdev))) {
+#else
+    for (i=0;i< RIO_NBOARDS;i++) {
+      if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 
+			       PCI_DEVICE_ID_SPECIALIX_RIO, i,
+			       &pci_bus, &pci_fun)) break;
+#endif
+
+#ifdef CONFIG_RIO_OLDPCI
+      pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &tint);
+
+      hp = &p->RIOHosts[p->RIONumHosts];
+      hp->PaddrP =  tint & PCI_BASE_ADDRESS_MEM_MASK;
+      hp->Ivec = get_irq (pdev);
+      if (((1 << hp->Ivec) & rio_irqmask) == 0) hp->Ivec = 0;
+      hp->Ivec |= 0x8000; /* Mark as non-sharable */
+      hp->CardP	= (struct DpRam *)
+      hp->Caddr = ioremap(p->RIOHosts[p->RIONumHosts].PaddrP, RIO_WINDOW_LEN);
+      hp->Type  = RIO_PCI;
+      hp->Copy  = rio_pcicopy;
+      hp->Mode  = RIO_PCI_DEFAULT_MODE;
+ 
+      rio_dprintk (RIO_DEBUG_PROBE, "Going to test it (%p/%p).\n",
+                   (void *)p->RIOHosts[p->RIONumHosts].PaddrP,
+                   p->RIOHosts[p->RIONumHosts].Caddr);
+      if (RIOBoardTest( p->RIOHosts[p->RIONumHosts].PaddrP,
+                        p->RIOHosts[p->RIONumHosts].Caddr, 
+                        RIO_PCI, 0 ) == RIO_SUCCESS) {
+        WBYTE(p->RIOHosts[p->RIONumHosts].ResetInt, 0xff);
+        p->RIOHosts[p->RIONumHosts].UniqueNum  =
+          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[0]) &0xFF)<< 0)|
+          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[1]) &0xFF)<< 8)|
+          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[2]) &0xFF)<<16)|
+          ((RBYTE(p->RIOHosts[p->RIONumHosts].Unique[3]) &0xFF)<<24);
+        rio_dprintk (RIO_DEBUG_PROBE, "Hmm Tested ok, uniqid = %x.\n",
+                   p->RIOHosts[p->RIONumHosts].UniqueNum);
+
+        p->RIOLastPCISearch = RIO_SUCCESS;
+        p->RIONumHosts++;
+        found++;
+      } else {
+        my_iounmap (p->RIOHosts[p->RIONumHosts].PaddrP, 
+                    p->RIOHosts[p->RIONumHosts].Caddr);
+      }
+#else
+      printk (KERN_ERR "Found an older RIO PCI card, but the driver is not "
+              "compiled to support it.\n");
+#endif
+#ifdef TWO_ZERO
+    }  /* We have two variants with the opening brace, so to prevent */
+#else
+    }  /* Emacs from getting confused we have two closing braces too. */
+#endif
+  }
+#endif /* PCI */
+
+  /* Now probe for ISA cards... */
   for (i=0;i<NR_RIO_ADDRS;i++) {
     hp = &p->RIOHosts[p->RIONumHosts];
     hp->PaddrP = rio_probe_addrs[i];
+    /* There was something about the IRQs of these cards. 'Forget what.--REW */
     hp->Ivec = 0;
     hp->CardP = (struct DpRam *)
     hp->Caddr = ioremap(p->RIOHosts[p->RIONumHosts].PaddrP, RIO_WINDOW_LEN);
@@ -1381,77 +1453,12 @@ int rio_init(void)
   }
 
 
-
-#if 0 
-#ifndef TWO_ZERO
-
-  /* These older PCI cards have problems (only byte-mode access is
-     supported), which makes them a bit hard to support. Please
-     contact Specialix or BitWizard if you have one of these. We'll
-     see what we can work out.... */
-
-  /* This section hasn't been tested/fixed. It won't work 
-     out-of-the-box. */
-
-    /* Then look for the older RIO/PCI devices: */
-    while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
-                                    PCI_DEVICE_ID_SPECIALIX_RIO, 
-                                    pdev))) {
-#else
-    for (i=0;i< RIO_NBOARDS;i++) {
-      if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 
-			       PCI_DEVICE_ID_SPECIALIX_RIO, i,
-			       &pci_bus, &pci_fun)) break;
-#endif
-      /* Specialix has a whole bunch of cards with
-         0x2000 as the device ID. They say its because
-         the standard requires it. Stupid standard. */
-      /* It seems that reading a word doesn't work reliably on 2.0.
-         Also, reading a non-aligned dword doesn't work. So we read the
-         whole dword at 0x2c and extract the word at 0x2e (SUBSYSTEM_ID)
-         ourselves */
-      /* I don't know why the define doesn't work, constant 0x2c does --REW */ 
-      pci_read_config_dword (pdev, 0x2c, &tint);
-      tshort = (tint >> 16) & 0xffff;
-      rio_dprintk (RIO_DEBUG_PROBE, "Got a specialix card: %x.\n", tint);
-      /* rio_dprintk (RIO_DEBUG_PROBE, "pdev = %d/%d  (%x)\n", pdev, tint); */ 
-      if (tshort != 0x0800) {
-        rio_dprintk (RIO_DEBUG_PROBE, "But it's not a RIO card (%d)...\n", 
-                    tshort);
-        continue;
-      }
-      board = &boards[found];
-      
-      pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2, &tint);
-      board->hw_base = tint & PCI_BASE_ADDRESS_MEM_MASK;
-      board->base =  (ulong) ioremap(board->hw_base, RIO_WINDOW_LEN);
-      board->irq  = get_irq (pdev);
-      board->flags &= ~RIO_BOARD_TYPE;
-      board->flags |=  RIO_PCI_BOARD;
-
-      rio_dprintk (RIO_DEBUG_PROBE, "Got a specialix card: %x/%x(%d).\n", 
-                  tint, boards[found].base, board->irq);
-
-      if (found_rio (board)) {
-        found++;
-      } else 
-        my_iounmap (board->hw_base, board->base);
-#ifdef TWO_ZERO      
-    }
-#else
-    }
-#endif
-#endif 
-
-  }
-#endif
-
-
-
   for (i=0;i<p->RIONumHosts;i++) {
     hp = &p->RIOHosts[i];
     if (hp->Ivec) {
-      if (request_irq (hp->Ivec, rio_interrupt, SA_SHIRQ, "rio", (void *)i)) {
+      int mode = SA_SHIRQ;
+      if (hp->Ivec & 0x8000) {mode = 0; hp->Ivec &= 0x7fff;}
+      if (request_irq (hp->Ivec, rio_interrupt, mode, "rio", (void *)i)) {
         printk(KERN_ERR "rio: Cannot allocate irq %d.\n", hp->Ivec);
         hp->Ivec = 0;
       }

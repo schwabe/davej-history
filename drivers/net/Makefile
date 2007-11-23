@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc sk98lin
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc sk98lin lmc
 
 L_TARGET := net.a
 L_OBJS   :=
@@ -847,6 +847,18 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_LANMEDIA),y)
+  SUB_DIRS += lmc
+  MOD_IN_SUB_DIRS += lmc
+  L_OBJS += lmc/lmc.o
+  CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_LANMEDIA),m)
+  CONFIG_SYNCPPP_MODULE = y
+  MOD_IN_SUB_DIRS += lmc
+  M_OBJS += lmc.o
+  endif
+endif
 
 ifeq ($(CONFIG_COSA),y)
 L_OBJS += cosa.o

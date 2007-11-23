@@ -146,6 +146,9 @@ extern int iph5526_probe(struct device *dev);
 /* SBNI adapters */
 extern int sbni_probe(struct device *);
 
+/* WAN Adapters */
+extern int lmc_probe_fake(struct device *);
+
 struct devprobe
 {
 	int (*probe)(struct device *dev);
@@ -200,6 +203,9 @@ struct devprobe pci_probes[] __initdata = {
 #endif	
 #ifdef CONFIG_EEXPRESS_PRO100	/* Intel EtherExpress Pro/100 */
 	{eepro100_probe, 0},
+#endif
+#ifdef CONFIG_LANMEDIA          /* Lanmedia must be before Tulip */
+        {lmc_probe_fake, 0},
 #endif
 #if defined(CONFIG_DEC_ELCP) || defined(CONFIG_DEC_ELCP_OLD)
 	{tulip_probe, 0},
@@ -621,6 +627,12 @@ static int fcif_probe(struct device *dev)
     static struct device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&tap0_dev)
+#endif
+
+#ifdef CONFIG_LANMEDIA
+static struct device lmc_dev = { "lmc_dev", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, lmc_probe_fake, };
+#    undef NEXT_DEV
+#    define NEXT_DEV    (&lmc_dev)
 #endif
 
 #ifdef CONFIG_SDLA

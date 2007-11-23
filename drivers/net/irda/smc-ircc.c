@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      smc-ircc.c
- * Version:       0.3
+ * Version:       0.4
  * Description:   Driver for the SMC Infrared Communications Controller
  * Status:        Experimental.
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
- * Modified at:   Fri Jan 14 15:39:14 2000
+ * Modified at:   Fri Jan 21 09:41:08 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999-2000 Dag Brattli
@@ -28,7 +28,7 @@
  *     Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
  *     MA 02111-1307 USA
  *
- *     SIO's: SMC FDC37N869, FDC37C669
+ *     SIO's: SMC FDC37N869, FDC37C669, FDC37N958
  *     Applicable Models : Fujitsu Lifebook 635t, Sony PCG-505TX
  *
  ********************************************************************/
@@ -44,6 +44,7 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/rtnetlink.h>
+#include <linux/serial_reg.h>
 
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -77,11 +78,12 @@ static int  ircc_open(int i, unsigned int iobase, unsigned int board_addr);
 static int  ircc_close(struct ircc_cb *self);
 #endif /* MODULE */
 static int  ircc_probe(int iobase, int board_addr);
-static int  ircc_probe_smc(int cfg_base, int *ioaddr, int *ioaddr2);
-static int  ircc_dma_receive(struct ircc_cb *self); 
-static int  ircc_dma_receive_complete(struct ircc_cb *self, int iobase);
+static int  ircc_probe_58(smc_chip_t *chip, chipio_t *info);
+static int  ircc_probe_69(smc_chip_t *chip, chipio_t *info);
+static int  ircc_dma_receive(struct ircc_cb *self, int iobase); 
+static void ircc_dma_receive_complete(struct ircc_cb *self, int iobase);
 static int  ircc_hard_xmit(struct sk_buff *skb, struct device *dev);
-static void ircc_dma_xmit(struct ircc_cb *self, int iobase);
+static void ircc_dma_xmit(struct ircc_cb *self, int iobase, int bofs);
 static void ircc_change_speed(void *priv, __u32 speed);
 static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int  ircc_is_receiving(struct ircc_cb *self);
@@ -92,6 +94,14 @@ static int  ircc_net_close(struct device *dev);
 static int  ircc_apmproc(apm_event_t event);
 #endif /* CONFIG_APM */
 
+/* These are the currently known SMC chipsets */
+static smc_chip_t chips[] =
+{
+	{ "FDC37C669", 0x55, 0x55, 0x0d, 0x04, ircc_probe_69 },
+	{ "FDC37N869", 0x55, 0x00, 0x0d, 0x29, ircc_probe_69 },
+	{ "FDC37N958", 0x55, 0x55, 0x20, 0x09, ircc_probe_58 },
+	{ NULL }
+};
 
 static int ircc_irq=255;
 static int ircc_dma=255;
@@ -111,28 +121,35 @@ static inline void register_bank(int iobase, int bank)
 int __init ircc_init(void)
 {
 	static int smcreg[] = { 0x3f0, 0x370 };
-	int fir_base, sir_base;
+	smc_chip_t *chip;
+	chipio_t info;
 	int ret = -ENODEV;
-	int conf_reg;
 	int i;
 
 	IRDA_DEBUG(0, __FUNCTION__ "\n");
 
-        for (i=0; i<2; i++) {
-		conf_reg = smcreg[i];
-		
-                /* First we check if the user has supplied parameters */
-                if (io[i] < 2000) {
-                         fir_base = io[i];
-                         sir_base = io2[i];
-                } else if (ircc_probe_smc(conf_reg, &fir_base, &sir_base) < 0)
-                        continue;
-		if (check_region(fir_base, CHIP_IO_EXTENT) < 0)
-                        continue;
-                if (check_region(sir_base, CHIP_IO_EXTENT) < 0)
-                        continue;
-		if (ircc_open(i, fir_base, sir_base) == 0)
-                        ret = 0; 
+	/* Probe for all the NSC chipsets we know about */
+	for (chip=chips; chip->name ; chip++,i++) {
+		for (i=0; i<2; i++) {
+			info.cfg_base = smcreg[i];
+			
+			/* 
+			 * First we check if the user has supplied any
+                         * parameters which we should use instead of probed
+			 * values
+			 */
+			if (io[i] < 2000) {
+				info.fir_base = io[i];
+				info.sir_base = io2[i];
+			} else if (chip->probe(chip, &info) < 0)
+				continue;
+			if (check_region(info.fir_base, CHIP_IO_EXTENT) < 0)
+				continue;
+			if (check_region(info.sir_base, CHIP_IO_EXTENT) < 0)
+				continue;
+			if (ircc_open(i, info.fir_base, info.sir_base) == 0)
+				ret = 0; 
+		}
 	}
 	return ret;
 }
@@ -219,7 +236,6 @@ static int ircc_open(int i, unsigned int fir_base, unsigned int sir_base)
 			driver_name, self->io.dma, ircc_dma);
 		self->io.dma = ircc_dma;
 	}
-        self->io.fifo_size = 16;
 
 	/* Lock the port that we need */
 	ret = check_region(self->io.fir_base, self->io.fir_ext);
@@ -241,7 +257,7 @@ static int ircc_open(int i, unsigned int fir_base, unsigned int sir_base)
 	irport->qos.min_turn_time.bits = 0x07;
 	irda_qos_bits_to_value(&irport->qos);
 
-	irport->flags = IFF_FIR|IFF_SIR|IFF_DMA|IFF_PIO;
+	irport->flags = IFF_FIR|IFF_MIR|IFF_SIR|IFF_DMA|IFF_PIO;
 	
 	/* Max DMA buffer size needed = (data_size + 6) * (window_size) + 6; */
 	self->rx_buff.truesize = 4000; 
@@ -300,7 +316,7 @@ static int ircc_close(struct ircc_cb *self)
 	register_bank(iobase, 0);
 	outb(0, iobase+IRCC_IER);
 	outb(IRCC_MASTER_RESET, iobase+IRCC_MASTER);
-
+	outb(0x00, iobase+IRCC_MASTER);
 #if 0
 	/* Reset to SIR mode */
 	register_bank(iobase, 1);
@@ -326,13 +342,14 @@ static int ircc_close(struct ircc_cb *self)
 #endif /* MODULE */
 
 /*
- * Function ircc_probe_smc (ioaddr, ioaddr2)
+ * Function ircc_probe_69 (chip, info)
  *
- *    Probe the SMC Chip for an IrDA port
+ *    Probes for the SMC FDC37C669 and FDC37N869
  *
  */
-static int ircc_probe_smc(int cfg_base, int *fir_base, int *sir_base)
+static int ircc_probe_69(smc_chip_t *chip, chipio_t *info)
 {
+	int cfg_base = info->cfg_base;
 	__u8 devid, mode;
 	int ret = -ENODEV;
 	int fir_io;
@@ -340,15 +357,15 @@ static int ircc_probe_smc(int cfg_base, int *fir_base, int *sir_base)
 	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 
 	/* Enter configuration */
-	outb(0x55, cfg_base);
-	outb(0x55, cfg_base);
+	outb(chip->entr1, cfg_base);
+	outb(chip->entr2, cfg_base);
 	
-	outb(0x0d, cfg_base);
+	outb(chip->cid_index, cfg_base);
 	devid = inb(cfg_base+1);
 	IRDA_DEBUG(0, __FUNCTION__ "(), devid=0x%02x\n",devid);
 	
 	/* Check for expected device ID; are there others? */
-	if (devid == 0x29 || devid == 0x04) {    
+	if (devid == chip->cid_value) {
 		outb(0x0c, cfg_base);
 		mode = inb(cfg_base+1);
 		mode = (mode & 0x38) >> 3;
@@ -357,15 +374,68 @@ static int ircc_probe_smc(int cfg_base, int *fir_base, int *sir_base)
 		if (mode && mode < 4) {
 			/* SIR iobase */
 			outb(0x25, cfg_base);
-			*sir_base = inb(cfg_base+1) << 2;
+			info->sir_base = inb(cfg_base+1) << 2;
 
 		       	/* FIR iobase */
 			outb(0x2b, cfg_base);
 			fir_io = inb(cfg_base+1) << 3;
 			if (fir_io) {
 				ret = 0;
-				*fir_base = fir_io;
+				info->fir_base = fir_io;
 			}
+		}
+	}
+	
+	/* Exit configuration */
+	outb(0xaa, cfg_base);
+
+	return ret;
+}
+
+/*
+ * Function ircc_probe_58 (chip, info)
+ *
+ *    Probes for the SMC FDC37N958
+ *
+ */
+static int ircc_probe_58(smc_chip_t *chip, chipio_t *info)
+{
+	int cfg_base = info->cfg_base;
+	__u8 devid;
+	int ret = -ENODEV;
+	int fir_io;
+	
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+
+	/* Enter configuration */
+	outb(chip->entr1, cfg_base);
+	outb(chip->entr2, cfg_base);
+	
+	outb(chip->cid_index, cfg_base);
+	devid = inb(cfg_base+1);
+	IRDA_DEBUG(0, __FUNCTION__ "(), devid=0x%02x\n",devid);
+	
+	/* Check for expected device ID; are there others? */
+	if (devid == chip->cid_value) {
+		/* Select logical device (UART2) */
+		outb(0x07, cfg_base);
+		outb(0x05, cfg_base + 1);
+		
+		/* SIR iobase */
+		outb(0x60, cfg_base);
+		info->sir_base = inb(cfg_base + 1) << 8;
+		outb(0x61, cfg_base);
+		info->sir_base |= inb(cfg_base + 1);
+		
+		/* Read FIR base */
+		outb(0x62, cfg_base);
+		fir_io = inb(cfg_base + 1) << 8;
+		outb(0x63, cfg_base);
+		fir_io |= inb(cfg_base + 1);
+		outb(0x2b, cfg_base);
+		if (fir_io) {
+			ret = 0;
+			info->fir_base = fir_io;
 		}
 	}
 	
@@ -390,23 +460,23 @@ static int ircc_probe(int fir_base, int sir_base)
 	IRDA_DEBUG(0, __FUNCTION__ "\n");
 
 	register_bank(iobase, 3);
-	high = inb(iobase+IRCC_ID_HIGH);
-	low = inb(iobase+IRCC_ID_LOW);
-	chip = inb(iobase+IRCC_CHIP_ID);
+	high    = inb(iobase+IRCC_ID_HIGH);
+	low     = inb(iobase+IRCC_ID_LOW);
+	chip    = inb(iobase+IRCC_CHIP_ID);
 	version = inb(iobase+IRCC_VERSION);
-	config = inb(iobase+IRCC_INTERFACE);
-	irq = config >> 4 & 0x0f;
-	dma = config & 0x0f;
+	config  = inb(iobase+IRCC_INTERFACE);
+	irq     = config >> 4 & 0x0f;
+	dma     = config & 0x0f;
 
         if (high == 0x10 && low == 0xb8 && (chip == 0xf1 || chip == 0xf2)) { 
                 MESSAGE("SMC IrDA Controller found; IrCC version %d.%d, "
 			"port 0x%03x, dma=%d, irq=%d\n",
 			chip & 0x0f, version, iobase, dma, irq);
 	} else
-		return -1;
+		return -ENODEV;
 
 	/* Power on device */
-	outb(0, iobase+IRCC_MASTER);
+	outb(0x00, iobase+IRCC_MASTER);
 
 	return config;
 }
@@ -434,6 +504,7 @@ static void ircc_change_speed(void *priv, __u32 speed)
 	self->io.speed = speed;
 
 	outb(IRCC_MASTER_RESET, iobase+IRCC_MASTER);
+	outb(0x00, iobase+IRCC_MASTER);
 
 	switch (speed) {
 	case 9600:
@@ -479,6 +550,15 @@ static void ircc_change_speed(void *priv, __u32 speed)
 
 		/* Install FIR transmit handler */
 		dev->hard_start_xmit = &ircc_hard_xmit;
+
+		/* 
+		 * Don't know why we have to do this, but FIR interrupts 
+		 * stops working if we remove it.
+		 */
+		/* outb(UART_MCR_OUT2, self->io.sir_base + UART_MCR); */
+
+		/* Be ready for incomming frames */
+		ircc_dma_receive(self, iobase);
 	} else {
 		/* Install SIR transmit handler */
 		dev->hard_start_xmit = &irport_hard_xmit;
@@ -489,7 +569,7 @@ static void ircc_change_speed(void *priv, __u32 speed)
 		irport_change_speed(self->irport, speed);
 	}	
 	dev->tbusy = 0;
-#if 0	
+
 	register_bank(iobase, 1);
 	outb(((inb(iobase+IRCC_SCE_CFGA) & 0x87) | ir_mode), 
 	     iobase+IRCC_SCE_CFGA);
@@ -509,7 +589,6 @@ static void ircc_change_speed(void *priv, __u32 speed)
 	
 	register_bank(iobase, 0);
 	outb(fast, iobase+IRCC_LCR_A);
-#endif
 }
 
 /*
@@ -522,21 +601,20 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct irport_cb *irport;
 	struct ircc_cb *self;
+	unsigned long flags;
+	__u32 speed;
 	int iobase;
 	int mtt;
-	__u32 speed;
 
 	irport = (struct irport_cb *) dev->priv;
 	self = (struct ircc_cb *) irport->priv;
-
 	ASSERT(self != NULL, return 0;);
 
 	iobase = self->io.fir_base;
 
-	IRDA_DEBUG(2, __FUNCTION__ "(%ld), skb->len=%d\n", jiffies,
-		   (int) skb->len);
+	spin_lock_irqsave(&self->lock, flags);
 
-	/* Check if we need to change the speed */
+	/* Check if we need to change the speed after this frame */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
 	
@@ -546,21 +624,28 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct device *dev)
 
 	memcpy(self->tx_buff.head, skb->data, skb->len);
 
-	/* Make sure that the length is a multiple of 16 bits */
-	if (skb->len & 0x01)
-		skb->len++;
-
 	self->tx_buff.len = skb->len;
 	self->tx_buff.data = self->tx_buff.head;
 	
 	mtt = irda_get_mtt(skb);	
 	if (mtt) {
-		/* OH BUGGER ME! */
-		udelay(mtt);
+		int bofs;
+
+		/* 
+		 * Compute who many BOFS (STA or PA's) we need to waste the
+		 * min turn time given the speed of the link.
+		 */
+		bofs = mtt * (self->io.speed / 1000) / 8000;
+		if (bofs > 4095)
+			bofs = 4095;
+
+		ircc_dma_xmit(self, iobase, bofs);
+	} else {
+		/* Transmit frame */
+		ircc_dma_xmit(self, iobase, 0);
 	}
 	
-	ircc_dma_xmit(self, iobase);
-	
+	spin_unlock_irqrestore(&self->lock, flags);
 	dev_kfree_skb(skb);
 
 	return 0;
@@ -572,44 +657,49 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct device *dev)
  *    Transmit data using DMA
  *
  */
-static void ircc_dma_xmit(struct ircc_cb *self, int iobase)
+static void ircc_dma_xmit(struct ircc_cb *self, int iobase, int bofs)
 {
+	__u8 ctrl;
+
 	IRDA_DEBUG(2, __FUNCTION__ "\n");
-
-	ASSERT(self != NULL, return;);
-
-	iobase = self->io.fir_base;
-
-	setup_dma(self->io.dma, self->tx_buff.data, self->tx_buff.len, 
-		  DMA_TX_MODE);
-	
-	self->io.direction = IO_XMIT;
-
- 	outb(0x08, self->io.sir_base+4);
-	
-	register_bank(iobase, 4);
-	outb((inb(iobase+IRCC_CONTROL) & 0xf0), iobase+IRCC_CONTROL);
-	
-	outb(2, iobase+IRCC_BOF_COUNT_LO);
-	outb(0, iobase+IRCC_BRICKWALL_CNT_LO);
-#if 1
-	outb(self->tx_buff.len >> 8, iobase+IRCC_BRICKWALL_TX_CNT_HI);
-	outb(self->tx_buff.len & 0xff, iobase+IRCC_TX_SIZE_LO);
-#else
-	outb(0, iobase+IRCC_BRICKWALL_TX_CNT_HI);
-	outb(0, iobase+IRCC_TX_SIZE_LO);
+#if 0	
+	/* Disable Rx */
+	register_bank(iobase, 0);
+	outb(0x00, iobase+IRCC_LCR_B);
 #endif
-
 	register_bank(iobase, 1);
-	outb(inb(iobase+IRCC_SCE_CFGB) | IRCC_CFGB_DMA_ENABLE,
+	outb(inb(iobase+IRCC_SCE_CFGB) & ~IRCC_CFGB_DMA_ENABLE, 
 	     iobase+IRCC_SCE_CFGB);
 
-	register_bank(iobase, 0);
+	self->io.direction = IO_XMIT;
 
-	outb(IRCC_IER_ACTIVE_FRAME | IRCC_IER_EOM, iobase+IRCC_IER);
-	outb(IRCC_LCR_B_SCE_TRANSMIT|IRCC_LCR_B_SIP_ENABLE, iobase+IRCC_LCR_B);
+	/* Set BOF additional count for generating the min turn time */
+	register_bank(iobase, 4);
+	outb(bofs & 0xff, iobase+IRCC_BOF_COUNT_LO);
+	ctrl = inb(iobase+IRCC_CONTROL) & 0xf0;
+	outb(ctrl | ((bofs >> 8) & 0x0f), iobase+IRCC_BOF_COUNT_HI);
 
+	/* Set max Tx frame size */
+	outb(self->tx_buff.len >> 8, iobase+IRCC_TX_SIZE_HI);
+	outb(self->tx_buff.len & 0xff, iobase+IRCC_TX_SIZE_LO);
+
+	/* Setup DMA controller (must be done after enabling chip DMA) */
+	setup_dma(self->io.dma, self->tx_buff.data, self->tx_buff.len, 
+		  DMA_TX_MODE);
+
+	outb(UART_MCR_OUT2, self->io.sir_base + UART_MCR);
+	/* Enable burst mode chip Tx DMA */
+	register_bank(iobase, 1);
+	outb(inb(iobase+IRCC_SCE_CFGB) | IRCC_CFGB_DMA_ENABLE |
+	     IRCC_CFGB_DMA_BURST, iobase+IRCC_SCE_CFGB);
+
+	/* Enable interrupt */
 	outb(IRCC_MASTER_INT_EN, iobase+IRCC_MASTER);
+	register_bank(iobase, 0);
+	outb(IRCC_IER_ACTIVE_FRAME | IRCC_IER_EOM, iobase+IRCC_IER);
+
+	/* Enable transmit */
+	outb(IRCC_LCR_B_SCE_TRANSMIT|IRCC_LCR_B_SIP_ENABLE, iobase+IRCC_LCR_B);
 }
 
 /*
@@ -619,39 +709,36 @@ static void ircc_dma_xmit(struct ircc_cb *self, int iobase)
  *    by the interrupt handler
  *
  */
-static void ircc_dma_xmit_complete(struct ircc_cb *self, int underrun)
+static void ircc_dma_xmit_complete(struct ircc_cb *self, int iobase)
 {
-	int iobase, d;
-
 	IRDA_DEBUG(2, __FUNCTION__ "\n");
-
-	ASSERT(self != NULL, return;);
-
+#if 0
+	/* Disable Tx */
+	register_bank(iobase, 0);
+	outb(0x00, iobase+IRCC_LCR_B);
+#endif
 	register_bank(self->io.fir_base, 1);
-
-	outb(inb(self->io.fir_base+IRCC_SCE_CFGB) & IRCC_CFGB_DMA_ENABLE,
+	outb(inb(self->io.fir_base+IRCC_SCE_CFGB) & ~IRCC_CFGB_DMA_ENABLE,
 	     self->io.fir_base+IRCC_SCE_CFGB);
 
-	d = get_dma_residue(self->io.dma);
-
-	IRDA_DEBUG(0, __FUNCTION__ 
-		   ": dma residue = %d, len=%d, sent=%d\n", 
-		   d, self->tx_buff.len, self->tx_buff.len - d);
-
-	iobase = self->io.fir_base;
-
 	/* Check for underrrun! */
-	if (underrun) {
+	register_bank(iobase, 0);
+	if (inb(iobase+IRCC_LSR) & IRCC_LSR_UNDERRUN) {
 		self->irport->stats.tx_errors++;
-		self->irport->stats.tx_fifo_errors++;		
+		self->irport->stats.tx_fifo_errors++;
+
+		/* Reset error condition */
+		register_bank(iobase, 0);
+		outb(IRCC_MASTER_ERROR_RESET, iobase+IRCC_MASTER);
+		outb(0x00, iobase+IRCC_MASTER);
 	} else {
 		self->irport->stats.tx_packets++;
 		self->irport->stats.tx_bytes +=  self->tx_buff.len;
 	}
 
+	/* Check if it's time to change the speed */
 	if (self->new_speed) {
-		ircc_change_speed(self, self->new_speed);
-		
+		ircc_change_speed(self, self->new_speed);		
 		self->new_speed = 0;
 	}
 
@@ -669,39 +756,31 @@ static void ircc_dma_xmit_complete(struct ircc_cb *self, int underrun)
  *    if it starts to receive a frame.
  *
  */
-static int ircc_dma_receive(struct ircc_cb *self) 
-{
-	int iobase;
-
-	IRDA_DEBUG(2, __FUNCTION__ "\n");
-
-	ASSERT(self != NULL, return -1;);
-
-	iobase= self->io.fir_base;
+static int ircc_dma_receive(struct ircc_cb *self, int iobase) 
+{	
+	/* Turn off chip DMA */
+	//register_bank(iobase, 1);
+	//outb(inb(iobase+IRCC_SCE_CFGB) & ~IRCC_CFGB_DMA_ENABLE, 
+	//     iobase+IRCC_SCE_CFGB);
 
 	setup_dma(self->io.dma, self->rx_buff.data, self->rx_buff.truesize, 
-		   DMA_RX_MODE);
-	
-	/* driver->media_busy = FALSE; */
+		  DMA_RX_MODE);
+	/* Set max Rx frame size */
+	register_bank(iobase, 4);
+	outb((2050 >> 8) & 0x0f, iobase+IRCC_RX_SIZE_HI);
+	outb(2050 & 0xff, iobase+IRCC_RX_SIZE_LO);
+
 	self->io.direction = IO_RECV;
 	self->rx_buff.data = self->rx_buff.head;
-#if 0
-	self->rx_buff.offset = 0;
-#endif
 
-	register_bank(iobase, 4);
-	outb(inb(iobase+IRCC_CONTROL) & 0xf0, iobase+IRCC_CONTROL);
-	outb(2, iobase+IRCC_BOF_COUNT_LO);
-	outb(0, iobase+IRCC_BRICKWALL_CNT_LO);
-	outb(0, iobase+IRCC_BRICKWALL_TX_CNT_HI);
-	outb(0, iobase+IRCC_TX_SIZE_LO);
-	outb(0, iobase+IRCC_RX_SIZE_HI);
-	outb(0, iobase+IRCC_RX_SIZE_LO);
-
+	/* Setup DMA controller */
+	
+	/* Enable receiver */
 	register_bank(iobase, 0);
 	outb(IRCC_LCR_B_SCE_RECEIVE | IRCC_LCR_B_SIP_ENABLE, 
 	     iobase+IRCC_LCR_B);
 	
+	/* Enable burst mode chip Rx DMA */
 	register_bank(iobase, 1);
 	outb(inb(iobase+IRCC_SCE_CFGB) | IRCC_CFGB_DMA_ENABLE | 
 	     IRCC_CFGB_DMA_BURST, iobase+IRCC_SCE_CFGB);
@@ -716,45 +795,54 @@ static int ircc_dma_receive(struct ircc_cb *self)
  *
  *    
  */
-static int ircc_dma_receive_complete(struct ircc_cb *self, int iobase)
+static void ircc_dma_receive_complete(struct ircc_cb *self, int iobase)
 {
+	unsigned long flags;
 	struct sk_buff *skb;
 	int len, msgcnt;
 
 	IRDA_DEBUG(2, __FUNCTION__ "\n");
+#if 0
+	/* Disable Rx */
+	register_bank(iobase, 0);
+	outb(0x00, iobase+IRCC_LCR_B);
+#endif
+	register_bank(iobase, 0);
+	msgcnt = inb(iobase+IRCC_LCR_B) & 0x08;
 
-	msgcnt = inb(self->io.fir_base+IRCC_LCR_B) & 0x08;
-
-	IRDA_DEBUG(0, __FUNCTION__ ": dma count = %d\n",
+	IRDA_DEBUG(2, __FUNCTION__ ": dma count = %d\n",
 		   get_dma_residue(self->io.dma));
 
-	len = self->rx_buff.truesize - get_dma_residue(self->io.dma) - 4;
+	len = self->rx_buff.truesize - get_dma_residue(self->io.dma);
+	
+	/* Remove CRC */
+	if (self->io.speed < 4000000)
+		len -= 2;
+	else
+		len -= 4;
 
-	IRDA_DEBUG(0, __FUNCTION__ ": msgcnt = %d, len=%d\n", msgcnt, len);
+	if ((len < 2) && (len > 2050)) {
+		WARNING(__FUNCTION__ "(), bogus len=%d\n", len);
+		return;
+	}
+	IRDA_DEBUG(2, __FUNCTION__ ": msgcnt = %d, len=%d\n", msgcnt, len);
 
 	skb = dev_alloc_skb(len+1);
 	if (!skb)  {
 		WARNING(__FUNCTION__ "(), memory squeeze, dropping frame.\n");
-		return FALSE;
-	}
-			
+		return;
+	}			
 	/* Make sure IP header gets aligned */
 	skb_reserve(skb, 1); 
-	skb_put(skb, len);
 
-	memcpy(skb->data, self->rx_buff.data, len);
+	memcpy(skb_put(skb, len), self->rx_buff.data, len);
 	self->irport->stats.rx_packets++;
+	self->irport->stats.rx_bytes += len;
 
 	skb->dev = self->netdev;
 	skb->mac.raw  = skb->data;
 	skb->protocol = htons(ETH_P_IRDA);
 	netif_rx(skb);
-
-	register_bank(self->io.fir_base, 1);
-	outb(inb(self->io.fir_base+IRCC_SCE_CFGB) & ~IRCC_CFGB_DMA_ENABLE, 
-	     self->io.fir_base+IRCC_SCE_CFGB);
-
-	return TRUE;
 }
 
 /*
@@ -776,19 +864,19 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return;
 	}
 	irport = (struct irport_cb *) dev->priv;
+	ASSERT(irport != NULL, return;);
 	self = (struct ircc_cb *) irport->priv;
+	ASSERT(self != NULL, return;);
 
 	/* Check if we should use the SIR interrupt handler */
 	if (self->io.speed < 576000) {
 		irport_interrupt(irq, dev_id, regs);
 		return;
 	}
-
 	iobase = self->io.fir_base;
 
+	spin_lock(&self->lock);	
 	dev->interrupt = 1;
-
-	outb(0, iobase+IRCC_MASTER);
 
 	register_bank(iobase, 0);
 	iir = inb(iobase+IRCC_IIR);
@@ -796,34 +884,23 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/* Disable interrupts */
 	outb(0, iobase+IRCC_IER);
 
-	IRDA_DEBUG(0, __FUNCTION__ "(), iir = 0x%02x\n", iir);
+	IRDA_DEBUG(2, __FUNCTION__ "(), iir = 0x%02x\n", iir);
 
 	if (iir & IRCC_IIR_EOM) {
-	        IRDA_DEBUG(0, __FUNCTION__ "(), IRCC_IIR_EOM\n");
-
 		if (self->io.direction == IO_RECV)
 			ircc_dma_receive_complete(self, iobase);
 		else
 			ircc_dma_xmit_complete(self, iobase);
 		
-		ircc_dma_receive(self);
-	}
-	if (iir & IRCC_IIR_ACTIVE_FRAME) {
-	        IRDA_DEBUG(0, __FUNCTION__ "(), IRCC_IIR_ACTIVE_FRAME\n");
-		self->rx_buff.state = INSIDE_FRAME;
-#if 0
-		ircc_dma_receive(self);
-#endif
-	}
-	if (iir & IRCC_IIR_RAW_MODE) {
-		IRDA_DEBUG(0, __FUNCTION__ "(), IIR RAW mode interrupt.\n");
+		ircc_dma_receive(self, iobase);
 	}
 
+	/* Enable interrupts again */
 	register_bank(iobase, 0);
 	outb(IRCC_IER_ACTIVE_FRAME|IRCC_IER_EOM, iobase+IRCC_IER);
-	outb(IRCC_MASTER_INT_EN, iobase+IRCC_MASTER);
 
 	dev->interrupt = 0;
+	spin_unlock(&self->lock);
 }
 
 /*
@@ -964,7 +1041,7 @@ static int ircc_apmproc(apm_event_t event)
 		if (!down) {			
 			for (i=0; i<4; i++) {
 				if (dev_self[i])
-					nsc_ircc_suspend(dev_self[i]);
+					ircc_suspend(dev_self[i]);
 			}
 		}
 		down = 1;
@@ -974,7 +1051,7 @@ static int ircc_apmproc(apm_event_t event)
 		if (down) {
 			for (i=0; i<4; i++) {
 				if (dev_self[i])
-					nsc_ircc_wakeup(dev_self[i]);
+					ircc_wakeup(dev_self[i]);
 			}
 		}
 		down = 0;

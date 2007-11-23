@@ -4,7 +4,7 @@
  *  This driver will also support the older SI, and XIO cards.
  *
  *
- *   (C) 1998 R.E.Wolff@BitWizard.nl
+ *   (C) 1998 - 2000  R.E.Wolff@BitWizard.nl
  *
  *  Simon Allen (simonallen@cix.compulink.co.uk) wrote a previous
  *  version of this driver. Some fragments may have been copied. (none
@@ -33,6 +33,9 @@
  *
  * Revision history:
  * $Log: sx.c,v $
+ * Revision 1.30  2000/01/21 17:43:06  wolff
+ * - Added support for SX+
+ *
  * Revision 1.26  1999/08/05 15:22:14  wolff
  * - Port to 2.3.x
  * - Reformatted to Linus' liking.
@@ -185,8 +188,8 @@
  * */
 
 
-#define RCS_ID "$Id: sx.c,v 1.26 1999/08/05 15:22:14 wolff Exp $"
-#define RCS_REV "$Revision: 1.26 $"
+#define RCS_ID "$Id: sx.c,v 1.30 2000/01/21 17:43:06 wolff Exp $"
+#define RCS_REV "$Revision: 1.30 $"
 
 
 #include <linux/module.h>
@@ -236,13 +239,6 @@
 #define SX_TYPE_NORMAL 1
 #define SX_TYPE_CALLOUT 2
 
-
-#ifndef SX_NORMAL_MAJOR
-/* This allows overriding on the compiler commandline, or in a "major.h" 
-   include or something like that */
-#define SX_NORMAL_MAJOR  32
-#define SX_CALLOUT_MAJOR 33
-#endif
 
 #ifndef PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8
 #define PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8 0x2000
@@ -658,7 +654,7 @@ int sx_start_board (struct sx_board *board)
 		write_sx_byte (board, SX_CONFIG, SX_CONF_BUSEN);
 	} else {
 		/* Don't bug me about the clear_set. 
-		   I haven't the foggiest idea what it's about -- REW*/
+		   I haven't the foggiest idea what it's about -- REW */
 		write_sx_byte (board, SI2_ISA_RESET,    SI2_ISA_RESET_CLEAR);
 		write_sx_byte (board, SI2_ISA_INTCLEAR, SI2_ISA_INTCLEAR_SET);
 	}
@@ -1013,7 +1009,7 @@ void sx_transmit_chars (struct sx_port *port)
 
 		/* Don't copy pas the end of the source buffer */
 		if (c > SERIAL_XMIT_SIZE - port->gs.xmit_tail) 
-                	c = SERIAL_XMIT_SIZE - port->gs.xmit_tail;
+			c = SERIAL_XMIT_SIZE - port->gs.xmit_tail;
 
 		sx_dprintk (SX_DEBUG_TRANSMIT, " %d(%d) \n", 
 		            c, SERIAL_XMIT_SIZE- port->gs.xmit_tail);
@@ -1622,7 +1618,7 @@ int do_memtest_w (struct sx_board *board, int min, int max)
 
 
 static int sx_fw_ioctl (struct inode *inode, struct file *filp,
-		         unsigned int cmd, unsigned long arg)
+                        unsigned int cmd, unsigned long arg)
 {
 	int rc = 0;
 	int *descr = (int *)arg, i;
@@ -1665,7 +1661,10 @@ static int sx_fw_ioctl (struct inode *inode, struct file *filp,
 		board = &boards[arg];
 		break;
 	case SXIO_GET_TYPE:
-		rc = IS_SX_BOARD (board)? SX_TYPE_SX:SX_TYPE_SI;
+		rc = -1; /* If we manage to miss one, return error. */
+		if (IS_SX_BOARD (board)) rc = SX_TYPE_SX;
+		if (IS_CF_BOARD (board)) rc = SX_TYPE_CF;
+		if (IS_SI_BOARD (board)) rc = SX_TYPE_SI;
 		sx_dprintk (SX_DEBUG_FIRMWARE, "returning type= %d\n", rc);
 		break;
 	case SXIO_DO_RAMTEST:
@@ -1697,7 +1696,7 @@ static int sx_fw_ioctl (struct inode *inode, struct file *filp,
 			for (i=0;i<nbytes;i += SX_CHUNK_SIZE) {
 				copy_from_user (tmp, (char *)data+i, 
 				                (i+SX_CHUNK_SIZE>nbytes)?nbytes-i:SX_CHUNK_SIZE);
-				memcpy_toio    ((char *) (board->base + offset + i), tmp, 
+				memcpy_toio    ((char *) (board->base2 + offset + i), tmp, 
 				                (i+SX_CHUNK_SIZE>nbytes)?nbytes-i:SX_CHUNK_SIZE);
 			}
 
@@ -1740,6 +1739,9 @@ static int sx_fw_ioctl (struct inode *inode, struct file *filp,
 		break;
 	case SXIO_GETGSDEBUG:
 		rc = gs_debug;
+		break;
+	case SXIO_GETNPORTS:
+		rc = sx_nports;
 		break;
 	default:
 		printk (KERN_WARNING "Unknown ioctl on firmware device (%x).\n", cmd);
@@ -1891,13 +1893,17 @@ static int sx_init_board (struct sx_board *board)
 
 	board->flags |= SX_BOARD_INITIALIZED;
 
+	if (read_sx_byte (board, 0))
+		/* CF boards may need this. */
+		write_sx_byte(board,0, 0);
+
 	/* This resets the processor again, to make sure it didn't do any
 	   foolish things while we were downloading the image */
 	if (!sx_reset (board))
 		return 0;
 
 	sx_start_board (board);
-
+	udelay (10);
 	if (!sx_busy_wait_neq (board, 0, 0xff, 0)) {
 		printk (KERN_ERR "sx: Ooops. Board won't initialize.\n");
 		return 0;
@@ -2058,51 +2064,55 @@ int probe_sx (struct sx_board *board)
 	int i;
 
 	func_enter();
-	sx_dprintk (SX_DEBUG_PROBE, "Going to verify vpd prom at %x.\n", 
-	            board->base + SX_VPD_ROM);
 
-	if (sx_debug & SX_DEBUG_PROBE)
-		my_hd ((char *)(board->base + SX_VPD_ROM), 0x40);
+	if (!IS_CF_BOARD (board)) {    
+		sx_dprintk (SX_DEBUG_PROBE, "Going to verify vpd prom at %x.\n", 
+		            board->base + SX_VPD_ROM);
 
-	p = (char *) &vpdp;
-	for (i=0;i< sizeof (struct vpd_prom);i++)
-		*p++ = read_sx_byte (board, SX_VPD_ROM + i*2);
+		if (sx_debug & SX_DEBUG_PROBE)
+			my_hd ((char *)(board->base + SX_VPD_ROM), 0x40);
 
-	if (sx_debug & SX_DEBUG_PROBE)
-		my_hd ((char *)&vpdp, 0x20);
+		p = (char *) &vpdp;
+		for (i=0;i< sizeof (struct vpd_prom);i++)
+			*p++ = read_sx_byte (board, SX_VPD_ROM + i*2);
 
-	sx_dprintk (SX_DEBUG_PROBE, "checking identifier...\n");
+		if (sx_debug & SX_DEBUG_PROBE)
+			my_hd ((char *)&vpdp, 0x20);
 
-	if (strncmp (vpdp.identifier, SX_VPD_IDENT_STRING, 16) != 0) {
-		sx_dprintk (SX_DEBUG_PROBE, "Got non-SX identifier: '%s'\n", 
-		            vpdp.identifier); 
-		return 0;
+		sx_dprintk (SX_DEBUG_PROBE, "checking identifier...\n");
+
+		if (strncmp (vpdp.identifier, SX_VPD_IDENT_STRING, 16) != 0) {
+			sx_dprintk (SX_DEBUG_PROBE, "Got non-SX identifier: '%s'\n", 
+			            vpdp.identifier); 
+			return 0;
+		}
 	}
 
 	printheader ();
 
-	printk (KERN_DEBUG "sx: Found an SX board at %x\n", board->hw_base);
-	printk (KERN_DEBUG "sx: hw_rev: %d, assembly level: %d, uniq ID:%08x, ", 
-	        vpdp.hwrev, vpdp.hwass, vpdp.uniqid);
-	printk (           "Manufactured: %d/%d\n", 
-	        1970 + vpdp.myear, vpdp.mweek);
+	if (!IS_CF_BOARD (board)) {
+		printk (KERN_DEBUG "sx: Found an SX board at %x\n", board->hw_base);
+		printk (KERN_DEBUG "sx: hw_rev: %d, assembly level: %d, uniq ID:%08x, ", 
+		        vpdp.hwrev, vpdp.hwass, vpdp.uniqid);
+		printk (           "Manufactured: %d/%d\n", 
+		        1970 + vpdp.myear, vpdp.mweek);
 
 
-	if ((((vpdp.uniqid >> 24) & SX_UNIQUEID_MASK) != SX_PCI_UNIQUEID1) &&
-	    (((vpdp.uniqid >> 24) & SX_UNIQUEID_MASK) != SX_ISA_UNIQUEID1)) {
-		/* This might be a bit harsh. This was the primary reason the
-		   SX/ISA card didn't work at first... */
-		printk (KERN_ERR "sx: Hmm. Not an SX/PCI or SX/ISA card. Sorry: giving up.\n");
-		return (0);
-	}
+		if ((((vpdp.uniqid >> 24) & SX_UNIQUEID_MASK) != SX_PCI_UNIQUEID1) &&
+		    (((vpdp.uniqid >> 24) & SX_UNIQUEID_MASK) != SX_ISA_UNIQUEID1)) {
+			/* This might be a bit harsh. This was the primary reason the
+			   SX/ISA card didn't work at first... */
+			printk (KERN_ERR "sx: Hmm. Not an SX/PCI or SX/ISA card. Sorry: giving up.\n");
+			return (0);
+		}
 
-	if (((vpdp.uniqid >> 24) & SX_UNIQUEID_MASK) == SX_ISA_UNIQUEID1) {
-		if (board->base & 0x8000) {
-			printk (KERN_WARNING "sx: Warning: There may be hardware problems with the card at %x.\n", board->base);
-			printk (KERN_WARNING "sx: Read sx.txt for more info.\n");
+		if (((vpdp.uniqid >> 24) & SX_UNIQUEID_MASK) == SX_ISA_UNIQUEID1) {
+			if (board->base & 0x8000) {
+				printk (KERN_WARNING "sx: Warning: There may be hardware problems with the card at %x.\n", board->base);
+				printk (KERN_WARNING "sx: Read sx.txt for more info.\n");
+			}
 		}
 	}
-
 
 	board->nports = -1;
 
@@ -2429,22 +2439,35 @@ int sx_init(void)
 			tshort = (tint >> 16) & 0xffff;
 			sx_dprintk (SX_DEBUG_PROBE, "Got a specialix card: %x.\n", tint);
 			/* sx_dprintk (SX_DEBUG_PROBE, "pdev = %d/%d	(%x)\n", pdev, tint); */ 
-			if (tshort != 0x0200) {
+			if ((tshort != 0x0200) && (tshort != 0x0300)) {
 				sx_dprintk (SX_DEBUG_PROBE, "But it's not an SX card (%d)...\n", 
 				            tshort);
 				continue;
 			}
 			board = &boards[found];
 
-			pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2, &tint);
-			board->hw_base = tint & PCI_BASE_ADDRESS_MEM_MASK;
-			board->base = (ulong) ioremap(board->hw_base, SX_WINDOW_LEN);
-			board->irq = get_irq (pdev);
 			board->flags &= ~SX_BOARD_TYPE;
-			board->flags |=  SX_PCI_BOARD;
+			board->flags |= (tshort == 0x200)?SX_PCI_BOARD:
+			                                  SX_CFPCI_BOARD;
 
-			sx_dprintk (SX_DEBUG_PROBE, "Got a specialix card: %x/%x(%d).\n", 
-			            tint, boards[found].base, board->irq);
+			/* CF boards use base address 3.... */
+			if (IS_CF_BOARD (board))
+				pci_read_config_dword(pdev, PCI_BASE_ADDRESS_3,
+				                      &tint);
+			else
+				pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2,
+				                      &tint);
+			board->hw_base = tint & PCI_BASE_ADDRESS_MEM_MASK;
+			board->base2 = 
+			board->base = (ulong) ioremap(board->hw_base, WINDOW_LEN (board));
+			/* Most of the stuff on the CF board is offset by
+			   0x18000 ....  */
+			if (IS_CF_BOARD (board)) board->base += 0x18000;
+
+			board->irq = get_irq (pdev);
+
+			sx_dprintk (SX_DEBUG_PROBE, "Got a specialix card: %x/%x(%d) %x.\n", 
+			            tint, boards[found].base, board->irq, board->flags);
 
 			if (probe_sx (board)) {
 				found++;

@@ -251,6 +251,7 @@ int el3_probe(struct device *dev)
 				if (el3_debug > 2) {
 					printk("3c529: irq %d  ioaddr 0x%x  ifport %d\n", irq, ioaddr, if_port);
 				}
+				EL3WINDOW(0);
 				for (i = 0; i < 3; i++) {
 					phys_addr[i] = htons(read_eeprom(ioaddr, i));
 				}
@@ -577,7 +578,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		outw(0x00, ioaddr + TX_FIFO);
 		/* ... and the packet rounded to a doubleword. */
 #ifdef  __powerpc__
-		outsl_unswapped(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
+		outsl_ns(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 #else
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 #endif
@@ -797,7 +798,7 @@ el3_rx(struct device *dev)
 
 				/* 'skb->data' points to the start of sk_buff data area. */
 #ifdef  __powerpc__
-				insl_unswapped(ioaddr+RX_FIFO, skb_put(skb,pkt_len),
+				insl_ns(ioaddr+RX_FIFO, skb_put(skb,pkt_len),
 							   (pkt_len + 3) >> 2);
 #else
 				insl(ioaddr + RX_FIFO, skb_put(skb,pkt_len),

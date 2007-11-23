@@ -3,6 +3,9 @@
    most of this file was taken from ps2esdi.h
 */
 
+/* Fixed 19/01/2000 davidm@amberdata.demon.co.uk - num_pages should have
+ * been in hex */
+
 struct {
   unsigned int base_addr;
 } addr_table[] = {
@@ -30,22 +33,22 @@ struct {
   unsigned long mem_start;
   unsigned char num_pages;
 } mem_table[] = {
-    { 16, 0x0c0000, 40 },
-    { 18, 0x0c4000, 40 },
-    { 20, 0x0c8000, 40 },
-    { 22, 0x0cc000, 40 },
-    { 24, 0x0d0000, 40 },
-    { 26, 0x0d4000, 40 },
-    { 28, 0x0d8000, 40 },
-    { 30, 0x0dc000, 40 },
-    {144, 0xfc0000, 40 },
-    {148, 0xfc8000, 40 },
-    {154, 0xfd0000, 40 },
-    {156, 0xfd8000, 40 },
-    {  0, 0x0c0000, 20 },
-    {  1, 0x0c2000, 20 },
-    {  2, 0x0c4000, 20 },
-    {  3, 0x0c6000, 20 }
+    { 16, 0x0c0000, 0x40 },
+    { 18, 0x0c4000, 0x40 },
+    { 20, 0x0c8000, 0x40 },
+    { 22, 0x0cc000, 0x40 },
+    { 24, 0x0d0000, 0x40 },
+    { 26, 0x0d4000, 0x40 },
+    { 28, 0x0d8000, 0x40 },
+    { 30, 0x0dc000, 0x40 },
+    {144, 0xfc0000, 0x40 },
+    {148, 0xfc8000, 0x40 },
+    {154, 0xfd0000, 0x40 },
+    {156, 0xfd8000, 0x40 },
+    {  0, 0x0c0000, 0x20 },
+    {  1, 0x0c2000, 0x20 },
+    {  2, 0x0c4000, 0x20 },
+    {  3, 0x0c6000, 0x20 }
 };
 
 #define IRQ_MASK 243

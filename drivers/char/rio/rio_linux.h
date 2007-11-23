@@ -127,3 +127,35 @@ struct vpd_prom {
 #endif
 
 
+
+#ifdef CONFIG_RIO_OLDPCI
+static inline void *rio_memcpy_toio (void *dummy, void *dest, void *source, int n)
+{
+  char *dst = dest;
+  char *src = source;
+
+  while (n--) {
+    writeb (*src++, dst++);
+    (void) readb (dummy);
+  }
+
+  return dest;
+}
+
+
+static inline void *rio_memcpy_fromio (void *dest, void *source, int n)
+{
+  char *dst = dest;
+  char *src = source;
+
+  while (n--) 
+    *dst++ = readb (src++);
+
+  return dest;
+}
+
+#else
+#define rio_memcpy_toio(dummy,dest,source,n)   memcpy_toio(dest, source, n)
+#define rio_memcpy_fromio                      memcpy_fromio
+#endif
+

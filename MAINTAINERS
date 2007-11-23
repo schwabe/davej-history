@@ -216,7 +216,7 @@ S:	Maintained
 
 CYCLADES ASYNC MUX DRIVER
 P:	Ivan Passos
-M:	Ivan Passos <ivan@cyclades.com>
+M:	ivan@cyclades.com
 W:	http://www.cyclades.com/
 S:	Supported
 
@@ -542,8 +542,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 MODULE SUPPORT [GENERAL], KERNELD
-P:	Richard Henderson
-M:	richard@gnu.ai.mit.edu
+P:	Keith Owens
+M:	kaos@ocs.com.au
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

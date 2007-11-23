@@ -1,8 +1,8 @@
-/* $Id: head.S,v 1.95.2.5 1999/12/02 11:51:56 davem Exp $
+/* $Id: head.S,v 1.95.2.6 2000/01/21 01:05:39 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1995 Peter Zaitcev   (Zaitcev@ipmce.su)
+ * Copyright (C) 1995,1999 Pete Zaitcev   (zaitcev@metabyte.com)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Copyright (C) 1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1997 Michael A. Griffith (grif@acm.org)
@@ -116,10 +116,10 @@ t_irq11:TRAP_ENTRY_INTERRUPT(11)            /* IRQ Floppy Intr.              */
 t_irq12:TRAP_ENTRY_INTERRUPT(12)            /* IRQ Zilog serial chip         */
 t_irq13:TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.               */
 t_irq14:TRAP_ENTRY_INTERRUPT(14)            /* IRQ Timer #2                  */
+	.globl	t_nmi
 #ifndef __SMP__
 t_nmi:	NMI_TRAP                            /* Level 15 (NMI)                */
 #else
-	.globl	t_nmi
 t_nmi:	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
 #endif
 t_racc:	TRAP_ENTRY(0x20, do_reg_access)     /* General Register Access Error */

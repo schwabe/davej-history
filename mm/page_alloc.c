@@ -20,6 +20,7 @@
 
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
+extern struct wait_queue * kswapd_wait;
 
 /*
  * Free area management
@@ -184,8 +185,6 @@ do { unsigned long size = 1 << high; \
 	atomic_set(&map->count, 1); \
 } while (0)
 
-int low_on_memory = 0;
-
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags;
@@ -212,21 +211,21 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	if (!(current->flags & PF_MEMALLOC)) {
 		int freed;
 
-		if (nr_free_pages > freepages.min) {
-			if (!low_on_memory)
-				goto ok_to_allocate;
-			if (nr_free_pages >= freepages.high) {
-				low_on_memory = 0;
-				goto ok_to_allocate;
-			}
+		if (nr_free_pages <= freepages.low) {
+			wake_up_interruptible(&kswapd_wait);
+			/* a bit of defensive programming */
+			if (gfp_mask & __GFP_WAIT)
+				schedule();
 		}
+		if (nr_free_pages > freepages.min)
+			goto ok_to_allocate;
 
-		low_on_memory = 1;
+		/* Danger, danger! Do something or fail */
 		current->flags |= PF_MEMALLOC;
 		freed = try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
 
-		if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+		if (!freed && !(gfp_mask & __GFP_HIGH))
 			goto nopage;
 	}
 ok_to_allocate:

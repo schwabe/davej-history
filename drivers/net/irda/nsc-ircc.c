@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Mon Jan 17 11:19:15 2000
+ * Modified at:   Wed Jan 19 08:59:16 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -1673,12 +1673,11 @@ static void nsc_ircc_fir_interrupt(struct nsc_ircc_cb *self, int iobase,
 			 * timer value, resolution 125 us 
 			 */
 			switch_bank(iobase, BANK4);
-			outb(0x01, iobase+TMRL); /* 125 us */
+			outb(0x02, iobase+TMRL); /* 2 * 125 us */
 			outb(0x00, iobase+TMRH);
 
 			/* Start timer */
 			outb(IRCR1_TMR_EN, iobase+IRCR1);
-
 			self->ier = IER_TMR_IE;
 		}
 	} else if (eir & EIR_TMR_EV) { /* Timer finished */

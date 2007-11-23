@@ -8397,6 +8397,13 @@ CONFIG_RIO
   say M here and compile this driver as kernel loadable module which 
   will be called rio.o.
 
+Specialix OLD RIO/PCI support 
+CONFIG_RIO_OLDPCI
+  This turns on support for the older PCI card. If you include
+  this support, performance on the newer cards will suffer a bit.
+
+  If you have one of these cards, say Y here.
+
 Cyclades async mux support
 CONFIG_CYCLADES
   This is a driver for a card that gives you many serial ports. You
@@ -9032,8 +9039,8 @@ CONFIG_FT_ALPHA_CLOCK
 
 Zilog serial support
 CONFIG_SUN_ZS
-  This driver does not exist at this point, so you might as well 
-  say N.
+  If you are asked this question, something is wrong with config scripts.
+  Zilog serial driver is always enabled in sparc architecture.
 
 Double Talk PC internal speech card support
 CONFIG_DTLK
@@ -10619,8 +10626,14 @@ CONFIG_SUN_OPENPROMIO
   inserted in and removed from the running kernel whenever you want),
   say M and read Documentation/modules.txt. If unsure, say Y.
 
-#Mostek real time clock support
-#CONFIG_SUN_MOSTEK_RTC
+Mostek real time clock support
+CONFIG_SUN_MOSTEK_RTC
+  The Mostek RTC chip is used on all knows Sun computers except
+  some JavaStation-s. For a JavaStation you need to say Y both here
+  and to CONFIG_RTC.
+
+  Say Y here unless you are building a special purpose kernel.
+
 #
 #Siemens SAB82532 serial support
 #CONFIG_SAB82532

@@ -56,7 +56,11 @@ unsigned long pmac_get_rtc_time(void)
 	struct adb_request req;
 
 	/* Get the time from the RTC */
-	switch (adb_hardware) {
+	if (adb_controller == 0)
+		return 0;
+	/* adb_controller->kind, not adb_hardware, since that doesn't
+	   get set until we call adb_init - paulus. */
+	switch (adb_controller->kind) {
 	case ADB_VIACUDA:
 		if (cuda_request(&req, NULL, 2, CUDA_PACKET, CUDA_GET_TIME) < 0)
 			return 0;
@@ -68,8 +72,10 @@ unsigned long pmac_get_rtc_time(void)
 		return (req.reply[3] << 24) + (req.reply[4] << 16)
 			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
 	case ADB_VIAPMU:
-		if (pmu_request(&req, NULL, 1, PMU_READ_RTC) < 0)
+		if (pmu_request(&req, NULL, 1, PMU_READ_RTC) < 0) {
+			printk("pmac_read_rtc_time: pmu_request failed\n");
 			return 0;
+		}
 		while (!req.complete)
 			pmu_poll();
 		if (req.reply_len != 5)

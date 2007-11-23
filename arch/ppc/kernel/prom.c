@@ -89,6 +89,7 @@ char *of_stdout_device = 0;
 
 prom_entry prom = 0;
 ihandle prom_chosen = 0, prom_stdout = 0;
+int prom_version = 0;
 
 extern char *klimit;
 char *bootpath = 0;
@@ -273,7 +274,7 @@ prom_init(int r3, int r4, prom_entry pp)
 	char type[16], *path;
 #endif	
 	unsigned long mem;
-	ihandle prom_rtas, prom_mmu;
+	ihandle prom_rtas, prom_mmu, prom_op;
 	unsigned long offset = reloc_offset();
 	int l;
 	char *p, *d;
@@ -411,6 +412,25 @@ prom_init(int r3, int r4, prom_entry pp)
 	RELOC(of_stdout_device) = PTRUNRELOC(p);
 	mem += strlen(p) + 1;
 
+	/* Find the OF version */
+	prom_op = call_prom(RELOC("finddevice"), 1, 1, RELOC("/openprom"));
+	RELOC(prom_version) = 0;
+	if (prom_op != (void*)-1) {
+	    char model[64];
+	    int sz;
+	    sz = (int)call_prom(RELOC("getprop"), 4, 1, prom_op, RELOC("model"), model, 64);
+	    if (sz > 0) {
+	    	char *c;
+		for (c = model; *c; c++)
+		    if (*c >= '0' && *c <= '9') {
+			RELOC(prom_version) = *c - '0';
+			break;
+		    }
+	    }
+	}
+	if (RELOC(prom_version) >= 3)
+		prom_print(RELOC("OF Version 3 detected.\n"));
+
 	/* Get the boot device and translate it to a full OF pathname. */
 	p = (char *) mem;
 	l = (int) call_prom(RELOC("getprop"), 4, 1, RELOC(prom_chosen),
@@ -482,10 +502,17 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_print(RELOC(" done\n"));
 	}
 
-	if ((int) call_prom(RELOC("getprop"), 4, 1, RELOC(prom_chosen),
+	/* If we are already running at 0xc0000000, we assume we were loaded by
+	 * an OF bootloader which did set a BAT for us. This breaks OF translate
+	 * so we force phys to be 0
+	 */
+	if (offset == 0)
+		phys = 0;
+	else {
+ 	    if ((int) call_prom(RELOC("getprop"), 4, 1, RELOC(prom_chosen),
 			    RELOC("mmu"), &prom_mmu, sizeof(prom_mmu)) <= 0) {	
 		prom_print(RELOC(" no MMU found\n"));
-	} else {
+	    } else {
 		int nargs;
 		struct prom_args prom_args;
 		nargs = 4;
@@ -503,8 +530,9 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_print(RELOC(" (translate failed) "));
 		else
 			phys = (unsigned long)prom_args.args[nargs+3];
+	    }
 	}
-
+	    
 #ifdef CONFIG_SMP
 	/*
 	 * With CHRP SMP we need to use the OF to start the other
@@ -580,6 +608,15 @@ prom_init(int r3, int r4, prom_entry pp)
 		else
 			prom_print(RELOC("...failed\n"));
 	}
+	
+	/* If OpenFirmware version >= 3, then use quiesce call */
+	if (RELOC(prom_version) >= 3) {
+	    prom_print(RELOC("Calling quiesce ...\n"));
+	    call_prom(RELOC("quiesce"), 0, 0);
+	    offset = reloc_offset();
+	    phys = offset + KERNELBASE;
+	}
+
 #endif	
 	return phys;
 }

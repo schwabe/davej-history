@@ -581,7 +581,7 @@ int tulip_probe(struct device *dev)
 		return -ENODEV;
 
 	for (;pci_index < 0xff; pci_index++) {
-		u16 vendor, device, pci_command, new_command;
+		u16 vendor, device, pci_command, new_command, subvendor;
 		int chip_idx;
 		int irq;
 		long ioaddr;
@@ -599,6 +599,13 @@ int tulip_probe(struct device *dev)
 								 PCI_VENDOR_ID, &vendor);
 		pcibios_read_config_word(pci_bus, pci_device_fn,
 								 PCI_DEVICE_ID, &device);
+		pcibios_read_config_word(pci_bus, pci_device_fn,
+								 PCI_SUBSYSTEM_VENDOR_ID, &subvendor);
+		
+	        if( subvendor == 0x1376 ){
+			printk("tulip: skipping LMC card.\n");
+			continue;
+		}	
 
 		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
 			if (vendor == pci_tbl[chip_idx].vendor_id

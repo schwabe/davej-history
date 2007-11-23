@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.22.2.2 1999/08/07 10:43:02 davem Exp $
+/* $Id: sys_sunos32.c,v 1.22.2.3 2000/01/17 21:28:31 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -327,6 +327,7 @@ asmlinkage u32 sunos_sigblock(u32 blk_mask)
 	spin_lock_irq(&current->sigmask_lock);
 	old = (u32) current->blocked.sig[0];
 	current->blocked.sig[0] |= (blk_mask & _BLOCKABLE);
+	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	return old;
 }
@@ -338,6 +339,7 @@ asmlinkage u32 sunos_sigsetmask(u32 newmask)
 	spin_lock_irq(&current->sigmask_lock);
 	retval = (u32) current->blocked.sig[0];
 	current->blocked.sig[0] = (newmask & _BLOCKABLE);
+	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	return retval;
 }

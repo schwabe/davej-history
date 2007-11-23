@@ -280,6 +280,11 @@ dep_tristate 'COSA/SRP sync serial boards support' CONFIG_COSA m
 dep_tristate 'Sealevel Systems 4021 support' CONFIG_SEALEVEL_4021 m
 
 #
+# Lan Media's board. Currently 1000, 1200, 5200, 5245
+#
+tristate 'LanMedia Corp. SSI/V.35, T1/E1, HSSI, T3 boards' CONFIG_LANMEDIA
+
+#
 # COMX drivers
 #
 

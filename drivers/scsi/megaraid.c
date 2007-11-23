@@ -1573,21 +1573,6 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 	    PCI_SLOT (pciDevFun),
 	    PCI_FUNC (pciDevFun));
 
-    /*
-     *	Dont crash on boot with AMI cards configured for I2O. 
-     *  (our I2O code will find them then they will fail oddly until
-     *   we figure why they upset our I2O code). This driver will die
-     *   if it tries to boot an I2O mode board and we dont stop it now.
-     *     - Alan Cox , Red Hat Software, Jan 2000
-     */
-     	    
-    if((pdev->class >> 8) == 0x0E00)	/* Intelligent I/O */
-    {
-    	printk( KERN_INFO "megaraid: Board configured for I2O, ignoring this card. Reconfigure the card\n"
-		KERN_INFO "megaraid: in the BIOS for \"mass storage\" to use it with this driver.\n");
-	continue;
-    }		
-
     /* Read the base port and IRQ from PCI */
 #if LINUX_VERSION_CODE < 0x20100
     pcibios_read_config_dword (pciBus, pciDevFun,
