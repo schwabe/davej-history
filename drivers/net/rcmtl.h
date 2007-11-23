@@ -2,7 +2,7 @@
 ** *************************************************************************
 **
 **
-**     R C M T L . H             $Revision: 1.1 $
+**     R C M T L . H             $Revision: 3 $
 **
 **
 **  RedCreek Message Transport Layer header file.
@@ -12,9 +12,9 @@
 **  ---                   All rights reserved.                        ---
 **  ---------------------------------------------------------------------
 **
-** File Description:
+**  File Description:
 **
-** Header file for host message transport layer API and data types.
+**  Header file for host message transport layer API and data types.
 **
 **  This program is free software; you can redistribute it and/or modify
 **  it under the terms of the GNU General Public License as published by
@@ -30,7 +30,8 @@
 **  along with this program; if not, write to the Free Software
 **  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
-***************************************************************************/
+** *************************************************************************
+*/
 
 #ifndef RCMTL_H
 #define RCMTL_H

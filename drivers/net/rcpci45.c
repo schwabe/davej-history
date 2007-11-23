@@ -1,4 +1,3 @@
-
 /* 
 **  RCpci45.c  
 **
@@ -9,9 +8,7 @@
 **  ---                   All rights reserved.                        ---
 **  ---------------------------------------------------------------------
 **
-** This software is RedCreek Communications proprietary and confidential.
-** No further distribution or copying is allowed without the express
-** written consent of RedCreek Communications.
+** Written by Pete Popov and Brian Moyle.
 **
 ** Known Problems
 ** 
@@ -23,8 +20,6 @@
 **      -Get rid of the wait loops in the API and replace them
 **       with system independent delays ...something like
 **       "delayms(2)".
-**      -Process the warm reboot in a timer callback routine,
-**       rather than at interrupt level.
 **
 **  This program is free software; you can redistribute it and/or modify
 **  it under the terms of the GNU General Public License as published by
@@ -45,7 +40,7 @@
 #define __NO_VERSION__ /* don't define kernel_verion in module.h */
 
 static char *version =
-"RedCreek Communications PCI linux driver version 1.31 Beta\n";
+"RedCreek Communications PCI linux driver version 1.32 Beta\n";
 
 
 #include <linux/config.h>
@@ -109,6 +104,8 @@ char kernel_version [] = UTS_RELEASE;
 
 static U32 DriverControlWord =  0;
 
+static void rc_timer(unsigned long);
+
 /*
  * Driver Private Area, DPA.
  */
@@ -126,6 +123,7 @@ typedef struct
      U32    pci_addr;               /* the pci address of the adapter */
      U32    bus;
      U32    function;
+     struct timer_list timer;        /*  timer */
      struct enet_statistics  stats; /* the statistics structure */
      struct device *next;            /* points to the next RC adapter */
      unsigned long numOutRcvBuffers;/* number of outstanding receive buffers*/
@@ -170,8 +168,11 @@ static int RC_allocate_and_post_buffers(struct device *, int);
 /* A list of all installed RC devices, for removing the driver module. */
 static struct device *root_RCdev = NULL;
 
-int
-init_module(void)
+#ifdef MODULE
+int init_module(void)
+#else
+int rcpci_probe(struct netdevice *dev)
+#endif
 {
      int cards_found;
 
@@ -179,10 +180,14 @@ init_module(void)
 
      root_RCdev = NULL;
      cards_found = RCscan();
+#ifdef MODULE     
      return cards_found ? 0 : -ENODEV;
+#else
+     return -1;
+#endif          
 }
 
-static int RCscan()
+static int RCscan(void)
 {
      int cards_found = 0;
      struct device *dev = 0;
@@ -269,14 +274,14 @@ static int RCscan()
                                                pci_command);
                 }
                 if ( ! (pci_command & PCI_COMMAND_MEMORY)) {
-				/*
-				 * If the BIOS did not set the memory enable bit, what else
-				 * did it not initialize?  Skip this adapter.
-				 */
+                /*
+                 * If the BIOS did not set the memory enable bit, what else
+                 * did it not initialize?  Skip this adapter.
+                 */
                      printk("rc: Adapter %d, PCI Memory Bit has not been set!\n",
-					 	cards_found);
+                         cards_found);
                      printk("rc: Bios problem? \n");
-					 continue;
+                     continue;
                 }
                     
                dev = RCfound_device(dev, pci_ioaddr, pci_irq_line,
@@ -359,7 +364,7 @@ RCfound_device(struct device *dev, int memaddr, int irq,
       * Request a shared interrupt line.
       */
      if ( request_irq(dev->irq, (void *)RCinterrupt,
-                      SA_INTERRUPT|SA_SHIRQ, dev->name, dev) )
+                      SA_INTERRUPT|SA_SHIRQ, "RedCreek VPN Adapter", dev) )
      {
           printk( "RC PCI 45: %s: unable to get IRQ %d\n", (PU8)dev->name, (uint)dev->irq );
           vfree(vaddr);
@@ -610,13 +615,6 @@ RCreset_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
 {
      PDPA pDpa;
      struct device *dev;
-     U32 watchdog = 0;
-     volatile unsigned int i, j;
-     RC_RETURN init_status = 1;
-     unsigned short pci_command, pci_int;
-     int post_buffers = MAX_NMBR_RCV_BUFFERS;
-     int count = 0;
-     int requested = 0;
      
      pDpa = PCIAdapters[AdapterID];
      dev = pDpa->dev;
@@ -624,141 +622,35 @@ RCreset_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
       printk("rc: RCreset_callback Status 0x%x\n", (uint)Status);
 #endif
       /*
-       * Check to see why we did a reset.
+       * Check to see why we were called.
        */
       if (pDpa->shutdown)
       {
-              /* shutdown overrides reboot */
-            printk("rc: Shutting down interface\n");
+           printk("rc: Shutting down interface\n");
+           pDpa->shutdown = 0;
+           pDpa->reboot = 0;
+           MOD_DEC_USE_COUNT; 
       }
       else if (pDpa->reboot)
       {
-           char did_shutdown = 0;
-
-           watchdog = 0;
-           do {
-                /*
-                 * OK, we have to first wait for the bus master
-                 * bit to become 0, indicating that the adapter 
-                 * has initiated the shutdown. Then, in the next
-                 * loop, we'll wait for the adapter to turn on
-                 * the bus master bit, indicating that it is done
-                 * rebooting.
-                 */
-                watchdog++;
-                if (watchdog > 100)
-                     break;
-                pcibios_read_config_word(pDpa->bus, 
-                                         pDpa->function,
-                                         PCI_COMMAND, 
-                                         &pci_command);
-                //             printk("1: pci_command = 0x%x\n", pci_command);
-                if (!did_shutdown)
-                {
-                     /*
-                      * Yes, this is precisely where I want to
-                      * do the shutdown!!!  Right here, in this
-                      * do/while loop.
-                      */
-                     RCShutdownLANCard(pDpa->id, 0, 0, 0);
-                     did_shutdown = 1;
-                }
-           } while (pci_command & PCI_COMMAND_MASTER);
-
-            printk("rc: Adapter is rebooting...\n");
-            printk("rc: Waiting for adapter to become ready\n");
-
-            watchdog = 0;
-            while(watchdog < 10)
-            {
-                 watchdog++;
-                 for (i=0; i<1000000; i++)
-                      for (j=0; j<100; j++);
-                 pcibios_read_config_word(pDpa->bus, 
-                                          pDpa->function,
-                                          PCI_COMMAND, 
-                                          &pci_command);
-                 //printk("2: pci_command = 0x%x\n", pci_command);
-                 if (pci_command & PCI_COMMAND_MASTER) {
-                      break;
-                 }
-            }
-            pDpa->reboot = 0;
-            if (watchdog >= 10)
-            {
-                 printk("rc: Adapter ready timeout\n");
-                 printk("rc: releasing driver...\n");
-                 RCDisableAdapterInterrupts(AdapterID);
-                 dev->flags &= ~IFF_UP;
-            }
-            else
-            {
-                 pci_command |= PCI_COMMAND_MEMORY;
-                 pcibios_write_config_word(pDpa->bus,
-                                           pDpa->function,
-                                           PCI_COMMAND, 
-                                           pci_command);
-                 printk("rc: Adapter ready\n");
-                 printk("rc: Initializing ...\n");
-                 init_status = InitRCApiMsgLayer(pDpa->id, dev->base_addr, 
-                                                 pDpa->PLanApiPA, pDpa->PLanApiPA,
-                                                 (PFNTXCALLBACK)RCxmit_callback,
-                                                 (PFNRXCALLBACK)RCrecv_callback,
-                                                 (PFNCALLBACK)RCreboot_callback);
-
-                 printk("rc: status = 0x%x\n", init_status);
-                 if (init_status)
-                 {
-                      printk("rc: Unable to initialize adapter\n");
-                      printk("rc: releasing driver...\n");
-                 }
-                 else
-                 {
-                      pcibios_read_config_word(pDpa->bus, 
-                                               pDpa->function,
-                                               PCI_INTERRUPT_LINE,
-                                               &pci_int);
-                      if (dev->irq != (pci_int & 0xff))
-                      {
-                           printk("rc: Interrupt line set to 0x%x\n", pci_int);    
-                           printk("rc: Resetting to 0x%x\n", dev->irq);
-                           pcibios_write_config_word(pDpa->bus, 
-                                                     pDpa->function,
-                                                     PCI_INTERRUPT_LINE,
-                                                     dev->irq);
-                      }
-
-                      RCReportDriverCapability(pDpa->id, DriverControlWord);
-                      RCEnableAdapterInterrupts(pDpa->id);
-
-                      if (dev->flags & IFF_UP)
-                      {
-                           while(post_buffers)
-                           {
-                                if (post_buffers > MAX_NMBR_POST_BUFFERS_PER_MSG)
-                                     requested = MAX_NMBR_POST_BUFFERS_PER_MSG;
-                                else
-                                     requested = post_buffers;
-                                count = RC_allocate_and_post_buffers(dev, requested);
-                                post_buffers -= count;
-                                if ( count < requested )
-                                     break;
-                           }
-                           pDpa->numOutRcvBuffers = MAX_NMBR_RCV_BUFFERS - post_buffers;
-                           pDpa->shutdown = 0;        /* just in case */
-
-                           printk("rc: posted %d buffers \r\n", (uint)pDpa->numOutRcvBuffers);
-                      }
-                      printk("rc: Initialization done.\n");
-                      return;
-                 }
-            }
+           printk("rc: reboot, shutdown adapter\n");
+           /*
+            * We don't set any of the flags in RCShutdownLANCard()
+            * and we don't pass a callback routine to it.
+            * The adapter will have already initiated the reboot by
+            * the time the function returns.
+            */
+		   RCDisableAdapterInterrupts(pDpa->id);
+           RCShutdownLANCard(pDpa->id,0,0,0);
+           printk("rc: scheduling timer...\n");
+           init_timer(&pDpa->timer);
+           pDpa->timer.expires = RUN_AT((30*HZ)/10); /* 3 sec. */
+           pDpa->timer.data = (unsigned long)dev;
+           pDpa->timer.function = &rc_timer;    /* timer handler */
+           add_timer(&pDpa->timer);
       }
-      pDpa->shutdown = 0;
-      pDpa->reboot = 0;
-      //RCDisableAdapterInterrupts(AdapterID);
 
-      MOD_DEC_USE_COUNT; 
+
 
 }
 
@@ -778,12 +670,22 @@ RCreboot_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
           return;
      }
      pDpa->reboot = 1;
-     //RCShutdownLANCard(pDpa->id, 
+     /*
+      * OK, we reset the adapter and ask it to return all
+      * outstanding transmit buffers as well as the posted
+      * receive buffers.  When the adapter is done returning
+      * those buffers, it will call our RCreset_callback() 
+      * routine.  In that routine, we'll call RCShutdownLANCard()
+      * to tell the adapter that it's OK to start the reboot and
+      * schedule a timer callback routine to execute 3 seconds 
+      * later; this routine will reinitialize the adapter at that time.
+      */
      RCResetLANCard(pDpa->id, 
                     RC_RESOURCE_RETURN_POSTED_RX_BUCKETS | 
                     RC_RESOURCE_RETURN_PEND_TX_BUFFERS,0,
                     (PFNCALLBACK)RCreset_callback);
 }
+
 
 int broadcast_packet(unsigned char * address)
 {
@@ -808,134 +710,135 @@ RCrecv_callback(U32  Status,
                 PU32 PacketDescBlock, 
                 U16  AdapterID)
 {
-    U32 len, count;
-    PDPA pDpa;
-    struct sk_buff *skb;
-    struct device *dev;
-    singleTCB tcb;
-    psingleTCB ptcb = &tcb;
+
+     U32 len, count;
+     PDPA pDpa;
+     struct sk_buff *skb;
+     struct device *dev;
+     singleTCB tcb;
+     psingleTCB ptcb = &tcb;
 
 
-    pDpa = PCIAdapters[AdapterID];
-    dev = pDpa->dev;
+          pDpa = PCIAdapters[AdapterID];
+          dev = pDpa->dev;
 
-    ptcb->bcount = 1;
+          ptcb->bcount = 1;
 
 #ifdef RCDEBUG
-    printk("rc: RCrecv_callback: 0x%x, 0x%x, 0x%x\n",
-           (uint)PktCount, (uint)BucketsRemain, (uint)PacketDescBlock);
+          printk("rc: RCrecv_callback: 0x%x, 0x%x, 0x%x\n",
+                 (uint)PktCount, (uint)BucketsRemain, (uint)PacketDescBlock);
 #endif
         
 #ifdef RCDEBUG
-    if ((pDpa->shutdown || pDpa->reboot) && !Status)
-         printk("shutdown||reboot && !Status: PktCount = %d\n",PktCount);
+          if ((pDpa->shutdown || pDpa->reboot) && !Status)
+               printk("shutdown||reboot && !Status: PktCount = %d\n",PktCount);
 #endif
 
-    if ( (Status != RC_REPLY_STATUS_SUCCESS) || pDpa->shutdown)
-    {
-        /*
-         * Free whatever buffers the adapter returned, but don't
-         * pass them to the kernel.
-         */
+          if ( (Status != RC_REPLY_STATUS_SUCCESS) || pDpa->shutdown)
+          {
+               /*
+                * Free whatever buffers the adapter returned, but don't
+                * pass them to the kernel.
+                */
         
-        if (!pDpa->shutdown && !pDpa->reboot)
-             printk("rc: RCrecv error: status = 0x%x\n", (uint)Status);
-        else
-             printk("rc: Returning %d buffers, status = 0x%x\n", 
-                    PktCount, (uint)Status);
-        /*
-         * TO DO: check the nature of the failure and put the adapter in
-         * failed mode if it's a hard failure.  Send a reset to the adapter
-         * and free all outstanding memory.
-         */
-        if (Status == RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER)
-        {
-   #ifdef RCDEBUG
-            printk("RCrecv status ABORT NO DATA TRANSFER\n");
-   #endif
-        }
-        /* check for reset status: RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER */ 
-        if (PacketDescBlock)
-        {
-            while(PktCount--)
-            {
-                skb = (struct sk_buff *)PacketDescBlock[0];
-                skb->free = 1;
-                skb->lock = 0;    
-   #ifdef RCDEBUG
-                printk("free skb 0x%p\n", skb);
-   #endif
-                dev_kfree_skb(skb, FREE_READ);
-                pDpa->numOutRcvBuffers--;
-                PacketDescBlock += BD_SIZE; /* point to next context field */
-            }
-        }
-        return;
-    }
-    else
-    {
-        while(PktCount--)
-        {
-            skb = (struct sk_buff *)PacketDescBlock[0];
-   #ifdef RCDEBUG
-            if (pDpa->shutdown)
-                printk("shutdown: skb=0x%x\n", (uint)skb);
+                    if (!pDpa->shutdown && !pDpa->reboot)
+                         printk("rc: RCrecv error: status = 0x%x\n", (uint)Status);
+                    else
+                         printk("rc: Returning %d buffers, status = 0x%x\n", 
+                                PktCount, (uint)Status);
+               /*
+                * TO DO: check the nature of the failure and put the adapter in
+                * failed mode if it's a hard failure.  Send a reset to the adapter
+                * and free all outstanding memory.
+                */
+               if (Status == RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER)
+               {
+#ifdef RCDEBUG
+                    printk("RCrecv status ABORT NO DATA TRANSFER\n");
+#endif
+               }
+               /* check for reset status: RC_REPLY_STATUS_ABORT_NO_DATA_TRANSFER */ 
+               if (PacketDescBlock)
+               {
+                    while(PktCount--)
+                    {
+                         skb = (struct sk_buff *)PacketDescBlock[0];
+                         skb->free = 1;
+                         skb->lock = 0;    
+#ifdef RCDEBUG
+                         printk("free skb 0x%p\n", skb);
+#endif
+                         dev_kfree_skb(skb, FREE_READ);
+                         pDpa->numOutRcvBuffers--;
+                         PacketDescBlock += BD_SIZE; /* point to next context field */
+                    }
+               }
+               return;
+          }
+          else
+          {
+               while(PktCount--)
+               {
+                    skb = (struct sk_buff *)PacketDescBlock[0];
+#ifdef RCDEBUG
+                    if (pDpa->shutdown)
+                         printk("shutdown: skb=0x%x\n", (uint)skb);
 
-            printk("skb = 0x%x: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", (uint)skb,
-                   (uint)skb->data[0], (uint)skb->data[1], (uint)skb->data[2],
-                   (uint)skb->data[3], (uint)skb->data[4], (uint)skb->data[5]);
-   #endif
-            if ( (memcmp(dev->dev_addr, skb->data, 6)) &&
-                 (!broadcast_packet(skb->data)))
-            {
-                /*
-                 * Re-post the buffer to the adapter.  Since the adapter usually
-                 * return 1 to 2 receive buffers at a time, it's not too inefficient
-                 * post one buffer at a time but ... may be that should be 
-                 * optimized at some point.
-                 */
-                ptcb->b.context = (U32)skb;    
-                ptcb->b.scount = 1;
-                ptcb->b.size = MAX_ETHER_SIZE;
-                ptcb->b.addr = (U32)skb->data;
+                    printk("skb = 0x%x: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", (uint)skb,
+                           (uint)skb->data[0], (uint)skb->data[1], (uint)skb->data[2],
+                           (uint)skb->data[3], (uint)skb->data[4], (uint)skb->data[5]);
+#endif
+                    if ( (memcmp(dev->dev_addr, skb->data, 6)) &&
+                         (!broadcast_packet(skb->data)))
+                    {
+                         /*
+                          * Re-post the buffer to the adapter.  Since the adapter usually
+                          * return 1 to 2 receive buffers at a time, it's not too inefficient
+                          * post one buffer at a time but ... may be that should be 
+                          * optimized at some point.
+                          */
+                         ptcb->b.context = (U32)skb;    
+                         ptcb->b.scount = 1;
+                         ptcb->b.size = MAX_ETHER_SIZE;
+                         ptcb->b.addr = (U32)skb->data;
 
-                if ( RCPostRecvBuffers(pDpa->id, (PRCTCB)ptcb ) != RC_RTN_NO_ERROR)
-                {
-                    printk("rc: RCrecv_callback: post buffer failed!\n");
-                    skb->free = 1;
-                    dev_kfree_skb(skb, FREE_READ);
-                }
-                else
-                {
-                    pDpa->numOutRcvBuffers++;
-                }
-            }
-            else
-            {
-                len = PacketDescBlock[2];
-                skb->dev = dev;
-                skb_put( skb, len ); /* adjust length and tail */
-                skb->protocol = eth_type_trans(skb, dev);
-                netif_rx(skb);    /* send the packet to the kernel */
-                dev->last_rx = jiffies;
-            }
-            pDpa->numOutRcvBuffers--;
-            PacketDescBlock += BD_SIZE; /* point to next context field */
-        }
-    } 
+                         if ( RCPostRecvBuffers(pDpa->id, (PRCTCB)ptcb ) != RC_RTN_NO_ERROR)
+                         {
+                              printk("rc: RCrecv_callback: post buffer failed!\n");
+                              skb->free = 1;
+                              dev_kfree_skb(skb, FREE_READ);
+                         }
+                         else
+                         {
+                              pDpa->numOutRcvBuffers++;
+                         }
+                    }
+                    else
+                    {
+                         len = PacketDescBlock[2];
+                         skb->dev = dev;
+                         skb_put( skb, len ); /* adjust length and tail */
+                         skb->protocol = eth_type_trans(skb, dev);
+                         netif_rx(skb);    /* send the packet to the kernel */
+                         dev->last_rx = jiffies;
+                    }
+                    pDpa->numOutRcvBuffers--;
+                    PacketDescBlock += BD_SIZE; /* point to next context field */
+               }
+          } 
     
-    /*
-     * Replenish the posted receive buffers. 
-     * DO NOT replenish buffers if the driver has already
-     * initiated a reboot or shutdown!
-     */
+          /*
+           * Replenish the posted receive buffers. 
+           * DO NOT replenish buffers if the driver has already
+           * initiated a reboot or shutdown!
+           */
 
-    if (!pDpa->shutdown && !pDpa->reboot)
-	{
-		count = RC_allocate_and_post_buffers(dev, 
-			MAX_NMBR_RCV_BUFFERS-pDpa->numOutRcvBuffers);
-		pDpa->numOutRcvBuffers += count;
-	}
+          if (!pDpa->shutdown && !pDpa->reboot)
+          {
+               count = RC_allocate_and_post_buffers(dev, 
+                                                    MAX_NMBR_RCV_BUFFERS-pDpa->numOutRcvBuffers);
+               pDpa->numOutRcvBuffers += count;
+          }
 
 }
 
@@ -957,7 +860,7 @@ RCinterrupt(int irq, void *dev_id, struct pt_regs *regs)
      pDpa = (PDPA) (dev->priv);
      
      if (pDpa->shutdown)
-         printk("rc: shutdown: service irq\n");
+          printk("rc: shutdown: service irq\n");
 
 #ifdef RCDEBUG
      printk("RC irq: pDpa = 0x%x, dev = 0x%x, id = %d\n", 
@@ -972,6 +875,89 @@ RCinterrupt(int irq, void *dev_id, struct pt_regs *regs)
      dev->interrupt = 0;
 
      return;
+}
+
+#define REBOOT_REINIT_RETRY_LIMIT 10
+static void rc_timer(unsigned long data)
+{
+     struct device *dev = (struct device *)data;
+     PDPA pDpa = (PDPA) (dev->priv);
+     int init_status;
+     static int retry = 0;
+     int post_buffers = MAX_NMBR_RCV_BUFFERS;
+     int count = 0;
+     int requested = 0;
+
+     if (pDpa->reboot)
+     {
+
+          init_status = InitRCApiMsgLayer(pDpa->id, dev->base_addr, 
+                                          pDpa->PLanApiPA, pDpa->PLanApiPA,
+                                          (PFNTXCALLBACK)RCxmit_callback,
+                                          (PFNRXCALLBACK)RCrecv_callback,
+                                          (PFNCALLBACK)RCreboot_callback);
+
+          switch(init_status)
+          {
+          case RC_RTN_NO_ERROR:
+ 
+               pDpa->reboot = 0;
+               pDpa->shutdown = 0;        /* just in case */
+               RCReportDriverCapability(pDpa->id, DriverControlWord);
+               RCEnableAdapterInterrupts(pDpa->id);
+
+               if (dev->flags & IFF_UP)
+               {
+                    while(post_buffers)
+                    {
+                         if (post_buffers > MAX_NMBR_POST_BUFFERS_PER_MSG)
+                              requested = MAX_NMBR_POST_BUFFERS_PER_MSG;
+                         else
+                              requested = post_buffers;
+                         count = RC_allocate_and_post_buffers(dev, requested);
+                         post_buffers -= count;
+                         if ( count < requested )
+                              break;
+                    }
+                    pDpa->numOutRcvBuffers = 
+                         MAX_NMBR_RCV_BUFFERS - post_buffers;
+                    printk("rc: posted %d buffers \r\n", 
+                           (uint)pDpa->numOutRcvBuffers);
+               }
+               printk("rc: Initialization done.\n");
+               return;
+          case RC_RTN_FREE_Q_EMPTY:
+               retry++;
+               printk("rc: inbound free q emtpy\n");
+               break;
+          default:
+               retry++;
+               printk("rc: unexpected bad status after reboot\n");    
+               break;
+          }
+
+          if (retry > REBOOT_REINIT_RETRY_LIMIT)
+          {
+               printk("rc: unable to reinitialize adapter after reboot\n");
+               printk("rc: decrementing driver and closing interface\n");
+               RCDisableAdapterInterrupts(pDpa->id);
+               dev->flags &= ~IFF_UP;
+               MOD_DEC_USE_COUNT; 
+          }
+          else
+          {
+               printk("rc: rescheduling timer...\n");
+               init_timer(&pDpa->timer);
+               pDpa->timer.expires = RUN_AT((30*HZ)/10); /* 3 sec. */
+               pDpa->timer.data = (unsigned long)dev;
+               pDpa->timer.function = &rc_timer;    /* timer handler */
+               add_timer(&pDpa->timer);
+          }
+     }
+     else
+     {
+          printk("rc: timer??\n");
+     }
 }
 
 static int
@@ -1028,7 +1014,7 @@ RCget_stats(struct device *dev)
     else if (!(dev->flags & IFF_UP))    
     {
 #ifdef RCDEBUG
-		printk("rc: RCget_stats: device down\n");
+        printk("rc: RCget_stats: device down\n");
 #endif
         return 0;
     }
@@ -1218,8 +1204,8 @@ static int RCconfig(struct device *dev, struct ifmap *map)
      return 0;
 }
 
-void
-cleanup_module(void)
+#ifdef MODULE
+void cleanup_module(void)
 {
      PDPA pDpa;
      struct device *next;
@@ -1247,6 +1233,8 @@ cleanup_module(void)
           root_RCdev = next;
      }
 }
+#endif
+
 
 static int
 RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
