@@ -347,6 +347,28 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 			val = sk->bsdism;
 			break;
 
+#ifdef CONFIG_NET
+                case SO_BINDTODEVICE:
+		{
+			struct ifreq req;
+
+                        /* Return the bound device (if any) */
+                        err=verify_area(VERIFY_WRITE,optval,sizeof(req));
+                        if(err)
+                                return err;
+
+                        memset((char *) &req, 0, sizeof(req));
+
+                        if (sk->bound_device) {
+                            strncpy(req.ifr_name, sk->bound_device->name, sizeof(req.ifr_name));
+                            (*(struct sockaddr_in *) &req.ifr_addr).sin_family = sk->bound_device->family;
+                            (*(struct sockaddr_in *) &req.ifr_addr).sin_addr.s_addr = sk->bound_device->pa_addr;
+                        }
+                        memcpy_tofs(optval, &req, sizeof(req));
+                        return 0;
+		}
+#endif
+
 		default:
 			return(-ENOPROTOOPT);
 	}

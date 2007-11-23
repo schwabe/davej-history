@@ -432,9 +432,12 @@ void ext2_read_inode (struct inode * inode)
 	group_desc = block_group >> EXT2_DESC_PER_BLOCK_BITS(inode->i_sb);
 	desc = block_group & (EXT2_DESC_PER_BLOCK(inode->i_sb) - 1);
 	bh = inode->i_sb->u.ext2_sb.s_group_desc[group_desc];
-	if (!bh)
-		ext2_panic (inode->i_sb, "ext2_read_inode",
+	if (!bh) {
+		ext2_error (inode->i_sb, "ext2_read_inode",
 			    "Descriptor not loaded");
+		goto bad_inode;
+	}
+	
 	gdp = (struct ext2_group_desc *) bh->b_data;
 	/*
 	 * Figure out the offset within the block group inode table
@@ -443,10 +446,13 @@ void ext2_read_inode (struct inode * inode)
 		EXT2_INODE_SIZE(inode->i_sb);
 	block = gdp[desc].bg_inode_table +
 		(offset >> EXT2_BLOCK_SIZE_BITS(inode->i_sb));
-	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
-		ext2_panic (inode->i_sb, "ext2_read_inode",
-			    "unable to read i-node block - "
+	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize))) {
+		ext2_error (inode->i_sb, "ext2_read_inode",
+			    "unable to read inode block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
+		goto bad_inode;
+	}
+	
 	offset &= (EXT2_BLOCK_SIZE(inode->i_sb) - 1);
 	raw_inode = (struct ext2_inode *) (bh->b_data + offset);
 
@@ -506,6 +512,11 @@ void ext2_read_inode (struct inode * inode)
 		inode->i_flags |= S_IMMUTABLE;
 	if (inode->u.ext2_i.i_flags & EXT2_NOATIME_FL)
 		inode->i_flags |= MS_NOATIME;
+	return;
+	
+bad_inode:
+	make_bad_inode(inode);
+	return;
 }
 
 static int ext2_update_inode(struct inode * inode, int do_sync)
@@ -545,10 +556,23 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		EXT2_INODE_SIZE(inode->i_sb);
 	block = gdp[desc].bg_inode_table +
 		(offset >> EXT2_BLOCK_SIZE_BITS(inode->i_sb));
-	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
-		ext2_panic (inode->i_sb, "ext2_write_inode",
-			    "unable to read i-node block - "
+	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize))) {
+		ext2_error (inode->i_sb, "ext2_write_inode",
+			    "unable to read inode block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
+		/*
+		 * Unfortunately we're in a lose-lose situation.  I think that
+		 * keeping the inode in-core with the dirty bit set is 
+		 * the worse option, since that will soak up inodes until
+		 * the end of the world.  Clearing the dirty bit is nasty if
+		 * we haven't succeeded in writing out, but it's less nasty
+		 * than the alternative. -- sct
+		 */
+		inode->i_dirt = 0;
+		
+		return -EIO;
+	}
+	
 	offset &= EXT2_BLOCK_SIZE(inode->i_sb) - 1;
 	raw_inode = (struct ext2_inode *) (bh->b_data + offset);
 
@@ -579,10 +603,11 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 		if (buffer_req(bh) && !buffer_uptodate(bh)) {
-			printk ("IO error syncing ext2 inode ["
-				"%s:%08lx]\n",
-				kdevname(inode->i_dev), inode->i_ino);
-			err = -1;
+			ext2_error (inode->i_sb, 
+				    "IO error syncing ext2 inode ["
+				    "%s:%08lx]\n",
+				    kdevname(inode->i_dev), inode->i_ino);
+			err = -EIO;
 		}
 	}
 	brelse (bh);

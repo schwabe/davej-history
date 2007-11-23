@@ -620,8 +620,12 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 #endif		 
 	if (snum == 0) 
 		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !suser()) 
+        if (snum < PROT_SOCK) {
+		if (!suser()) 
 		return(-EACCES);
+		if (snum == 0)
+			return(-EAGAIN);
+	}
 	
 	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
 	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR &&

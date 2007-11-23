@@ -61,6 +61,11 @@
    0.21         17.10-95        Removed the unnecessary extern 
 				init_etherdev() declaration. Some
 				other cleanups.
+
+   0.21a	15.08-97	Made signature check less restrictive to
+				detect card that have been used for booting
+				with a bootprom.
+				Kurt Huwig <kurt@huwig.de>
    Bugs:
 	In some cases the interface autoprobing code doesn't find 
 	the correct interface type. In this case you can 
@@ -72,7 +77,7 @@
 */
 
 static char *version = 
-	"eth16i.c: v0.21 17-10-95 Mika Kuoppala (miku@elt.icl.fi)\n";
+	"eth16i.c: v0.21a 15-08-97 Mika Kuoppala (miku@elt.icl.fi)/Kurt Huwig (kurt@huwig.de)\n";
 
 #include <linux/module.h>
 
@@ -722,10 +727,10 @@ static int eth16i_check_signature(short ioaddr)
 #endif
 
   if( !( (creg[2] == 0x36) && (creg[3] == 0xE0)) ) {
-      creg[2] &= 0x42;
+      creg[2] &= 0x40;
       creg[3] &= 0x03;
 
-      if( !( (creg[2] == 0x42) && (creg[3] == 0x00)) )
+      if( !( (creg[2] == 0x40) && (creg[3] == 0x00)) )
 	return -1;
   }
 

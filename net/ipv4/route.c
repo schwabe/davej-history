@@ -924,6 +924,8 @@ static __inline__ void rt_kick_free_queue(void)
 {
 	struct rtable *rt, **rtp;
 
+	ip_rt_bh_mask &= ~RT_BH_FREE;
+
 	rtp = &rt_free_queue;
 
 	while ((rt = *rtp) != NULL)

@@ -672,6 +672,7 @@ repeat:
 		};
 	}
 
+#if 0
 	/*
 	 * In order to protect our reserved pages, 
 	 * return now if we got any buffers.
@@ -682,6 +683,8 @@ repeat:
 	/* and repeat until we find something good */
 	if (!grow_buffers(GFP_ATOMIC, size))
 		wakeup_bdflush(1);
+#endif
+	wakeup_bdflush(1);
 
 	/* decrease needed even if there is no success */
 	needed -= PAGE_SIZE;
@@ -1719,11 +1722,11 @@ int bdflush(void * unused)
 			continue;
 		}
 		run_task_queue(&tq_disk);
-		wake_up(&bdflush_done);
 		
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
 		if(nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
+			wake_up(&bdflush_done);
 			current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);
 		}

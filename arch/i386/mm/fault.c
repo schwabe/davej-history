@@ -130,10 +130,9 @@ bad_area:
 		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
 		return;
 	}
-	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE) {
+	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE)
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
-		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
-	} else
+	else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
 	printk(" at virtual address %08lx\n",address);
 	__asm__("movl %%cr3,%0" : "=r" (page));

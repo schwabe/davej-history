@@ -49,7 +49,7 @@ static __inline__ int tcp_bhashfn(__u16 lport)
  * break TCP port selection. This function must also NOT wrap around
  * when the next number exceeds the largest possible port (2^16-1).
  */
-static __inline__ int tcp_bhashnext(__u16 short lport, __u16 h)
+static __inline__ int tcp_bhashnext(__u16 lport, __u16 h)
 {
         __u32 s;	/* don't change this to a smaller type! */
 
@@ -237,6 +237,8 @@ extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
 
 extern int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 
+extern void tcp_v4_unhash(struct sock *sk);
+
 extern void tcp_read_wakeup(struct sock *);
 extern void tcp_write_xmit(struct sock *);
 extern void tcp_time_wait(struct sock *);
@@ -358,6 +360,8 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 		break;
 
 	case TCP_CLOSE:
+		/* Preserve the invariant */
+		tcp_v4_unhash(sk);
 		/* Should be about 2 rtt's */
 		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
 		/* fall through */

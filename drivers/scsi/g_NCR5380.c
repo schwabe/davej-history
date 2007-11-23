@@ -614,6 +614,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
     int i;
     struct Scsi_Host *scsi_ptr;
     Scsi_Cmnd *ptr;
+    Scsi_Device *dev;
     struct NCR5380_hostdata *hostdata;
 
     cli();

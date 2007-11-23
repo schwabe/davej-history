@@ -63,6 +63,7 @@ struct symbol_table scsi_symbol_table = {
     X(print_Scsi_Cmnd),
     X(scsi_mark_host_reset),
     X(scsi_mark_bus_reset),
+    X(scsi_device_types),
 #if defined(CONFIG_PROC_FS)
     X(proc_print_scsidevice),
 #endif

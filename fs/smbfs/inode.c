@@ -382,7 +382,7 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 		return -EPERM;
 
 	if (((attr->ia_valid & ATTR_GID) &&
-	     (attr->ia_uid != SMB_SERVER(inode)->m.gid)))
+	     (attr->ia_gid != SMB_SERVER(inode)->m.gid)))
 		return -EPERM;
 
 	if (((attr->ia_valid & ATTR_MODE) &&

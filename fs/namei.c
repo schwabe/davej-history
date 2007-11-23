@@ -6,6 +6,8 @@
 
 /*
  * Some corrections by tytso.
+ *
+ * Aug 97 - cevans - fix security problem with O_TRUNC and append only files
  */
 
 #include <asm/segment.h>
@@ -282,6 +284,10 @@ static int _namei(const char * pathname, struct inode * base,
 			return error;
 	} else
 		iput(base);
+	if ((inode->i_flags & S_BAD_INODE) != 0) {
+		iput(inode);
+		return -EIO;
+	}
 	*res_inode = inode;
 	return 0;
 }
@@ -424,8 +430,9 @@ int open_namei(const char * pathname, int flag, int mode,
 	}
 	/*
 	 * An append-only file must be opened in append mode for writing
+	 * Additionally, we must disallow O_TRUNC -- cevans
 	 */
-	if (IS_APPEND(inode) && ((flag & FMODE_WRITE) && !(flag & O_APPEND))) {
+	if (IS_APPEND(inode) && (((flag & FMODE_WRITE) && !(flag & O_APPEND)) || (flag & O_TRUNC))) {
 		iput(inode);
 		return -EPERM;
 	}

@@ -175,7 +175,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 
 	tcp_statistics.TcpOutSegs++;  
 	skb->seq = ntohl(th->seq);
-	skb->end_seq = skb->seq + size - 4*th->doff;
+	skb->end_seq = skb->seq + size - 4*th->doff + th->fin;
 
 	/*
 	 *	We must queue if
@@ -880,6 +880,8 @@ void tcp_send_fin(struct sock *sk)
 			return;
 		}
 	}
+
+	clear_delayed_acks(sk);
 	
 	/*
 	 *	We ought to check if the end of the queue is a buffer and

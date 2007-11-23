@@ -205,7 +205,7 @@
  *		Theodore Ts'o	:	Do secure TCP sequence numbers.
  *		David S. Miller	:	New socket lookup architecture for ISS.
  *					This code is dedicated to John Dyson.
- *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
+ *		Elliot Poger	:	Added support for SO_BINDTODEVICE.
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -529,45 +529,47 @@ unsigned short tcp_good_socknum(void)
 	int retval = 0, i, end, bc;
 
 	SOCKHASH_LOCK();
-        i = tcp_bhashfn(start);
-        end = i + TCP_BHTABLE_SIZE;
-        bc = binding_contour;
-        do {
-                struct sock *sk = tcp_bound_hash[i&(TCP_BHTABLE_SIZE-1)];
-                if(!sk) {
-                        /* find the smallest value no smaller than start
-                         * that has this hash value.
-                         */
-                        retval = tcp_bhashnext(start-1,i&(TCP_BHTABLE_SIZE-1));
+	i = tcp_bhashfn(start);
+	end = i + TCP_BHTABLE_SIZE;
+	bc = binding_contour;
+	do {
+		struct sock *sk = tcp_bound_hash[i&(TCP_BHTABLE_SIZE-1)];
+		if(!sk) {
+			/* find the smallest value no smaller than start
+			 * that has this hash value.
+			 */
+			retval = tcp_bhashnext(start-1,i&(TCP_BHTABLE_SIZE-1));
 
-                        /* Check for decreasing load. */
-                        if (bc != 0)
-                                binding_contour = 0;
-                        goto done;
-                } else {
-                        int j = 0;
-                        do { sk = sk->bind_next; } while (++j < size && sk);
-                        if (j < size) {
-                                best = i&(TCP_BHTABLE_SIZE-1);
-                                size = j;
-                                if (bc && size <= bc)
-                                        goto verify;
-                        }
-                }
-        } while(++i != end);
-        i = best;
+			/* Check for decreasing load. */
+			if (bc != 0)
+				binding_contour = 0;
+			goto done;
+		} else {
+			int j = 0;
+			do { sk = sk->bind_next; } while (++j < size && sk);
+			if (j < size) {
+				best = i&(TCP_BHTABLE_SIZE-1);
+				size = j;
+				if (bc && size <= bc) {
+					i = best;
+					goto verify;
+				}
+			}
+		}
+	} while(++i != end);
+	i = best;
 
-        /* Socket load is increasing, adjust our load average. */
-        binding_contour = size;
+	/* Socket load is increasing, adjust our load average. */
+	binding_contour = size;
 verify:
-        if (size < binding_contour)
-                binding_contour = size;
+	if (size < binding_contour)
+		binding_contour = size;
 
-        retval = tcp_bhashnext(start-1,i);
+	retval = tcp_bhashnext(start-1,i);
 
 	best = retval;	/* mark the starting point to avoid infinite loops */
-        while(tcp_lport_inuse(retval)) {
-               	retval = tcp_bhashnext(retval,i);
+	while(tcp_lport_inuse(retval)) {
+		retval = tcp_bhashnext(retval,i);
 		if (retval > 32767)	/* Upper bound */
 			retval = tcp_bhashnext(PROT_SOCK,i);
 		if (retval == best) {
@@ -575,12 +577,12 @@ verify:
 			retval = 0;
 			break;
 		}
-        }
+	}
 
 done:
-        start = (retval + 1);
-        if (start > 32767 || start < PROT_SOCK)
-                start = PROT_SOCK;
+	start = (retval + 1);
+	if (start > 32767 || start < PROT_SOCK)
+		start = PROT_SOCK;
 	SOCKHASH_UNLOCK();
 
 	return retval;
@@ -2042,7 +2044,7 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 
 	/* Now that the socket is dead, if we are in the FIN_WAIT2 state
 	 * we may need to set up a timer.
-         */
+	 */
 	if (sk->state==TCP_FIN_WAIT2)
 	{
 		int timer_active=del_timer(&sk->timer);

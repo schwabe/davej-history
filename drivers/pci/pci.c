@@ -591,7 +591,9 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_COMPEX:	return "Compex";
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
+	      case PCI_VENDOR_ID_3DFX:		return "3DFX";
 	      case PCI_VENDOR_ID_SIGMA_DESIGNS:	return "Sigma Designs";
+ 	      case PCI_VENDOR_ID_OPTIBASE:	return "Optibase Inc.";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
 	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";
 	      case PCI_VENDOR_ID_3DLABS:	return "3Dlabs";

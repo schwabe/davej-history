@@ -74,6 +74,7 @@ extern int max_files, nr_files;
 #define S_APPEND	256	/* Append-only file */
 #define S_IMMUTABLE	512	/* Immutable file */
 #define MS_NOATIME	1024	/* Do not update access times. */
+#define S_BAD_INODE	2048	/* Marker for unreadable inodes */
 
 /*
  * Flags that can be altered by MS_REMOUNT
@@ -635,6 +636,7 @@ extern struct inode * get_empty_inode(void);
 extern void insert_inode_hash(struct inode *);
 extern void clear_inode(struct inode *);
 extern struct inode * get_pipe_inode(void);
+extern void make_bad_inode(struct inode *);
 extern int get_unused_fd(void);
 extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);
