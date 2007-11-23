@@ -55,6 +55,7 @@ if [ "$CONFIG_SCSI_GENERIC_NCR5380" != "n" ]; then
 fi
 dep_tristate 'Initio 91XX support' CONFIG_SCSI_INITIO $CONFIG_SCSI
 dep_tristate 'NCR53c406a SCSI support' CONFIG_SCSI_NCR53C406A $CONFIG_SCSI
+dep_tristate 'symbios 53c416 SCSI support' CONFIG_SCSI_SYM53C416 $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then

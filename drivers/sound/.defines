@@ -1,0 +1,118 @@
+# Computer generated file. Please don't edit
+
+ifdef CONFIG_PSS
+CONFIG_MPU_EMU=y
+endif
+
+ifdef CONFIG_SSCAPE
+CONFIG_MPU_EMU=y
+endif
+
+ifdef CONFIG_CS4232
+CONFIG_MPU_EMU=y
+endif
+
+ifdef CONFIG_MAUI
+CONFIG_MPU_EMU=y
+endif
+
+ifdef CONFIG_PSS
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_GUS16
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_GUSMAX
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_MSS
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_SSCAPE
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_TRIX
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_MAD16
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_CS4232
+CONFIG_AD1848=y
+endif
+
+ifdef CONFIG_SB
+CONFIG_SBDSP=y
+endif
+
+ifdef CONFIG_TRIX
+CONFIG_SBDSP=y
+endif
+
+ifdef CONFIG_MAD16
+CONFIG_SBDSP=y
+endif
+
+ifdef CONFIG_SB
+CONFIG_UART401=y
+endif
+
+ifdef CONFIG_TRIX
+CONFIG_UART401=y
+endif
+
+ifdef CONFIG_MAD16
+CONFIG_UART401=y
+endif
+
+ifdef CONFIG_PAS
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_SB
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_ADLIB
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_GUS
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_MPU401
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_PSS
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_SSCAPE
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_TRIX
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_MAD16
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_CS4232
+CONFIG_SEQUENCER=y
+endif
+
+ifdef CONFIG_MAUI
+CONFIG_SEQUENCER=y
+endif
+

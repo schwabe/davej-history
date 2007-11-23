@@ -31,6 +31,23 @@ Create device nodes for the diskarray device:
 Where ctlrs is the number of controllers you have (defaults to 1 if not
 specified).
 
+EISA Controllers:
+-----------------
+
+If you want to use an EISA controller you'll have to turn on EISA support
+and supply some insmod/lilo paramaters.  If the driver is compiled into the
+kernel, must give it port/irq data at boot time.  For example, if you had
+two SMART-2/E controllers, in EISA slots 1 and 2, on irqs 15 and 5 respectively
+you'd give it a boot argument like this:
+
+	smart2=0x1000,0xf,0x2000,0x5
+
+If you were loading the driver as a module, you'd give load it like this:
+
+	insmod cpqarray.o eisa=0x1000,0xf,0x2000,0x5
+
+You can use EISA and PCI adapters at the same time.
+
 Booting:
 --------
 

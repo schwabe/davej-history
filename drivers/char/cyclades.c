@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.1.1.10 $$Date: 1998/11/12 16:08:23 $";
+"$Revision: 2.1.1.11 $$Date: 1998/12/30 18:58:47 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,7 +31,11 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
- * Revision: 2.1.1.10  1998/11/12 16:08:23 ivan
+ * Revision 2.1.1.11  1998/12/30 18:58:47 ivan
+ * Changed access to PLX PCI bridge registers from I/O to MMIO, in
+ * order to make PLX9050-based boards work with certain motherboards.
+ *
+ * Revision 2.1.1.10  1998/11/12 16:08:23 ivan
  * cy_close function now resets (correctly) the tty->closing flag;
  * JIFFIES_DIFF macro fixed.
  *
@@ -4707,7 +4711,6 @@ cy_detect_pci(void))
 {
 #ifdef CONFIG_PCI
   unsigned char         cyy_bus, cyy_dev_fn, cyy_rev_id;
-  unsigned long         pci_intr_ctrl;
   unsigned char         cy_pci_irq;
   uclong                cy_pci_addr0, cy_pci_addr1, cy_pci_addr2;
   unsigned short        i,j,cy_pci_nchan, plx_ver;
@@ -4761,7 +4764,7 @@ cy_detect_pci(void))
             printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
 		(ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
 #endif
-                cy_pci_addr1  &= PCI_BASE_ADDRESS_IO_MASK;
+                cy_pci_addr0  &= PCI_BASE_ADDRESS_MEM_MASK;
                 cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #if defined(__alpha__)
@@ -4778,6 +4781,7 @@ cy_detect_pci(void))
 	            continue;
                 }
 #else
+		cy_pci_addr0  = (ulong) ioremap(cy_pci_addr0, CyPCI_Yctl);
                 if ((ulong)cy_pci_addr2 >= 0x100000)  /* above 1M? */
                     cy_pci_addr2 = (ulong) ioremap(cy_pci_addr2, CyPCI_Ywin);
 #endif
@@ -4827,7 +4831,7 @@ cy_detect_pci(void))
 
                 /* set cy_card */
                 cy_card[j].base_addr = (ulong)cy_pci_addr2;
-                cy_card[j].ctl_addr = 0;
+		cy_card[j].ctl_addr = (ulong)cy_pci_addr0;
                 cy_card[j].irq = (int) cy_pci_irq;
                 cy_card[j].bus_index = 1;
                 cy_card[j].first_line = cy_next_channel;
@@ -4839,20 +4843,16 @@ cy_detect_pci(void))
                 switch (plx_ver) {
 		    case PLX_9050:
 
-		    outw(inw(cy_pci_addr1+0x4c)|0x0040,cy_pci_addr1+0x4c);
-		    pci_intr_ctrl = (unsigned long)
-				(inw(cy_pci_addr1+0x4c)
-				| inw(cy_pci_addr1+0x4e)<<16);
+		    cy_writew(cy_pci_addr0+0x4c,
+			cy_readw(cy_pci_addr0+0x4c)|0x0040);
 		    break;
 
 		    case PLX_9060:
 		    case PLX_9080:
 		    default: /* Old boards, use PLX_9060 */
 
-		    outw(inw(cy_pci_addr1+0x68)|0x0900,cy_pci_addr1+0x68);
-		    pci_intr_ctrl = (unsigned long)
-				(inw(cy_pci_addr1+0x68)
-				| inw(cy_pci_addr1+0x6a)<<16);
+		    cy_writew(cy_pci_addr0+0x68,
+			cy_readw(cy_pci_addr0+0x68)|0x0900);
 		    break;
                 }
 

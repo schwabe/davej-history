@@ -618,7 +618,7 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	 * This is a split test for drives 8 Gig and Bigger only.
 	 */
 	if ((id->lba_capacity >= 16514064) && (id->cyls == 0x3fff) &&
-	    (id->heads == 16) && (id->sectors = 63)) {
+	    (id->heads == 16) && (id->sectors == 63)) {
 		id->cyls = lba_sects / (16 * 63); /* correct cyls */
 		return 1;	/* lba_capacity is our only option */
 	}
@@ -627,7 +627,7 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	 * This is a split test for drives less than 8 Gig only.
 	 */
 	if ((id->lba_capacity < 16514064) && (lba_sects > chs_sects) &&
-	    (id->heads == 16) && (id->sectors = 63)) {
+	    (id->heads == 16) && (id->sectors == 63)) {
 		id->cyls = lba_sects / (16 * 63); /* correct cyls */
 		return 1;	/* lba_capacity is our only option */
 	}	
@@ -3402,7 +3402,11 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	const byte *heads = head_vals;
 	unsigned long tracks;
 
-	if ((drive = get_info_ptr(i_rdev)) == NULL || drive->forced_geom) {
+	drive = get_info_ptr(i_rdev);
+	if (!drive)
+		return 0;
+
+	if (drive->forced_geom) {
 		/*
 		 * Update the current 3D drive values.
 		 */

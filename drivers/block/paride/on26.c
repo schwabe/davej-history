@@ -12,10 +12,11 @@
         1.01    GRG 1998.05.06 init_proto, release_proto
 	1.02    GRG 1998.09.23 updates for the -E rev chip
 	1.03    GRG 1998.12.14 fix for slave drives
+	1.04    GRG 1998.12.20 yet another bug fix
 
 */
 
-#define ON26_VERSION      "1.03"
+#define ON26_VERSION      "1.04"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -159,7 +160,7 @@ static int on26_test_port( PIA *pi)  /* hard reset */
                 x = on26_read_regr(pi,0,7);
                 on26_write_regr(pi,0,6,0xb0);
                 y = on26_read_regr(pi,0,7);
-                if ((x&0x80)||(y&0x80)) break;
+                if (!((x&0x80)||(y&0x80))) break;
                 udelay(100000);
             }
 

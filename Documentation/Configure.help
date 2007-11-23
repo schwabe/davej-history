@@ -2116,6 +2116,22 @@ CONFIG_SCSI_DC390T_NOGENSUPP
   some reason, you want to drive with the other AM53C974 driver.
   If unsure, say N.
 
+Symbios Logic sym53c416 support
+CONFIG_SCSI_SYM53C416
+  This is support for the sym53c416 SCSI host adapter. This is the 
+  SCSI adapter that comes with some hp scanners. This driver requires that
+  the sym53c416 is configured first using some sort of pnp configuration
+  program (e.g. isapnp). After doing so it should be loaded as a module
+  using insmod. The parameters of the configured card(s) should be passed
+  to the driver. The format is:
+  
+    insmod sym53c416 sym53c416=<base>,<irq> [sym53c416_1=<base>,<irq>]
+
+  There is support for up to four adapters. If you want to compile this
+  driver as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt.                                      
+
 AM53/79C974 PCI SCSI support
 CONFIG_SCSI_AM53C974
   This is support for the AM53/79C974 SCSI host adapters. Please read

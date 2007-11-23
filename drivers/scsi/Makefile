@@ -380,6 +380,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_SYM53C416),y) 
+L_OBJS += sym53c416.o 
+else 
+  ifeq ($(CONFIG_SCSI_SYM53C416),m) 
+  M_OBJS += sym53c416.o 
+  endif 
+endif 
+
 ifeq ($(CONFIG_SCSI_MEGARAID),y)
 L_OBJS += megaraid.o
 else

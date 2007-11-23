@@ -153,6 +153,10 @@
 #include "NCR53c406a.h"
 #endif
 
+#ifdef CONFIG_SCSI_SYM53C416 
+#include "sym53c416.h" 
+#endif
+
 #ifdef CONFIG_SCSI_DC390T
 #include "dc390.h"
 #endif
@@ -282,6 +286,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_NCR53C406A	/* 53C406A should come before QLOGIC */
     NCR53c406a,
 #endif
+#ifdef CONFIG_SCSI_SYM53C416 
+    SYM53C416, 
+#endif 
 #ifdef CONFIG_SCSI_QLOGIC_FAS
     QLOGICFAS,
 #endif

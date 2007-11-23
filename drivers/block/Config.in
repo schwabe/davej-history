@@ -60,7 +60,11 @@ if [ "$CONFIG_PCI" = "y" ]; then
   bool 'Mylex DAC960 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960
 fi
 
-tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
+bool 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
+if [ "$CONFIG_BLK_CPQ_DA" = "y" -o "$CONFIG_BLK_CPQ_DA" = "m" ]; then
+  bool '   Support for PCI SMART-2 Controllers' CONFIG_BLK_CPQ_DA_PCI
+  bool '   Support for EISA SMART-2 Controllers' CONFIG_BLK_CPQ_DA_EISA
+fi
 
 tristate 'Parallel port IDE device support' CONFIG_PARIDE 
 if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then

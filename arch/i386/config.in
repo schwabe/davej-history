@@ -27,7 +27,7 @@ choice 'Nemory configuration' \
 	 Enterprise	CONFIG_MEM_ENT	\
 	 Custom		CONFIG_MEM_SPECIAL" Standard
 
-if [ "CONFIG_MEM_SPECIAL" = "y" ]; then
+if [ "$CONFIG_MEM_SPECIAL" = "y" ]; then
 	int ' Max physical memory in MB' CONFIG_MAX_MEMSIZE 1024
 fi
 if [ "$CONFIG_MEM_ENT" = "y" ]; then

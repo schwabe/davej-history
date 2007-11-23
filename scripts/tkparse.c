@@ -345,6 +345,11 @@ void parse(char * pnt) {
       tok = tok_define;
       pnt += 11;
     }
+  else if (strncmp(pnt, "define_int", 10) == 0) 
+    {
+      tok = tok_define_int;
+      pnt += 10;
+    }
   else if (strncmp(pnt, "bool", 4) == 0) 
     {
       tok = tok_bool;
@@ -446,6 +451,10 @@ void parse(char * pnt) {
       if(*pnt == 'y' || *pnt == 'Y' ) kcfg->value = "1";
       if(*pnt == 'n' || *pnt == 'N' ) kcfg->value = "0";
       if(*pnt == 'm' || *pnt == 'M' ) kcfg->value = "2";
+      break;
+    case tok_define_int:
+      pnt = get_string(pnt, &kcfg->optionname);
+      pnt = get_string(pnt, &kcfg->value);
       break;
     case tok_menuname:
       pnt = get_qstring(pnt, &kcfg->label);

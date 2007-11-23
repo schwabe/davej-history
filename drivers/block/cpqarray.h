@@ -88,6 +88,8 @@ typedef struct {
 	unsigned int avg_latency;
 	unsigned int max_latency;
 	unsigned int nr_requests;
+	unsigned int nr_allocs;
+	unsigned int nr_frees;
 	struct timer_list timer;
 	unsigned int misc_tflags;
 } ctlr_info_t;

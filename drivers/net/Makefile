@@ -682,8 +682,8 @@ include $(TOPDIR)/Rules.make
 clean:
 	rm -f core *.o *.a *.s
 
-rcpci.o: rcpci45.o rcmtl.o
-	$(LD) -r -o rcpci.o rcpci45.o rcmtl.o
+rcpci.o: rcpci45.o rclanmtl.o
+	$(LD) -r -o rcpci.o rcpci45.o rclanmtl.o
 
 wd.o:	wd.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $<

@@ -46,6 +46,7 @@ if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
   dep_tristate 'NLS ISO 8859-7 (Modern Greek)'    CONFIG_NLS_ISO8859_7    $CONFIG_NLS
   dep_tristate 'NLS ISO 8859-8 (Hebrew)'    CONFIG_NLS_ISO8859_8    $CONFIG_NLS
   dep_tristate 'NLS ISO 8859-9 (Latin 5; Turkey)'    CONFIG_NLS_ISO8859_9    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-15 (Latin 9; Western European Languages with Euro)' CONFIG_NLS_ISO8859_15 $CONFIG_NLS
   dep_tristate 'NLS KOI8-R (Russian)'        CONFIG_NLS_KOI8_R       $CONFIG_NLS
   endmenu
 fi

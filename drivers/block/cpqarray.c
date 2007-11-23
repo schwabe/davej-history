@@ -42,10 +42,10 @@
 #else
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
-#endif
 extern struct inode_operations proc_diskarray_inode_operations;
+#endif
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 0.9.5)"
+#define DRIVER_NAME "Compaq SMART2 Driver (v 0.9.7)"
 
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
@@ -63,6 +63,13 @@ extern struct inode_operations proc_diskarray_inode_operations;
 
 static int nr_ctlr = 0;
 static ctlr_info_t *hba[MAX_CTLR] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+#ifdef CONFIG_BLK_CPQ_DA_EISA
+#ifndef MODULE
+static
+#endif
+int eisa[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
 
 static struct hd_struct * ida;
 static int * ida_sizes;
@@ -88,22 +95,21 @@ static struct gendisk ida_gendisk[MAX_CTLR];
 #endif /* PROFILE_REQUESTS */
 
 
-#define PROFILE_MEMUSAGE
-#ifdef PROFILE_MEMUSAGE
-unsigned int nr_allocs = 0;
-unsigned int nr_frees = 0;
-#endif
-
 void cpqarray_init(void);
+#ifdef CONFIG_BLK_CPQ_DA_PCI
 static int cpqarray_pci_detect(void);
 static void cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn);
 static ulong remap_pci_mem(ulong base, ulong size);
+#endif
+#ifdef CONFIG_BLK_CPQ_DA_EISA
+static int cpqarray_eisa_detect(void);
+#endif
 static void flushcomplete(int ctlr);
 static int pollcomplete(int ctlr);
 static void getgeometry(int ctlr);
 
-static cmdlist_t * cmd_alloc(int intr);
-static void cmd_free(cmdlist_t *c);
+static cmdlist_t * cmd_alloc(ctlr_info_t *h, int intr);
+static void cmd_free(ctlr_info_t *h, cmdlist_t *c);
 
 static int sendcmd(
 	__u8	cmd,
@@ -154,6 +160,32 @@ static int revalidate_allvol(kdev_t dev);
 static void ida_procinit(int i);
 static int ida_proc_get_info(char *buffer, char **start, off_t offset, int length, int dp);
 
+/*
+ * These macros control what happens when the driver tries to write to or
+ * read from a card.  If the driver is configured for EISA only or PCI only,
+ * the macros expand to inl/outl or readl/writel.  If the drive is configured
+ * for both EISA and PCI, the macro expands to a conditional which uses
+ * memory mapped IO if the card has it (PCI) or io ports if it doesn't (EISA).
+ */
+#ifdef CONFIG_BLK_CPQ_DA_PCI
+#	ifdef CONFIG_BLK_CPQ_DA_EISA
+#		warning "SMART2: EISA+PCI"
+#		define smart2_read(h, offset)  ( ((h)->vaddr) ? readl((h)->vaddr+(offset)) : inl((h)->ioaddr+(offset)) )
+#		define smart2_write(p, h, offset) ( ((h)->vaddr) ? writel((p), (h)->vaddr+(offset)) : outl((p), (h)->ioaddr+(offset)) )
+#	else
+#		warning "SMART2: PCI"
+#		define smart2_read(h, offset)  readl((h)->vaddr+(offset))
+#		define smart2_write(p, h, offset) writel((p), (h)->vaddr+(offset))
+#	endif
+#else
+#	ifdef CONFIG_BLK_CPQ_DA_EISA
+#		warning "SMART2: EISA"
+#		define smart2_read(h, offset)  inl((h)->vaddr+(offset))
+#		define smart2_write(p, h, offset) outl((p), (h)->vaddr+(offset))
+#	else
+#		error "You must enable either SMART2 PCI support or SMART2 EISA support or both!"
+#	endif
+#endif
 
 void ida_geninit(struct gendisk *g)
 {
@@ -324,11 +356,9 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 			h->nr_requests);
 	pos += size; len += size;
 #endif /* PROFILE_REQUESTS */
-#ifdef PROFILE_MEMUSAGE
 	size = sprintf(buffer+len,"nr_allocs = %d\nnr_frees = %d\n",
-			nr_allocs, nr_frees);
+			h->nr_allocs, h->nr_frees);
 	pos += size; len += size;
-#endif /* PROFILE_MEMUSAGE */
 
 	*start = buffer+offset;
 	len -= offset;
@@ -340,6 +370,7 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 #ifdef MODULE
 /* This is a hack... */
 #include "proc_array.c"
+
 int init_module(void)
 {
 	int i, j;
@@ -361,7 +392,7 @@ void cleanup_module(void)
 	struct gendisk *g;
 
 	for(i=0; i<nr_ctlr; i++) {
-		writel(0, hba[i]->vaddr + INTR_MASK);
+		smart2_write(0, hba[i], INTR_MASK);
 		free_irq(hba[i]->intr, hba[i]);
 		vfree((void*)hba[i]->vaddr);
 		unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
@@ -413,7 +444,14 @@ void cpqarray_init(void)
 	int i;
 
 	/* detect controllers */
-	if (cpqarray_pci_detect() == 0)
+#ifdef CONFIG_BLK_CPQ_DA_PCI
+	cpqarray_pci_detect();
+#endif
+#ifdef CONFIG_BLK_CPQ_DA_EISA
+	cpqarray_eisa_detect();
+#endif
+
+	if (nr_ctlr == 0)
 		return;
 
 	printk(DRIVER_NAME "\n");
@@ -446,7 +484,7 @@ void cpqarray_init(void)
 	 * Get an interrupt, set the Q depth and get into /proc
 	 */
 	for(i=0; i< nr_ctlr; i++) {
-		writel(0, hba[i]->vaddr + INTR_MASK);  /* No interrupts */
+		smart2_write(0, hba[i], INTR_MASK);  /* No interrupts */
 		if (request_irq(hba[i]->intr, do_ida_intr,
 			SA_INTERRUPT | SA_SHIRQ, hba[i]->devname, hba[i])) {
 
@@ -463,7 +501,7 @@ void cpqarray_init(void)
 		printk("Finding drives on %s\n", hba[i]->devname);
 		getgeometry(i);
 
-		writel(FIFO_NOT_EMPTY, hba[i]->vaddr + INTR_MASK);
+		smart2_write(FIFO_NOT_EMPTY, hba[i], INTR_MASK);
 
 		hba[i]->maxQ = 32;
 #ifdef PROFILE_REQUESTS
@@ -502,6 +540,7 @@ void cpqarray_init(void)
 	/* done ! */
 }
 
+#ifdef CONFIG_BLK_CPQ_DA_PCI
 /*
  * Find the controller and initialize it
  */
@@ -597,6 +636,49 @@ static ulong remap_pci_mem(ulong base, ulong size)
 
         return (ulong) (page_remapped ? (page_remapped + page_offs) : 0UL);
 }
+#endif /* CONFIG_BLK_CPQ_DA_PCI */
+
+#ifdef CONFIG_BLK_CPQ_DA_EISA
+/*
+ * Copy the contents of the ints[] array passed to us by init.
+ */
+void cpqarray_setup(char *str, int *ints)
+{
+	int i;
+	if (ints[0] & 1) {
+		printk( "SMART2 Parameter Usage:\n"
+			"     smart2=io,irq,io,irq,...\n");
+		return;
+	}
+	for(i=0; i<ints[0]; i++) {
+		eisa[i] = ints[i+1];
+	}
+}
+
+/*
+ * Find an EISA controller's signature.  Set up an hba if we find it.
+ */
+static int cpqarray_eisa_detect(void)
+{
+	int i=0;
+
+	while(i<16 && eisa[i]) {
+		if (inl(eisa[i]+0xC80) == 0x3040110e) {
+			hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
+			memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
+			hba[nr_ctlr]->ioaddr = eisa[i];
+			hba[nr_ctlr]->intr = eisa[i+1];
+			sprintf(hba[nr_ctlr]->devname, "ida%d", nr_ctlr);
+			hba[nr_ctlr]->ctlr = nr_ctlr;
+			nr_ctlr++;
+		} else {
+			printk("SMART2:  Could not find a controller at io=0x%04x irq=0x%x\n", eisa[i], eisa[i+1]);
+		}
+		i+=2;
+	}
+	return nr_ctlr;
+}
+#endif /* CONFIG_BLK_CPQ_DA_EISA */
 
 /*
  * Open.  Make sure the device is really there.
@@ -706,7 +788,7 @@ void do_ida_request(int ctlr)
 	if (h->Qdepth >= h->maxQ)
 		goto doreq_done;
 
-	if ((c = cmd_alloc(1)) == NULL)
+	if ((c = cmd_alloc(h, 1)) == NULL)
 		goto doreq_done;
 
 	blk_dev[MAJOR_NR+ctlr].current_request = creq->next;
@@ -774,7 +856,7 @@ static void start_io(ctlr_info_t *h)
 
 	while((c = h->reqQ) != NULL) {
 		/* Can't do anything if we're busy */
-		if (readl(h->vaddr + COMMAND_FIFO) == 0)
+		if (smart2_read(h, COMMAND_FIFO) == 0)
 			return;
 
 		/* Get the first entry from the request Q */
@@ -782,7 +864,7 @@ static void start_io(ctlr_info_t *h)
 		h->Qdepth--;
 	
 		/* Tell the controller to do our bidding */
-		writel(c->busaddr, h->vaddr + COMMAND_FIFO);
+		smart2_write(c->busaddr, h, COMMAND_FIFO);
 
 		/* Get onto the completion Q */
 		addQ(&h->cmpQ, c);
@@ -852,7 +934,7 @@ void do_ida_intr(int irq, void *dev_id, struct pt_regs *regs)
 	unsigned long istat;
 	__u32 a,a1;
 
-	istat = readl(h->vaddr + INTR_PENDING);
+	istat = smart2_read(h, INTR_PENDING);
 	/* Is this interrupt for us? */
 	if (istat == 0)
 		return;
@@ -862,7 +944,7 @@ void do_ida_intr(int irq, void *dev_id, struct pt_regs *regs)
 	 * we had better do something about it.
 	 */
 	if (istat & FIFO_NOT_EMPTY) {
-		while((a = readl(h->vaddr + COMMAND_COMPLETE_FIFO))) {
+		while((a = smart2_read(h, COMMAND_COMPLETE_FIFO))) {
 			a1 = a; a &= ~3;
 			if ((c = h->cmpQ) == NULL) goto bad_completion;
 			while(c->busaddr != a) {
@@ -884,7 +966,7 @@ void do_ida_intr(int irq, void *dev_id, struct pt_regs *regs)
 				++h->nr_requests;
 #endif /* PROFILE_REQUESTS */
 					complete_command(c, 0);
-					cmd_free(c);
+					cmd_free(h, c);
 				} else if (c->type == CMD_IOCTL_PEND) {
 					c->type = CMD_IOCTL_DONE;
 				}
@@ -947,12 +1029,18 @@ int ida_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsigne
 		put_user(diskinfo[0], &geo->heads);
 		put_user(diskinfo[1], &geo->sectors);
 		put_user(diskinfo[2], &geo->cylinders);
-		put_user(ida[MINOR(inode->i_rdev)].start_sect, &geo->start);
+		put_user(ida[(ctlr<<CTLR_SHIFT)+MINOR(inode->i_rdev)].start_sect, &geo->start);
 		return 0;
 	case IDAGETDRVINFO:
 		error = verify_area(VERIFY_WRITE, io, sizeof(*io));
 		if (error) return error;
 		memcpy_tofs(&io->c.drv,&hba[ctlr]->drv[dsk],sizeof(drv_info_t));
+		return 0;
+	case BLKGETSIZE:
+		if (!arg) return -EINVAL;
+		error = verify_area(VERIFY_WRITE, (long*)arg, sizeof(long));
+		if (error) return error;
+		put_user(ida[(ctlr<<CTLR_SHIFT)+MINOR(inode->i_rdev)].nr_sects, (long*)arg);
 		return 0;
 	case BLKRASET:
 		if (!suser()) return -EACCES;
@@ -1012,7 +1100,7 @@ int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	int error;
 
 	DBGINFO(printk("ida_ctlr_ioctl %d %x %p\n", ctlr, dsk, io));
-	if ((c = cmd_alloc(0)) == NULL)
+	if ((c = cmd_alloc(h, 0)) == NULL)
 		return -ENOMEM;
 	c->ctlr = ctlr;
 	c->hdr.unit = (io->unit & UNITVALID) ? io->unit &0x7f : dsk;
@@ -1102,7 +1190,7 @@ int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	io->rcode = c->req.hdr.rcode;
 	error = 0;
 ioctl_err_exit:
-	cmd_free(c);
+	cmd_free(h, c);
 	return error;
 }
 
@@ -1110,24 +1198,25 @@ ioctl_err_exit:
  * Sooner or later we'll want to maintain our own cache of
  * commands.  For now, just use kmalloc to get them
  */
-cmdlist_t * cmd_alloc(int intr)
+cmdlist_t * cmd_alloc(ctlr_info_t *h, int intr)
 {
 	cmdlist_t * c;
 
+	if (h->nr_allocs - h->nr_frees > 128)
+		return NULL;
+
 	c = kmalloc(sizeof(cmdlist_t), (intr) ? GFP_ATOMIC : GFP_KERNEL);
+	if (c == NULL)
+		return NULL;
 	memset(c, 0, sizeof(cmdlist_t));
 	c->busaddr = virt_to_bus(c);
-#ifdef PROFILE_MEMUSAGE
-	nr_allocs++;
-#endif
+	h->nr_allocs++;
 	return c;
 }
 
-void cmd_free(cmdlist_t *c)
+void cmd_free(ctlr_info_t *h, cmdlist_t *c)
 {
-#ifdef PROFILE_MEMUSAGE
-	nr_frees++;
-#endif
+	h->nr_frees++;
 	kfree(c);
 }
 
@@ -1153,7 +1242,7 @@ int sendcmd(
 	unsigned long i;
 	ctlr_info_t *info_p = hba[ctlr];
 
-	c = cmd_alloc(0);
+	c = cmd_alloc(info_p, 0);
 	c->ctlr = ctlr;
 	c->hdr.unit = log_unit;
 	c->hdr.prio = 0;
@@ -1181,11 +1270,11 @@ int sendcmd(
 	 * Disable interrupt
 	 */
 	base_ptr = info_p->vaddr;
-	writel(0, base_ptr + INTR_MASK);
+	smart2_write(0, info_p, INTR_MASK);
 	/* Make sure there is room in the command FIFO */
 	/* Actually it should be completely empty at this time. */
 	for (i = 200000; i > 0; i--) {
-		temp = readl(base_ptr + COMMAND_FIFO);
+		temp = smart2_read(info_p, COMMAND_FIFO);
 		if (temp != 0) {
 			break;
 		}
@@ -1198,7 +1287,7 @@ DBG(
 	/*
 	 * Send the cmd
 	 */
-	writel(c->busaddr, base_ptr + COMMAND_FIFO);
+	smart2_write(c->busaddr, info_p, COMMAND_FIFO);
 	complete = pollcomplete(ctlr);
 	if (complete != 1) {
 		if (complete != c->busaddr) {
@@ -1206,7 +1295,7 @@ DBG(
 			"ida%d: idaSendPciCmd "
 		      "Invalid command list address returned! (%08lx)\n",
 				ctlr, (unsigned long)complete);
-			cmd_free(c);
+			cmd_free(info_p, c);
 			return (IO_ERROR);
 		}
 	} else {
@@ -1214,7 +1303,7 @@ DBG(
 			"ida%d: idaSendPciCmd Timeout out, "
 			"No command list address returned!\n",
 			ctlr);
-		cmd_free(c);
+		cmd_free(info_p, c);
 		return (IO_ERROR);
 	}
 
@@ -1226,11 +1315,11 @@ DBG(
 				"cmd: 0x%x, return code = 0x%x\n",
 				ctlr, c->req.hdr.cmd, c->req.hdr.rcode);
 
-			cmd_free(c);
+			cmd_free(info_p, c);
 			return (IO_ERROR);
 		}
 	}
-	cmd_free(c);
+	cmd_free(info_p, c);
 	return (IO_OK);
 }
 
@@ -1286,9 +1375,9 @@ static int revalidate_allvol(kdev_t dev)
 	 * we check the new geometry.  Then turn interrupts back on when
 	 * we're done.
 	 */
-	writel(0, hba[ctlr]->vaddr + INTR_MASK);
+	smart2_write(0, hba[ctlr], INTR_MASK);
 	getgeometry(ctlr);
-	writel(FIFO_NOT_EMPTY, hba[ctlr]->vaddr + INTR_MASK);
+	smart2_write(FIFO_NOT_EMPTY, hba[ctlr], INTR_MASK);
 
 	ida_geninit(&ida_gendisk[ctlr]);
 	for(i=0; i<NWD; i++)
@@ -1358,12 +1447,11 @@ int pollcomplete(int ctlr)
 {
 	int done;
 	int i;
-	unsigned long base_ptr = hba[ctlr]->vaddr;
 
 	/* Wait (up to 2 seconds) for a command to complete */
 
 	for (i = 200000; i > 0; i--) {
-		done = readl(base_ptr + COMMAND_COMPLETE_FIFO);
+		done = smart2_read(hba[ctlr], COMMAND_COMPLETE_FIFO);
 		if (done == 0) {
 			udelay(10);	/* a short fixed delay */
 		} else
@@ -1388,13 +1476,11 @@ int pollcomplete(int ctlr)
  */
 void flushcomplete(int ctlr)
 {
-
-	unsigned long base_ptr = hba[ctlr]->vaddr;
 	unsigned long ret_addr;
 	unsigned int i;
 
 	for (i = 200000; i > 0; i--) {
-		ret_addr = readl(base_ptr + COMMAND_COMPLETE_FIFO);
+		ret_addr = smart2_read(hba[ctlr], COMMAND_COMPLETE_FIFO);
 		if (ret_addr == 0) {
 			break;
 		}
