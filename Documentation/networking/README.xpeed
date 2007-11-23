@@ -1,0 +1,52 @@
+Driver for Xpeed Inc. PCI network cards
+---------------------------------------
+The following cards are supported with this driver:
+
+Xpeed X200 IDSL NIC (http://www.xpeed.com/Products/x200/x200_c.html)
+Xpeed X300 SDSL NIC (http://www.xpeed.com/Products/x300/x300_c.html)
+
+This driver handles frame relay encapsulation of WAN link and presents
+the card to the kernel as an ethernet-like device called dsl0, dsl1, etc.
+
+The driver supports up to 6 cards and supports operation in either
+RFC1490 frame relay or bridged ethernet modes. Note that when operating
+in RFC1490 frame relay mode, "ifconfig -arp" (no ARP) should be used.
+
+=============================== NOTE ====================================
+You will NEED to use the xpds-config utility to configure the link speed,
+change LT/NT mode, change swap/invert parameters, and reflash the adapter
+firmware. This utility and other support files can be downloaded at
+ftp://ftp.xpeed.com/pub/linux/
+=============================== NOTE ====================================
+
+The driver accepts the following parameters when compiled as a module:
+
+xpds_default_dlci
+    Defines the DLCI to be used for the local interface. Default is 16.
+
+xpds_default_dlci_cr
+    A special mask value to be used when speaking with certain buggy
+    vendor equipment. Can be 0 or 2. Default is 0.
+
+xpds_default_dlci_lmi
+    Defines how the card will perform LMI protocol negotiation.
+    Valid values are:
+     0  No LMI will be used.
+     1  LMI will operate in LT (Line Termination) mode.
+     2  LMI will operate in NT (Network Termination) mode.
+     3  LMI will operation in bidirectional NT mode.
+    -1  Attempt to autoconfigure LMI mode. (Default)
+
+xpds_default_bridged
+    Defines whether the card will operate in RFC1490 frame relay or
+    bridged ethernet mode. Default is 0, RFC1490 frame relay mode.
+
+Typical usage for a connection in RFC1490 frame relay mode:
+
+# modprobe xpds-fr
+# ifconfig dsl0 10.0.0.2 netmask 255.255.255.0 broadcast 10.0.0.255 -arp
+
+Typical usage for a connection in bridged ethernet mode:
+
+# modprobe xpds-fr xpds_default_bridged=1
+# ifconfig dsl0 10.0.0.2 netmask 255.255.255.0 broadcast 10.0.0.255

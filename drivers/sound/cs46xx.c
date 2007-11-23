@@ -22,6 +22,9 @@
  *	along with this program; if not, write to the Free Software
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
+ *	Changes:
+ *	20000909	Changed cs_read, cs_write and drain_dac
+ *			Nils Faerber <nils@kernelconcepts.de>
  */
  
 #include <linux/module.h>
@@ -777,7 +780,7 @@ static int drain_dac(struct cs_state *state, int nonblock)
 
 		tmo = (dmabuf->dmasize * HZ) / dmabuf->rate;
 		tmo >>= sample_shift[dmabuf->fmt];
-		tmo += (4096*HZ)/dmabuf->rate;
+		tmo += (2048*HZ)/dmabuf->rate;
 		
 		if (!schedule_timeout(tmo ? tmo : 1) && tmo){
 			printk(KERN_ERR "cs461x: drain_dac, dma timeout? %d\n", count);
@@ -921,6 +924,7 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 {
 	struct cs_state *state = (struct cs_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
@@ -940,6 +944,7 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 		return -EFAULT;
 	ret = 0;
 
+	add_wait_queue(&state->dmabuf.wait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&state->card->lock, flags);
 		if (dmabuf->count > (signed) dmabuf->dmasize) {
@@ -952,6 +957,8 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 		cnt = dmabuf->dmasize - swptr;
 		if (dmabuf->count < cnt)
 			cnt = dmabuf->count;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&state->card->lock, flags);
 
 		if (cnt > count)
@@ -963,38 +970,20 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 			start_adc(state);
 			if (file->f_flags & O_NONBLOCK) {
 				if (!ret) ret = -EAGAIN;
-				return ret;
+				remove_wait_queue(&state->dmabuf.wait, &wait);
+				break;
 			}
-			/* This isnt strictly right for the 810  but it'll do */
-			tmo = (dmabuf->dmasize * HZ) / (dmabuf->rate * 2);
-			tmo >>= sample_shift[dmabuf->fmt];
-			/* There are two situations when sleep_on_timeout returns, one is when
-			   the interrupt is serviced correctly and the process is waked up by
-			   ISR ON TIME. Another is when timeout is expired, which means that
-			   either interrupt is NOT serviced correctly (pending interrupt) or it
-			   is TOO LATE for the process to be scheduled to run (scheduler latency)
-			   which results in a (potential) buffer overrun. And worse, there is
-			   NOTHING we can do to prevent it. */
-			if (!interruptible_sleep_on_timeout(&dmabuf->wait, tmo)) {
-#ifdef DEBUG
-				printk(KERN_ERR "cs461x: recording schedule timeout, "
-				       "dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
-				       dmabuf->dmasize, dmabuf->fragsize, dmabuf->count,
-				       dmabuf->hwptr, dmabuf->swptr);
-#endif
-				/* a buffer overrun, we delay the recovery untill next time the
-				   while loop begin and we REALLY have space to record */
-			}
+			schedule();
 			if (signal_pending(current)) {
 				ret = ret ? ret : -ERESTARTSYS;
-				return ret;
+				break;
 			}
 			continue;
 		}
 
 		if (copy_to_user(buffer, dmabuf->rawbuf + swptr, cnt)) {
 			if (!ret) ret = -EFAULT;
-			return ret;
+			break;
 		}
 
 		swptr = (swptr + cnt) % dmabuf->dmasize;
@@ -1009,6 +998,8 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 		ret += cnt;
 		start_adc(state);
 	}
+	remove_wait_queue(&state->dmabuf.wait, &wait);
+	set_current_state(TASK_RUNNING);
 	return ret;
 }
 
@@ -1017,8 +1008,9 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 static ssize_t cs_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct cs_state *state = (struct cs_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	struct dmabuf *dmabuf = &state->dmabuf;
-	ssize_t ret;
+	ssize_t ret = 0;
 	unsigned long flags;
 	unsigned swptr;
 	int cnt;
@@ -1035,8 +1027,7 @@ static ssize_t cs_write(struct file *file, const char *buffer, size_t count, lof
 		return ret;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
-	ret = 0;
-
+	add_wait_queue(&state->dmabuf.wait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&state->card->lock, flags);
 		if (dmabuf->count < 0) {
@@ -1049,6 +1040,8 @@ static ssize_t cs_write(struct file *file, const char *buffer, size_t count, lof
 		cnt = dmabuf->dmasize - swptr;
 		if (dmabuf->count + cnt > dmabuf->dmasize)
 			cnt = dmabuf->dmasize - dmabuf->count;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&state->card->lock, flags);
 
 		if (cnt > count)
@@ -1060,37 +1053,18 @@ static ssize_t cs_write(struct file *file, const char *buffer, size_t count, lof
 			start_dac(state);
 			if (file->f_flags & O_NONBLOCK) {
 				if (!ret) ret = -EAGAIN;
-				return ret;
+				break;
 			}
-			/* Not strictly correct but works */
-			tmo = (dmabuf->dmasize * HZ) / (dmabuf->rate * 2);
-			tmo >>= sample_shift[dmabuf->fmt];
-			/* There are two situations when sleep_on_timeout returns, one is when
-			   the interrupt is serviced correctly and the process is waked up by
-			   ISR ON TIME. Another is when timeout is expired, which means that
-			   either interrupt is NOT serviced correctly (pending interrupt) or it
-			   is TOO LATE for the process to be scheduled to run (scheduler latency)
-			   which results in a (potential) buffer underrun. And worse, there is
-			   NOTHING we can do to prevent it. */
-			if (!interruptible_sleep_on_timeout(&dmabuf->wait, tmo)) {
-#ifdef DEBUG
-				printk(KERN_ERR "cs461x: playback schedule timeout, "
-				       "dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
-				       dmabuf->dmasize, dmabuf->fragsize, dmabuf->count,
-				       dmabuf->hwptr, dmabuf->swptr);
-#endif
-				/* a buffer underrun, we delay the recovery untill next time the
-				   while loop begin and we REALLY have data to play */
-			}
+			schedule();
 			if (signal_pending(current)) {
 				if (!ret) ret = -ERESTARTSYS;
-				return ret;
+				break;
 			}
 			continue;
 		}
 		if (copy_from_user(dmabuf->rawbuf + swptr, buffer, cnt)) {
 			if (!ret) ret = -EFAULT;
-			return ret;
+			break;
 		}
 
 		swptr = (swptr + cnt) % dmabuf->dmasize;
@@ -1106,6 +1080,8 @@ static ssize_t cs_write(struct file *file, const char *buffer, size_t count, lof
 		ret += cnt;
 		start_dac(state);
 	}
+	remove_wait_queue(&state->dmabuf.wait, &wait);
+	set_current_state(TASK_RUNNING);
 	return ret;
 }
 
@@ -2524,7 +2500,7 @@ static struct cs_card_type __initdata cards[]={
 	{PCI_VENDOR_ID_IBM, 0x0153, "Thinkpad 600X/A20/T20", amp_none, clkrun_hack},
 	{PCI_VENDOR_ID_IBM, 0x1010, "Thinkpad 600E (unsupported)", NULL, NULL},
 	{0, 0, "Card without SSID set", NULL, NULL },
-	{0, 0, NULL, NULL}
+	{0, 0, NULL, NULL, NULL}
 };
 
 static int __init cs_install(struct pci_dev *pci_dev)

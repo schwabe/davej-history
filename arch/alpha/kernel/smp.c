@@ -543,12 +543,12 @@ smp_boot_cpus(void)
 	bogosum = 0;
         for (i = 0; i < NR_CPUS; i++) {
 		if (cpu_present_mask & (1L << i))
-			bogosum += cpu_data[i].loops_per_sec;
+			bogosum += cpu_data[i].loops_per_jiffy;
         }
 	printk(KERN_INFO "SMP: Total of %d processors activated "
 	       "(%lu.%02lu BogoMIPS).\n",
-	       cpu_count, (bogosum + 2500) / 500000,
-	       ((bogosum + 2500) / 5000) % 100);
+	       cpu_count, (bogosum + 2500) / (500000 / HZ),
+	       ((bogosum + 2500) / (5000 / HZ)) % 100);
 
 	smp_num_cpus = cpu_count;
 }

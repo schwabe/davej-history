@@ -246,7 +246,7 @@ struct hd_driveid {
 	unsigned short	word123;	/* reserved (word 123) */
 	unsigned short	word124;	/* reserved (word 124) */
 	unsigned short	word125;	/* reserved (word 125) */
-	unsigned short	word126;	/* reserved (word 126) */
+	unsigned short	last_lun;	/* last lun on device */
 	unsigned short	word127;	/* reserved (word 127) */
 	unsigned short	security;	/* bits 0:support 1:enabled 2:locked 3:frozen */
 	unsigned short	reserved[127];

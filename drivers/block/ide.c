@@ -1627,6 +1627,8 @@ int ide_revalidate_disk(kdev_t i_rdev)
 	ide_drive_t *drive;
 	ide_hwgroup_t *hwgroup;
 	unsigned int p, major, minor;
+	int old_blksize;
+	extern int *blksize_size[];
 	long flags;
 
 	if ((drive = get_info_ptr(i_rdev)) == NULL)
@@ -1634,6 +1636,7 @@ int ide_revalidate_disk(kdev_t i_rdev)
 	major = MAJOR(i_rdev);
 	minor = drive->select.b.unit << PARTN_BITS;
 	hwgroup = HWGROUP(drive);
+	old_blksize = blksize_size[major][minor];
 	spin_lock_irqsave(&io_request_lock, flags);
 	if (drive->busy || (drive->usage > 1)) {
 		spin_unlock_irqrestore(&io_request_lock, flags);
@@ -1651,7 +1654,10 @@ int ide_revalidate_disk(kdev_t i_rdev)
 			if (sb)
 				invalidate_inodes(sb);
 			invalidate_buffers (devp);
-			set_blocksize(devp, 1024);
+			if (!old_blksize)
+				set_blocksize(devp, 1024);
+			else
+				set_blocksize(devp, old_blksize);
 		}
 		drive->part[p].start_sect = 0;
 		drive->part[p].nr_sects   = 0;

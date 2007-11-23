@@ -116,6 +116,11 @@ CORE_FILES := $(CORE_FILES) arch/m68k/ifpsp060/ifpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/ifpsp060
 endif
 
+ifdef CONFIG_FPU_EMU
+CORE_FILES := $(CORE_FILES) arch/m68k/math-emu/mathemu.o
+SUBDIRS := $(SUBDIRS) arch/m68k/math-emu
+endif
+
 lilo:	vmlinux
 	if [ -f $(INSTALL_PATH)/vmlinux ]; then mv -f $(INSTALL_PATH)/vmlinux $(INSTALL_PATH)/vmlinux.old; fi
 	if [ -f $(INSTALL_PATH)/System.map ]; then mv -f $(INSTALL_PATH)/System.map $(INSTALL_PATH)/System.old; fi
@@ -127,13 +132,26 @@ zImage compressed: vmlinux.gz
 
 vmlinux.gz: vmlinux
 
-ifdef CONFIG_KGDB
+ifndef CONFIG_KGDB
 	cp vmlinux vmlinux.tmp
 	$(STRIP) vmlinux.tmp
 	gzip -9c vmlinux.tmp >vmlinux.gz
 	rm vmlinux.tmp
 else
 	gzip -9c vmlinux >vmlinux.gz
+endif
+
+bzImage: vmlinux.bz2
+
+vmlinux.bz2: vmlinux
+
+ifndef CONFIG_KGDB
+	cp vmlinux vmlinux.tmp
+	$(STRIP) vmlinux.tmp
+	bzip2 -1c vmlinux.tmp >vmlinux.bz2
+	rm vmlinux.tmp
+else
+	bzip2 -1c vmlinux >vmlinux.bz2
 endif
 
 archclean:

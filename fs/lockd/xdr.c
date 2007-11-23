@@ -17,6 +17,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/stats.h>
+#include <linux/lockd/xdr4.h>
 #include <linux/lockd/lockd.h>
 #include <linux/lockd/sm_inter.h>
 
@@ -52,6 +53,17 @@ nlmxdr_init(void)
 	nlm_lck_denied_nolocks = htonl(NLM_LCK_DENIED_NOLOCKS);
 	nlm_lck_blocked = htonl(NLM_LCK_BLOCKED);
 	nlm_lck_denied_grace_period = htonl(NLM_LCK_DENIED_GRACE_PERIOD);
+
+        nlm4_granted = htonl(NLM_LCK_GRANTED);
+        nlm4_lck_denied = htonl(NLM_LCK_DENIED);
+        nlm4_lck_denied_nolocks = htonl(NLM_LCK_DENIED_NOLOCKS);
+        nlm4_lck_blocked = htonl(NLM_LCK_BLOCKED);
+        nlm4_lck_denied_grace_period = htonl(NLM_LCK_DENIED_GRACE_PERIOD);
+	nlm4_deadlock = htonl(NLM_DEADLCK);
+	nlm4_rofs = htonl(NLM_ROFS);
+	nlm4_stale_fh = htonl(NLM_STALE_FH);
+	nlm4_fbig = htonl(NLM_FBIG);
+	nlm4_failed = htonl(NLM_FAILED);
 
 	inited = 1;
 
@@ -561,7 +573,7 @@ nlmclt_decode_res(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
       (kxdrproc_t) nlmclt_encode_##argtype,			\
       (kxdrproc_t) nlmclt_decode_##restype,			\
       MAX(NLM_##argtype##_sz, NLM_##restype##_sz) << 2,		\
-      0								\
+      0                                                         \
     }
 
 static struct rpc_procinfo	nlm_procedures[] = {

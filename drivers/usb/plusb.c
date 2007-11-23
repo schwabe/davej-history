@@ -40,7 +40,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-//#define DEBUG
+#define DEBUG
 #include <linux/usb.h>
 
 #include "plusb.h"
@@ -457,7 +457,10 @@ static void plusb_disconnect (struct usb_device *usbdev, void *ptr)
 {
 	plusb_t *s = ptr;
 
+	printk ("plusb_net_disconnect: Starting\n");
+	
 	dbg("plusb_disconnect");
+	
 	s->connected = 0;
 	
 	plusb_free_all(s);
@@ -466,9 +469,16 @@ static void plusb_disconnect (struct usb_device *usbdev, void *ptr)
 		dbg("unregistering netdev: %s",s->net_dev.name);
 		unregister_netdev(&s->net_dev);
 		s->net_dev.name[0] = '\0';
+#if (LINUX_VERSION_CODE < 0x020300)		
+		kfree (s->net_dev.name);
+		s->net_dev.name = NULL;
+#endif
 	}
 	
 	dbg("plusb_disconnect: finished");
+	
+	printk ("plusb_net_disconnect: Finished\n");
+	
 	MOD_DEC_USE_COUNT;
 }
 
@@ -497,8 +507,14 @@ static void *plusb_probe (struct usb_device *usbdev, unsigned int ifnum)
 {
 	plusb_t *s;
 
-	dbg("plusb: probe: vendor id 0x%x, device id 0x%x ifnum:%d",
-	  usbdev->descriptor.idVendor, usbdev->descriptor.idProduct, ifnum);
+	printk ("plusb_probe: Starting\n");
+
+	if (usbdev) {
+		printk("plusb: probe: vendor id 0x%x, device id 0x%x ifnum:%d\n",
+		    usbdev->descriptor.idVendor, usbdev->descriptor.idProduct, ifnum);
+	} else {
+		printk ("plusb: usbdev is NULL!\n");
+	}
 
 	if (usbdev->descriptor.idVendor != 0x067b || usbdev->descriptor.idProduct > 0x1)
 		return NULL;
@@ -507,22 +523,61 @@ static void *plusb_probe (struct usb_device *usbdev, unsigned int ifnum)
 	if (usbdev->descriptor.bNumConfigurations != 1)
 		return NULL;
 
+	printk ("plusb_probe: Looking for Struct\n");
 	s = plusb_find_struct ();
 	if (!s)
 		return NULL;
 
 	s->usbdev = usbdev;
 
+	printk ("plusb_probe: Setting Configuration\n");
 	if (usb_set_configuration (s->usbdev, usbdev->config[0].bConfigurationValue) < 0) {
 		err("set_configuration failed");
 		return NULL;
 	}
 
+	printk ("plusb_probe: Setting Interface\n");	
 	if (usb_set_interface (s->usbdev, 0, 0) < 0) {
 		err("set_interface failed");
 		return NULL;
 	}
 
+	printk ("plusb_probe: Checking device name\n");
+	
+#if (LINUX_VERSION_CODE < 0x020300)
+	{
+		int i;
+		
+		/* EZA: find the device number... we seem to have lost it...*/
+		for (i=0; i<NRPLUSB; i++) {
+			if (&plusb[i] == s)
+				break;
+		}
+	
+		/* EZA: for Kernel version 2.2, the driver is responsible for
+		   allocating this memory. For version 2.4, the rules
+		   have apparently changed, but there is a nifty function
+		   'init_netdev' that might make this easier...  It's in 
+		   ../net/net_init.c - but can we get there from here?  (no)
+		*/
+		if(!s->net_dev.name) {
+			s->net_dev.name = kmalloc(strlen("plusbXXXX"), GFP_KERNEL);
+			sprintf (s->net_dev.name, "plusb%d", i);
+			s->net_dev.init=plusb_net_init;
+			s->net_dev.priv=s;
+			
+			printk ("plusb_probe: Registering Device\n");	
+			if(!register_netdev(&s->net_dev))
+				info("registered: %s", s->net_dev.name);
+			else {
+				err("register_netdev failed");
+				s->net_dev.name[0] = '\0';
+			}
+			printk ("plusb_probe: Connected!\n");
+		}
+	}
+#else
+	/* Kernel version 2.3+ works a little bit differently  */
 	if(!s->net_dev.name[0]) {
 		strcpy(s->net_dev.name, "plusb%d");
 		s->net_dev.init=plusb_net_init;
@@ -534,8 +589,10 @@ static void *plusb_probe (struct usb_device *usbdev, unsigned int ifnum)
 			s->net_dev.name[0] = '\0';
 		}
 	}
-		
+	
+#endif
 	s->connected = 1;
+	printk ("plusb_probe: Set Connected\n");		
 
 	if(s->opened) {
 		dbg("net device already allocated, restarting USB transfers");
@@ -560,19 +617,27 @@ static struct usb_driver plusb_driver =
 static int __init plusb_init (void)
 {
 	unsigned u;
+	
 	dbg("plusb_init");
 	
 	/* initialize struct */
 	for (u = 0; u < NRPLUSB; u++) {
-		plusb_t *s = &plusb[u];
+		plusb_t *s;
+		dbg("plusb_init: u=%ud about to assign s\n", u);
+		s= &plusb[u];
+		dbg("plusb_init: u=%ud about to memset\n", u);
 		memset (s, 0, sizeof (plusb_t));
 		s->bh.routine = (void (*)(void *))plusb_bh;
 		s->bh.data = s;
+		dbg("plusb_init: u=%ud about to init list head\n", u);
 		INIT_LIST_HEAD (&s->tx_skb_list);
 		INIT_LIST_HEAD (&s->free_skb_list);
+		dbg("plusb_init: u=%ud about to init spin lock\n", u);
 		spin_lock_init (&s->lock);
 	}
-
+	
+	dbg ("plusb_init: Initialized structure\n");
+	
 	/* register misc device */
 	usb_register (&plusb_driver);
 

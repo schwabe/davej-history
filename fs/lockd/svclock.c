@@ -26,6 +26,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/nlm.h>
+#include <linux/lockd/xdr4.h>
 #include <linux/lockd/lockd.h>
 
 
@@ -98,9 +99,10 @@ nlmsvc_lookup_block(struct nlm_file *file, struct nlm_lock *lock, int remove)
 				lock->fl.fl_end, lock->fl.fl_type);
 	for (head = &nlm_blocked; (block = *head); head = &block->b_next) {
 		fl = &block->b_call.a_args.lock.fl;
-		dprintk("       check f=%p pd=%d %ld-%ld ty=%d\n",
+		dprintk("lockd: check f=%p pd=%d %ld-%ld ty=%d cookie=%x\n",
 				block->b_file, fl->fl_pid, fl->fl_start,
-				fl->fl_end, fl->fl_type);
+				fl->fl_end, fl->fl_type, 
+				*(u32 *)(&block->b_call.a_args.cookie.data));
 		if (block->b_file == file && nlm_compare_locks(fl, &lock->fl)) {
 			if (remove)
 				*head = block->b_next;
@@ -129,6 +131,8 @@ nlmsvc_find_block(struct nlm_cookie *cookie)
 	struct nlm_block *block;
 
 	for (block = nlm_blocked; block; block = block->b_next) {
+		dprintk("cookie: head of blocked queue %p, block %p\n", 
+			nlm_blocked, block);
 		if (nlm_cookie_match(&block->b_call.a_args.cookie,cookie))
 			break;
 	}
@@ -280,6 +284,7 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 {
 	struct file_lock	*conflock;
 	struct nlm_block	*block;
+	struct inode            *inode = file->f_file.f_dentry->d_inode;
 	int			error;
 
 	dprintk("lockd: nlmsvc_lock(%04x/%ld, ty=%d, pi=%d, %ld-%ld, bl=%d)\n",
@@ -289,6 +294,10 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 				lock->fl.fl_start,
 				lock->fl.fl_end,
 				wait);
+	
+	/* Checking for read only file system */
+	if (IS_RDONLY(inode))
+		return nlm4_rofs;
 
 	/* Lock file against concurrent access */
 	down(&file->f_sema);
@@ -301,7 +310,7 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 again:
 	if (!(conflock = posix_test_lock(&file->f_file, &lock->fl))) {
 		error = posix_lock_file(&file->f_file, &lock->fl, 0);
-
+		
 		if (block)
 			nlmsvc_delete_block(block, 0);
 		up(&file->f_sema);
@@ -309,18 +318,19 @@ again:
 		dprintk("lockd: posix_lock_file returned %d\n", -error);
 		switch(-error) {
 		case 0:
-			return nlm_granted;
-		case EDEADLK:			/* no applicable NLM status */
+			return nlm4_granted;
+		case EDEADLK:		
+			return nlm4_deadlock;
 		case EAGAIN:
-			return nlm_lck_denied;
+			return nlm4_lck_denied;
 		default:			/* includes ENOLCK */
-			return nlm_lck_denied_nolocks;
+			return nlm4_lck_denied_nolocks;
 		}
 	}
 
 	if (!wait) {
 		up(&file->f_sema);
-		return nlm_lck_denied;
+		return nlm4_lck_denied;
 	}
 
 	/* If we don't have a block, create and initialize it. Then
@@ -328,7 +338,7 @@ again:
 	if (block == NULL) {
 		dprintk("lockd: blocking on this lock (allocating).\n");
 		if (!(block = nlmsvc_create_block(rqstp, file, lock, cookie)))
-			return nlm_lck_denied_nolocks;
+			return nlm4_lck_denied_nolocks;
 		goto again;
 	}
 
@@ -343,7 +353,7 @@ again:
 	}
 
 	up(&file->f_sema);
-	return nlm_lck_blocked;
+	return nlm4_lck_blocked;
 }
 
 /*
@@ -364,14 +374,15 @@ nlmsvc_testlock(struct nlm_file *file, struct nlm_lock *lock,
 
 	if ((fl = posix_test_lock(&file->f_file, &lock->fl)) != NULL) {
 		dprintk("lockd: conflicting lock(ty=%d, %ld-%ld)\n",
-				fl->fl_type, fl->fl_start, fl->fl_end);
+				fl->fl_type, fl->fl_start, fl->fl_end );
+
 		conflock->caller = "somehost";	/* FIXME */
 		conflock->oh.len = 0;		/* don't return OH info */
 		conflock->fl = *fl;
-		return nlm_lck_denied;
+		return nlm4_lck_denied;
 	}
 
-	return nlm_granted;
+	return nlm4_granted;
 }
 
 /*
@@ -399,7 +410,7 @@ nlmsvc_unlock(struct nlm_file *file, struct nlm_lock *lock)
 	lock->fl.fl_type = F_UNLCK;
 	error = posix_lock_file(&file->f_file, &lock->fl, 0);
 
-	return (error < 0)? nlm_lck_denied_nolocks : nlm_granted;
+	return (error < 0)? nlm4_lck_denied_nolocks : nlm4_granted;
 }
 
 /*
@@ -425,7 +436,7 @@ nlmsvc_cancel_blocked(struct nlm_file *file, struct nlm_lock *lock)
 	if ((block = nlmsvc_lookup_block(file, lock, 1)) != NULL)
 		nlmsvc_delete_block(block, 1);
 	up(&file->f_sema);
-	return nlm_granted;
+	return nlm4_granted;
 }
 
 /*
@@ -541,6 +552,8 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	unsigned long		timeout;
 
 	dprintk("lockd: GRANT_MSG RPC callback\n");
+	dprintk("callback: looking for cookie %x \n", 
+		*(u32 *)(call->a_args.cookie.data));
 	if (!(block = nlmsvc_find_block(&call->a_args.cookie))) {
 		dprintk("lockd: no block for cookie %x\n", *(u32 *)(call->a_args.cookie.data));
 		return;
@@ -616,7 +629,7 @@ nlmsvc_retry_blocked(void)
 	dprintk("nlmsvc_retry_blocked(%p, when=%ld)\n",
 			nlm_blocked,
 			nlm_blocked? nlm_blocked->b_when : 0);
-	while ((block = nlm_blocked) && block->b_when < jiffies) {
+	while ((block = nlm_blocked) && block->b_when <= jiffies) {
 		dprintk("nlmsvc_retry_blocked(%p, when=%ld, done=%d)\n",
 			block, block->b_when, block->b_done);
 		if (block->b_done)
@@ -627,6 +640,5 @@ nlmsvc_retry_blocked(void)
 
 	if ((block = nlm_blocked) && block->b_when != NLM_NEVER)
 		return (block->b_when - jiffies);
-
 	return MAX_SCHEDULE_TIMEOUT;
 }

@@ -33,6 +33,24 @@ static inline long kernel_thread (int (*fn) (void *), void *arg, unsigned long f
 #define netif_queue_stopped(dev)	dev->tbusy
 #define netif_running(dev)		dev->start
 
+/* hot-(un)plugging stuff */
+static inline int netif_device_present(struct net_device *dev)
+{
+	return	test_bit(0, &dev->start);
+}
+
+static inline void netif_device_detach(struct net_device *dev)
+{
+	if ( test_and_clear_bit(0, &dev->start) )
+		netif_stop_queue(dev);
+}
+
+static inline void netif_device_attach(struct net_device *dev)
+{
+	if ( !test_and_set_bit(0, &dev->start) )
+		netif_wake_queue(dev);
+}
+
 #define NET_XMIT_SUCCESS	0
 #define NET_XMIT_DROP		1
 #define NET_XMIT_CN		2

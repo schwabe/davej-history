@@ -10,7 +10,7 @@
 SUB_DIRS     := block char net misc sound
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp \
-				macintosh video dio zorro fc4 usb telephony i2o
+				macintosh video dio zorro fc4 nubus usb telephony i2o
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio

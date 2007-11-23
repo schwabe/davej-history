@@ -4,16 +4,17 @@
  * Public declarations for NFS exports. The definitions for the
  * syscall interface are in nfsctl.h
  *
- * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #ifndef NFSD_EXPORT_H
 #define NFSD_EXPORT_H
 
-#include <linux/types.h>
-#include <linux/socket.h>
-#include <linux/in.h>
-#include <linux/fs.h>
+#include <asm/types.h>
+#ifdef __KERNEL__
+# include <linux/types.h>
+# include <linux/in.h>
+#endif
 
 /*
  * Important limits for the exports stuff.
@@ -34,8 +35,10 @@
 #define NFSEXP_UIDMAP		0x0040
 #define NFSEXP_KERBEROS		0x0080		/* not available */
 #define NFSEXP_SUNSECURE	0x0100
-#define NFSEXP_CROSSMNT		0x0200		/* not available */
-#define NFSEXP_ALLFLAGS		0x03FF
+#define NFSEXP_CROSSMNT		0x0200
+#define NFSEXP_NOSUBTREECHECK	0x0400
+#define	NFSEXP_NOAUTHNLM	0x0800		/* Don't authenticate NLM requests - just trust */
+#define NFSEXP_ALLFLAGS		0x0FFF
 
 
 #ifdef __KERNEL__

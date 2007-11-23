@@ -41,6 +41,9 @@ unsigned long m68k_machtype;
 unsigned long m68k_cputype;
 unsigned long m68k_fputype;
 unsigned long m68k_mmutype;
+#ifdef CONFIG_VME
+unsigned long vme_brdtype;
+#endif
 
 int m68k_is040or060 = 0;
 
@@ -76,6 +79,8 @@ void (*mach_gettod) (int*, int*, int*, int*, int*, int*);
 int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
 int (*mach_set_clock_mmss) (unsigned long) = NULL;
 void (*mach_reset)( void );
+void (*mach_halt)( void ) = NULL;
+void (*mach_power_off)( void ) = NULL;
 long mach_max_dma_address = 0x00ffffff; /* default set to the lower 16MB */
 #if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) || defined(CONFIG_BLK_DEV_FD)
 void (*mach_floppy_setup) (char *, int *) __initdata = NULL;
@@ -114,6 +119,9 @@ extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);
 extern int mac_parse_bootinfo(const struct bi_record *);
 extern int q40_parse_bootinfo(const struct bi_record *);
+extern int bvme6000_parse_bootinfo(const struct bi_record *);
+extern int mvme16x_parse_bootinfo(const struct bi_record *);
+extern int mvme147_parse_bootinfo(const struct bi_record *);
 
 extern void config_amiga(void);
 extern void config_atari(void);
@@ -171,6 +179,12 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 		    unknown = mac_parse_bootinfo(record);
 		else if (MACH_IS_Q40)
 		    unknown = q40_parse_bootinfo(record);
+		else if (MACH_IS_BVME6000)
+		    unknown = bvme6000_parse_bootinfo(record);
+		else if (MACH_IS_MVME16x)
+		    unknown = mvme16x_parse_bootinfo(record);
+		else if (MACH_IS_MVME147)
+		    unknown = mvme147_parse_bootinfo(record);
 		else
 		    unknown = 1;
 	}
@@ -208,10 +222,12 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	base_trap_init();
 
 	/* clear the fpu if we have one */
+#ifndef CONFIG_FPU_EMU_ONLY
 	if (m68k_fputype & (FPU_68881|FPU_68882|FPU_68040|FPU_68060)) {
 		volatile int zero = 0;
 		asm __volatile__ ("frestore %0" : : "m" (zero));
 	}
+#endif
 
 	init_task.mm->start_code = PAGE_OFFSET;
 	init_task.mm->end_code = (unsigned long) &_etext;

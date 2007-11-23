@@ -44,30 +44,16 @@ static void a2091_intr (int irq, void *dummy, struct pt_regs *fp)
 	    continue;
 
 	if (status & ISTR_INTS)
-	{
-	    /* disable PORTS interrupt */
-	    custom.intena = IF_PORTS;
 	    wd33c93_intr (instance);
-	    /* enable PORTS interrupt */
-	    custom.intena = IF_SETCLR | IF_PORTS;
-	}
     }
-}
-
-static void do_a2091_intr (int irq, void *dummy, struct pt_regs *fp)
-{
-    unsigned long flags;
-
-    spin_lock_irqsave(&io_request_lock, flags);
-    a2091_intr(irq, dummy, fp);
-    spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
 {
     unsigned short cntr = CNTR_PDMD | CNTR_INTEN;
-    unsigned long addr = VTOP(cmd->SCp.ptr);
+    unsigned long addr = virt_to_bus(cmd->SCp.ptr);
     struct Scsi_Host *instance = cmd->host;
+    static int scsi_alloc_out_of_range = 0;
 
     /* don't allow DMA if the physical address is bad */
     if (addr & A2091_XFER_MASK ||
@@ -75,41 +61,55 @@ static int dma_setup (Scsi_Cmnd *cmd, int dir_in)
     {
 	HDATA(instance)->dma_bounce_len = (cmd->SCp.this_residual + 511)
 	    & ~0x1ff;
-	HDATA(instance)->dma_bounce_buffer =
-	    scsi_malloc (HDATA(instance)->dma_bounce_len);
-	
-	/* can't allocate memory; use PIO */
-	if (!HDATA(instance)->dma_bounce_buffer) {
-	    HDATA(instance)->dma_bounce_len = 0;
-	    return 1;
+ 	if( !scsi_alloc_out_of_range ) {
+	    HDATA(cmd->host)->dma_bounce_buffer =
+		scsi_malloc (HDATA(cmd->host)->dma_bounce_len);
+	    HDATA(cmd->host)->dma_buffer_pool = BUF_SCSI_ALLOCED;
 	}
 
-	/* get the physical address of the bounce buffer */
-	addr = VTOP(HDATA(instance)->dma_bounce_buffer);
+	if ( scsi_alloc_out_of_range || !HDATA(cmd->host)->dma_bounce_buffer) {
+	    HDATA(cmd->host)->dma_bounce_buffer =
+		amiga_chip_alloc(HDATA(cmd->host)->dma_bounce_len);
 
-	/* the bounce buffer may not be in the first 16M of physmem */
+	    if(!HDATA(cmd->host)->dma_bounce_buffer)
+	    {
+		HDATA(cmd->host)->dma_bounce_len = 0;
+		return 1;
+	    }
+
+	    HDATA(cmd->host)->dma_buffer_pool = BUF_CHIP_ALLOCED;
+	}
+
+	/* check if the address of the bounce buffer is OK */
+	addr = virt_to_bus(HDATA(cmd->host)->dma_bounce_buffer);
+
 	if (addr & A2091_XFER_MASK) {
-	    /* we could use chipmem... maybe later */
-	    scsi_free (HDATA(instance)->dma_bounce_buffer,
-		       HDATA(instance)->dma_bounce_len);
-	    HDATA(instance)->dma_bounce_buffer = NULL;
-	    HDATA(instance)->dma_bounce_len = 0;
-	    return 1;
-	}
+	    /* fall back to Chip RAM if address out of range */
+	    if( HDATA(cmd->host)->dma_buffer_pool == BUF_SCSI_ALLOCED) {
+		scsi_free (HDATA(cmd->host)->dma_bounce_buffer,
+			   HDATA(cmd->host)->dma_bounce_len);
+		scsi_alloc_out_of_range = 1;
+	    } else {
+		amiga_chip_free (HDATA(cmd->host)->dma_bounce_buffer);
+            }
+		
+	    HDATA(cmd->host)->dma_bounce_buffer =
+		amiga_chip_alloc(HDATA(cmd->host)->dma_bounce_len);
 
+	    if(!HDATA(cmd->host)->dma_bounce_buffer)
+	    {
+		HDATA(cmd->host)->dma_bounce_len = 0;
+		return 1;
+	    }
+
+	    addr = virt_to_bus(HDATA(cmd->host)->dma_bounce_buffer);
+	    HDATA(cmd->host)->dma_buffer_pool = BUF_CHIP_ALLOCED;
+	}
+	    
 	if (!dir_in) {
 	    /* copy to bounce buffer for a write */
-	    if (cmd->use_sg)
-#if 0
-		panic ("scsi%ddma: incomplete s/g support",
-		       instance->host_no);
-#else
-		memcpy (HDATA(instance)->dma_bounce_buffer,
-			cmd->SCp.ptr, cmd->SCp.this_residual);
-#endif
-	    else
-		memcpy (HDATA(instance)->dma_bounce_buffer,
-			cmd->request_buffer, cmd->request_bufflen);
+	    memcpy (HDATA(cmd->host)->dma_bounce_buffer,
+		    cmd->SCp.ptr, cmd->SCp.this_residual);
 	}
     }
 
@@ -169,32 +169,19 @@ static void dma_stop (struct Scsi_Host *instance, Scsi_Cmnd *SCpnt,
 
     /* copy from a bounce buffer, if necessary */
     if (status && HDATA(instance)->dma_bounce_buffer) {
-	if (SCpnt && SCpnt->use_sg) {
-#if 0
-	    panic ("scsi%d: incomplete s/g support",
-		   instance->host_no);
-#else
-	    if( HDATA(instance)->dma_dir )
-		memcpy (SCpnt->SCp.ptr, 
-			HDATA(instance)->dma_bounce_buffer,
-			SCpnt->SCp.this_residual);
+	if (HDATA(instance)->dma_dir && SCpnt)
+	    memcpy (SCpnt->SCp.ptr, 
+		    HDATA(instance)->dma_bounce_buffer,
+		    SCpnt->SCp.this_residual);
+	
+	if (HDATA(instance)->dma_buffer_pool == BUF_SCSI_ALLOCED)
 	    scsi_free (HDATA(instance)->dma_bounce_buffer,
 		       HDATA(instance)->dma_bounce_len);
-	    HDATA(instance)->dma_bounce_buffer = NULL;
-	    HDATA(instance)->dma_bounce_len = 0;
-	    
-#endif
-	} else {
-	    if (HDATA(instance)->dma_dir && SCpnt)
-		memcpy (SCpnt->request_buffer,
-			HDATA(instance)->dma_bounce_buffer,
-			SCpnt->request_bufflen);
-
-	    scsi_free (HDATA(instance)->dma_bounce_buffer,
-		       HDATA(instance)->dma_bounce_len);
-	    HDATA(instance)->dma_bounce_buffer = NULL;
-	    HDATA(instance)->dma_bounce_len = 0;
-	}
+	else
+	    amiga_chip_free(HDATA(instance)->dma_bounce_buffer);
+	
+	HDATA(instance)->dma_bounce_buffer = NULL;
+	HDATA(instance)->dma_bounce_len = 0;
     }
 }
 
@@ -229,7 +216,7 @@ __initfunc(int a2091_detect(Scsi_Host_Template *tpnt))
 	if (num_a2091++ == 0) {
 	    first_instance = instance;
 	    a2091_template = instance->hostt;
-	    request_irq(IRQ_AMIGA_PORTS, do_a2091_intr, 0, "A2091 SCSI", a2091_intr);
+	    request_irq(IRQ_AMIGA_PORTS, a2091_intr, 0, "A2091 SCSI", a2091_intr);
 	}
 	DMA(instance)->CNTR = CNTR_PDMD | CNTR_INTEN;
 	zorro_config_board(key, 0);

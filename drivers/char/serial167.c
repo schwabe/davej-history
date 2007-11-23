@@ -42,7 +42,7 @@
 #include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/interrupt.h>
-#include <linux/serial.h>
+#include <linux/m68kserial.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
@@ -2788,6 +2788,57 @@ void serial167_write(struct console *co, const char *str, unsigned count)
 	base_addr[CyIER] = ier;
 
 	restore_flags(flags);
+}
+
+/* This is a hack; if there are multiple chars waiting in the chip we
+ * discard all but the last one, and return that.  The cd2401 is not really
+ * designed to be driven in polled mode.
+ */
+
+int serial167_wait_key(struct console *co)
+{
+	volatile unsigned char *base_addr = (u_char *)BASE_ADDR;
+	unsigned long flags;
+	volatile u_char sink;
+	u_char ier;
+	int port;
+	int keypress = 0;
+
+	save_flags(flags); cli();
+
+	/* Ensure receiver is enabled! */
+
+	port = 0;
+	base_addr[CyCAR] = (u_char)port;
+	while (base_addr[CyCCR])
+		;
+	base_addr[CyCCR] = CyENB_RCVR;
+	ier = base_addr[CyIER];
+	base_addr[CyIER] = CyRxData;
+
+	while (!keypress) {
+		if (pcc2chip[PccSCCRICR] & 0x20)
+		{
+			/* We have an Rx int. Acknowledge it */
+			sink = pcc2chip[PccRPIACKR];
+			if ((base_addr[CyLICR] >> 2) == port) {
+				int cnt = base_addr[CyRFOC];
+				while (cnt-- > 0)
+				{
+					keypress = base_addr[CyRDR];
+				}
+				base_addr[CyREOIR] = 0;
+			}
+			else
+				base_addr[CyREOIR] = CyNOTRANS;
+		}
+	}
+
+	base_addr[CyIER] = ier;
+
+	restore_flags(flags);
+
+	return keypress;
 }
 
 #ifdef CONFIG_REMOTE_DEBUG

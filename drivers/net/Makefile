@@ -112,6 +112,11 @@ L_OBJS += daynaport.o
 CONFIG_8390_BUILTIN = y
 endif
 
+ifeq ($(CONFIG_MAC8390), y)
+L_OBJS += mac8390.o
+CONFIG_8390_BUILTIN = y
+endif
+
 ifeq ($(CONFIG_APNE),y)
 L_OBJS += apne.o
 CONFIG_8390_BUILTIN = y
@@ -976,6 +981,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_XPEED),y)
+  SUB_DIRS += xpds
+  MOD_IN_SUB_DIRS += xpds
+  L_OBJS += xpds/xpds-fr.o
+else
+  ifeq ($(CONFIG_XPEED),m)
+    MOD_IN_SUB_DIRS += xpds
+  endif
+endif
+
 # If anything built-in uses Z85230, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 
@@ -1101,6 +1116,17 @@ else
   M_OBJS += hplance.o
   endif
 endif
+
+ifeq ($(CONFIG_MVME147_NET),y)
+L_OBJS += mvme147.o
+CONFIG_7990_BUILTIN = y
+else
+  ifeq ($(CONFIG_MVME147_NET),m)
+  CONFIG_7990_MODULE = y
+  M_OBJS += mvme147.o
+  endif
+endif
+
 # If we need generic LANCE support, either in the kernel or as a module,
 # build it in the appropriate way.
 ifdef CONFIG_7990_BUILTIN
@@ -1233,6 +1259,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MAC89x0),y)
+L_OBJS += mac89x0.o
+else
+  ifeq ($(CONFIG_MAC89x0),m)
+  M_OBJS += mac89x0.o
+  endif
+endif
+
 ifeq ($(CONFIG_LTPC),y)
 L_OBJS += ltpc.o
 else
@@ -1270,6 +1304,18 @@ L_OBJS += mace.o
 else
   ifeq ($(CONFIG_MACE),m)
   M_OBJS += mace.o
+  endif
+endif
+
+ifeq ($(CONFIG_MACMACE),y)
+L_OBJS += macmace.o
+endif
+
+ifeq ($(CONFIG_MACSONIC),y)
+L_OBJS += macsonic.o
+else
+  ifeq ($(CONFIG_MACSONIC),m)
+  M_OBJS += macsonic.o
   endif
 endif
 

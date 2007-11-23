@@ -176,6 +176,7 @@ MODULE_PARM(setup_strings, "s");
 static inline uchar read_wd33c93(wd33c93_regs *regp,uchar reg_num)
 {
    regp->SASR = reg_num;
+   mb();
    return(regp->SCMD);
 }
 
@@ -186,14 +187,18 @@ static inline uchar read_wd33c93(wd33c93_regs *regp,uchar reg_num)
 static inline void write_wd33c93(wd33c93_regs *regp,uchar reg_num, uchar value)
 {
    regp->SASR = reg_num;
+   mb();
    regp->SCMD = value;
+   mb();
 }
 
 
 static inline void write_wd33c93_cmd(wd33c93_regs *regp, uchar cmd)
 {
    regp->SASR = WD_COMMAND;
+   mb();
    regp->SCMD = cmd;
+   mb();
 }
 
 
@@ -216,9 +221,11 @@ uchar x = 0;
 static void write_wd33c93_count(wd33c93_regs *regp,unsigned long value)
 {
    regp->SASR = WD_TRANSFER_COUNT_MSB;
+   mb();
    regp->SCMD = value >> 16;
    regp->SCMD = value >> 8;
    regp->SCMD = value;
+   mb();
 }
 
 
@@ -227,9 +234,11 @@ static unsigned long read_wd33c93_count(wd33c93_regs *regp)
 unsigned long value;
 
    regp->SASR = WD_TRANSFER_COUNT_MSB;
+   mb();
    value = regp->SCMD << 16;
    value |= regp->SCMD << 8;
    value |= regp->SCMD;
+   mb();
    return value;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.159.2.7 2000/01/21 01:05:35 davem Exp $
+/* $Id: entry.S,v 1.159.2.8 2000/10/05 04:17:17 anton Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1807,13 +1807,13 @@ C_LABEL(fpload):
 C_LABEL(udelay):
 	save	%sp, -REGWIN_SZ, %sp
 	mov	%i0, %o0
-	sethi	%hi(0x10c6), %o1
+	sethi	%hi(0x10c600), %o1
 	call	.umul
-	 or	%o1, %lo(0x10c6), %o1
+	 or	%o1, %lo(0x10c600), %o1
 #ifndef __SMP__
-	sethi	%hi(C_LABEL(loops_per_sec)), %o3
+	sethi	%hi(C_LABEL(loops_per_jiffy)), %o3
 	call	.umul
-	 ld	[%o3 + %lo(C_LABEL(loops_per_sec))], %o1
+	 ld	[%o3 + %lo(C_LABEL(loops_per_jiffy))], %o1
 #else
 	GET_PROCESSOR_OFFSET(o4, o2)
 	set	C_LABEL(cpu_data), %o3

@@ -12,13 +12,18 @@
 /*
  * This should be the same as the max(NUM_X_SOURCES) for all the
  * different m68k hosts compiled into the kernel.
- * Currently the Atari has 72 and the Amiga 24, but if both are
- * supported in the kernel it is better to make room for 72.
+ * Currently the Atari has 72, Mac has 64 and the Amiga 24; this
+ * makes sure there is room for the largest table needed by the
+ * architectures supported by the kernel.
  */
 #if defined(CONFIG_ATARI)
 #define NR_IRQS (72+SYS_IRQS)
 #else
+#if defined(CONFIG_MAC)
+#define NR_IRQS (64+SYS_IRQS)
+#else
 #define NR_IRQS (24+SYS_IRQS)
+#endif
 #endif
 
 /*
@@ -69,6 +74,7 @@ static __inline__ int irq_cannonicalize(int irq)
 
 extern void (*enable_irq)(unsigned int);
 extern void (*disable_irq)(unsigned int);
+#define disable_irq_nosync(i) disable_irq(i)
 
 extern int sys_request_irq(unsigned int, 
 	void (*)(int, void *, struct pt_regs *), 

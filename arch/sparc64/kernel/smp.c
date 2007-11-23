@@ -78,8 +78,8 @@ int smp_bogo(char *buf)
 		if(cpu_present_map & (1UL << i))
 			len += sprintf(buf + len,
 				       "Cpu%dBogo\t: %lu.%02lu\n",
-				       i, cpu_data[i].udelay_val / 500000,
-				       (cpu_data[i].udelay_val / 5000) % 100);
+				       i, cpu_data[i].udelay_val / (500000/HZ),
+				       (cpu_data[i].udelay_val / (5000/HZ)) % 100);
 	return len;
 }
 
@@ -91,7 +91,7 @@ __initfunc(void smp_store_cpu_info(int id))
 	cpu_data[id].bh_count			= 0;
 	/* multiplier and counter set by
 	   smp_setup_percpu_timer()  */
-	cpu_data[id].udelay_val			= loops_per_sec;
+	cpu_data[id].udelay_val			= loops_per_jiffy;
 
 	cpu_data[id].pgcache_size		= 0;
 	cpu_data[id].pte_cache[0]		= NULL;
@@ -280,8 +280,8 @@ __initfunc(void smp_boot_cpus(void))
 		}
 		printk("Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
 		       cpucount + 1,
-		       (bogosum + 2500)/500000,
-		       ((bogosum + 2500)/5000)%100);
+		       (bogosum + 2500)/(500000/HZ),
+		       ((bogosum + 2500)/(5000/HZ))%100);
 		smp_activated = 1;
 		smp_num_cpus = cpucount + 1;
 	}

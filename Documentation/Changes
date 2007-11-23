@@ -224,13 +224,14 @@ the latest stable public release.  If you already have GCC 2.7.2 on
 your system, you don't have to upgrade just so the kernel will work
 (though feel free to upgrade if you want the gcc bug fixes).
 
-   Note that the latest compilers (egcs, pgcc, gcc 2.8) may do Bad
+   Note that the latest compilers (pgcc, gcc 2.95) may do Bad
 Things while compiling your kernel, particularly if absurd
-optimizations (like -O9) are used.  Caveat emptor.  Currently, the only
-C compiler available in a binary distribution is egcs.  Version 1.1.2
-seems okay; if you have to have a binary, you may be successful using
-that.  In general, however, gcc-2.7.2.3 is known to be stable, while
-egcs and others have not been as thoroughly tested yet.
+optimizations (like -O9) are used.  Caveat emptor. In general, however, 
+gcc-2.7.2.3 and egcs 1.1.2 are known to be stable on x86, while gcc 2.95 and 
+others have not been as thoroughly tested yet.
+
+For non x86 platforms consult the platform specific information for
+recommended compilers.
 
 Networking Changes
 ==================
@@ -651,9 +652,9 @@ The user-land 2.2beta40 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/dontuse/nfs-server-2.2beta40.tar.gz
 ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/dontuse/nfs-server-2.2beta40.tar.gz
 
-The kernel-level 1.4.7 release:
-ftp://ftp.varesearch.com/pub/support/hjl/knfsd/knfsd-1.4.7.tar.gz
-ftp://ftp.kernel.org/pub/linux/devel/gcc/knfsd-1.4.7.tar.gz
+
+The kernel-level nfs-utils-0.1.6 release:
+ftp://nfs.sourceforge.net/pub/nfs/nfs-utils-0.1.6.tar.gz
 
 Net-tools
 =========

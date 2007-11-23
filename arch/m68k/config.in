@@ -58,6 +58,13 @@ bool '68020 support' CONFIG_M68020
 bool '68030 support' CONFIG_M68030
 bool '68040 support' CONFIG_M68040
 bool '68060 support' CONFIG_M68060
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Math emulation support' CONFIG_FPU_EMU
+  if [ "$CONFIG_FPU_EMU" = "y" ]; then
+    bool 'Math emulation extra precision' CONFIG_FPU_EMU_EXTRAPREC
+    bool 'Math emulation only kernel' CONFIG_FPU_EMU_ONLY
+  fi
+fi
 bool 'Advanced configuration options' CONFIG_ADVANCED
 if [ "$CONFIG_ADVANCED" = "y" ]; then
   bool 'Use read-modify-write instructions' CONFIG_RMW_INSNS
@@ -115,7 +122,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
        fi
     fi
   fi
-  if [ "$CONFIG_ATARI" == "y" ]; then
+  if [ "$CONFIG_ATARI" = "y" ]; then
     dep_tristate '    Atari builtin port' CONFIG_PARPORT_ATARI $CONFIG_PARPORT
   fi
 fi
@@ -190,8 +197,8 @@ if [ "$CONFIG_ATARI" = "y" ]; then
   fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-  bool 'MAC NCR5380 SCSI' CONFIG_MAC_SCSI
-  dep_tristate 'MAC NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP $CONFIG_SCSI
+  tristate 'Macintosh NCR5380 SCSI' CONFIG_MAC_SCSI
+  dep_tristate 'Macintosh NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP $CONFIG_SCSI
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 
@@ -251,9 +258,15 @@ if [ "$CONFIG_APOLLO" = "y" ] ; then
   tristate 'Apollo 3c505 support' CONFIG_APOLLO_ELPLUS
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-  bool 'Mac NS 8390 based ethernet cards' CONFIG_DAYNAPORT
-#  bool 'Macintosh (AV) onboard MACE ethernet' CONFIG_MACMACE
-  bool 'Macintosh (Quadra) onboard SONIC ethernet' CONFIG_MACSONIC
+  tristate 'Macintosh NS 8390 based ethernet cards (new driver)' CONFIG_MAC8390
+  if [ "$CONFIG_MAC8390" = "n" ]; then
+    bool 'Macintosh NS 8390 based ethernet cards (old driver)' CONFIG_DAYNAPORT
+  fi
+  tristate 'Macintosh SONIC based ethernet (onboard, NuBus, LC, CS)' CONFIG_MACSONIC
+  tristate 'Macintosh SMC 9194 based ethernet cards' CONFIG_SMC9194
+  tristate 'Macintosh CS89x0 based ethernet cards' CONFIG_MAC89x0
+  bool 'Macintosh (AV) onboard MACE ethernet' CONFIG_MACMACE
+
 fi
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME147" = "y" ]; then
   tristate 'MVME147 (Lance) Ethernet support' CONFIG_MVME147_NET
@@ -336,7 +349,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari mouse support' CONFIG_ATARIMOUSE
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-   bool 'Mac ADB mouse support' CONFIG_ADBMOUSE
+   bool 'Macintosh ADB mouse support' CONFIG_ADBMOUSE
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
@@ -361,10 +374,13 @@ if [ "$CONFIG_PARPORT" = "n" ]; then
     dep_tristate 'GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
     dep_tristate 'GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
     tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool 'HyperCom1 serial support (EXPERIMENTAL)' CONFIG_HYPERCOM1
+    fi
   fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
-  bool 'Mac SCC serial support' CONFIG_MAC_SCC
+  bool 'Macintosh SCC serial support' CONFIG_MAC_SCC
 fi
 if [ "$CONFIG_HP300" = "y" -a "$CONFIG_DIO" = "y" ]; then
   tristate 'HP DCA serial support' CONFIG_HPDCA

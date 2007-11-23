@@ -19,27 +19,16 @@
 /*
  * USB core
  */
+extern int usb_hub_init(void);
+extern void usb_hub_cleanup(void);
+extern int usb_major_init(void);
+extern void usb_major_cleanup(void);
 
-int usb_hub_init(void);
-void usb_hub_cleanup(void);
-int usb_major_init(void);
-void usb_major_cleanup(void);
-
-
-/*
- * HCI drivers
- */
-
-int uhci_init(void);
-int ohci_hcd_init(void);
-
-#ifdef MODULE
 
 /*
  * Cleanup
  */
-
-void cleanup_module(void)
+static void __exit usb_exit(void)
 {
 	usb_major_cleanup();
 	usbdevfs_cleanup();
@@ -49,20 +38,14 @@ void cleanup_module(void)
 /*
  * Init
  */
-
-int init_module(void)
-#else
 int usb_init(void)
-#endif
 {
 	usb_major_init();
 	usbdevfs_init();
 	usb_hub_init();
 
-#ifndef CONFIG_USB_MODULE
-#ifdef CONFIG_USB_OHCI
-	ohci_hcd_init(); 
-#endif
-#endif
 	return 0;
 }
+
+module_init (usb_init);
+module_exit (usb_exit);

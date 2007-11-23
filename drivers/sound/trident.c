@@ -115,6 +115,10 @@
 #include <asm/hardirq.h>
 #include <linux/bitops.h>
 
+#if defined CONFIG_ALPHA_NAUTILUS || CONFIG_ALPHA_GENERIC
+#include <asm/hwrpb.h>
+#endif
+
 #include "dm.h"
 
 #include "trident.h"
@@ -2899,13 +2903,23 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 	outl(0x00, TRID_REG(card, T4D_MUSICVOL_WAVEVOL));
 
 	if (card->pci_id == PCI_DEVICE_ID_ALI_5451) {
-		/* edited by HMSEO for GT sound */
-#ifdef CONFIG_ALPHA_NAUTILUS
-		u16 ac97_data = trident_ac97_get (card->ac97_codec[0], AC97_POWER_CONTROL);
-		trident_ac97_set (card->ac97_codec[0], AC97_POWER_CONTROL,
-				  ac97_data | ALI_EAPD_POWER_DOWN);
-#endif
-		/* edited by HMSEO for GT sound*/
+               /* edited by HMSEO for GT sound
+               09-20-00 changed by Rich Payne (rdp@alphalinux.org) to take into account
+		generic kernels running on Nautilus */
+
+#if defined CONFIG_ALPHA_NAUTILUS || CONFIG_ALPHA_GENERIC
+		u16 ac97_data;
+		extern struct hwrpb_struct *hwrpb;
+
+		if ((hwrpb->sys_type) == 201) {
+			printk(KERN_INFO "trident: Running on Alpha system type Nautilus\n");
+                	ac97_data = trident_ac97_get (card->ac97_codec[0], AC97_POWER_CONTROL);
+                	trident_ac97_set (card->ac97_codec[0], AC97_POWER_CONTROL,
+                                  ac97_data | ALI_EAPD_POWER_DOWN);
+       		}
+#endif                
+	/* edited by HMSEO for GT sound*/
+
 	}
 
 	/* Enable Address Engine Interrupts */

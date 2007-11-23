@@ -19,9 +19,11 @@ extern int esp_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int esp_command(Scsi_Cmnd *);
 extern int esp_abort(Scsi_Cmnd *);
 extern int esp_reset(Scsi_Cmnd *, unsigned int);
-
+extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
+			int hostno, int inout);
 
 #define SCSI_MAC_ESP      { proc_dir:		&proc_scsi_esp, \
+			    proc_info:		esp_proc_info, \
 			    name:		"Mac 53C9x SCSI", \
 			    detect:		mac_esp_detect, \
 			    release:		NULL, \

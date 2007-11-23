@@ -107,7 +107,7 @@ inex:
 	bnes		not_fmt40
 	fmovel		%fpsr,-(%sp)
 	btstb		#E1,E_BYTE(%a6)		|test for E1 set
-	beqs		not_b1232
+	beq		not_b1232
 	btstb		#snan_bit,2(%sp) |test for snan
 	beq		inex_ckofl
 	addl		#4,%sp

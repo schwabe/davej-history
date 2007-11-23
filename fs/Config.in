@@ -69,14 +69,15 @@ comment 'Network File Systems'
 if [ "$CONFIG_INET" = "y" ]; then
   tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
   tristate 'NFS filesystem support' CONFIG_NFS_FS
+  if [ "$CONFIG_NFS_FS" != "n" ]; then
+    bool '   NFS Version 3 filesystem support' CONFIG_NFS_V3
+  fi
   if [ "$CONFIG_NFS_FS" = "y" -a "$CONFIG_IP_PNP" = "y" ]; then
     bool '   Root file system on NFS' CONFIG_ROOT_NFS
   fi
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'NFS server support' CONFIG_NFSD
-  fi
-  if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_NFSD" != "n" ]; then
-    bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
+  tristate 'NFS server support' CONFIG_NFSD
+  if [ "$CONFIG_NFSD" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool '   NFS Version 3 server support (EXPERIMENTAL)' CONFIG_NFSD_V3
   fi
   if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
     define_bool CONFIG_SUNRPC y
@@ -89,9 +90,6 @@ if [ "$CONFIG_INET" = "y" ]; then
       define_bool CONFIG_SUNRPC n
       define_bool CONFIG_LOCKD n
     fi
-  fi
-  if [ "$CONFIG_NFS_FS" != "n" -o "$CONFIG_NFSD" != "n" ]; then
-    bool '   NFS Version 3' CONFIG_NFS_V3
   fi
   tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
   if [ "$CONFIG_SMB_FS" != "n" ]; then

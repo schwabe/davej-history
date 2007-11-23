@@ -313,9 +313,9 @@ int get_cpuinfo(char *buffer)
 			       (GET_PVR & 0xff00) >> 8, GET_PVR & 0xff);
 
 		len += sprintf(buffer+len, "bogomips\t: %lu.%02lu\n",
-			       (CD(loops_per_sec)+2500)/500000,
-			       (CD(loops_per_sec)+2500)/5000 % 100);
-		bogosum += CD(loops_per_sec);
+			       (CD(loops_per_jiffy*HZ)+2500)/500000,
+			       (CD(loops_per_jiffy*HZ)+2500)/5000 % 100);
+		bogosum += CD(loops_per_jiffy);
 	}
 
 #ifdef __SMP__
@@ -713,7 +713,7 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 	id->word123        = __le16_to_cpu(id->word123);
 	id->word124        = __le16_to_cpu(id->word124);
 	id->word125        = __le16_to_cpu(id->word125);
-	id->word126        = __le16_to_cpu(id->word126);
+	id->last_lun       = __le16_to_cpu(id->last_lun);
 	id->word127        = __le16_to_cpu(id->word127);
 	id->security       = __le16_to_cpu(id->security);
 	for (i=0; i<127; i++)

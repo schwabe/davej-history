@@ -47,14 +47,14 @@ void ext2_put_inode (struct inode * inode)
  */
 void ext2_delete_inode (struct inode * inode)
 {
-	if (inode->i_ino == EXT2_ACL_IDX_INO ||
+	if (is_bad_inode(inode) ||
+	    inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
 	inode->u.ext2_i.i_dtime	= CURRENT_TIME;
-	/* When we delete an inode, we increment its i_version. If it
-	   is ever read in from disk again, it will have a different
-	   i_version. */
-	inode->u.ext2_i.i_version++;
+	/* When we delete an inode, we increment its i_generation.
+	   If it is read in from disk again, the generation will differ. */
+	inode->i_generation++;
 	mark_inode_dirty(inode);
 	ext2_update_inode(inode, IS_SYNC(inode));
 	inode->i_size = 0;
@@ -512,9 +512,20 @@ void ext2_read_inode (struct inode * inode)
 	inode->i_ctime = le32_to_cpu(raw_inode->i_ctime);
 	inode->i_mtime = le32_to_cpu(raw_inode->i_mtime);
 	inode->u.ext2_i.i_dtime = le32_to_cpu(raw_inode->i_dtime);
+	/* We now have enough fields to check if the inode was active or not.
+	 * This is needed because nfsd might try to access dead inodes
+	 * the test is that same one that e2fsck uses
+	 * NeilBrown 1999oct15
+	 */
+	if (inode->i_nlink == 0 && (inode->i_mode == 0 || inode->u.ext2_i.i_dtime)) {
+		/* this inode is deleted */
+		brelse (bh);
+		goto bad_inode;
+	}
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = le32_to_cpu(raw_inode->i_blocks);
 	inode->i_version = ++global_event;
+	inode->i_generation = le32_to_cpu(raw_inode->i_generation);
 	inode->u.ext2_i.i_new_inode = 0;
 	inode->u.ext2_i.i_flags = le32_to_cpu(raw_inode->i_flags);
 	inode->u.ext2_i.i_faddr = le32_to_cpu(raw_inode->i_faddr);
@@ -536,8 +547,6 @@ void ext2_read_inode (struct inode * inode)
 			<< 32;
 #endif
 	}
-	inode->u.ext2_i.i_version = le32_to_cpu(raw_inode->i_version);
-	inode->i_generation = inode->u.ext2_i.i_version;
 	inode->u.ext2_i.i_block_group = block_group;
 	inode->u.ext2_i.i_next_alloc_block = 0;
 	inode->u.ext2_i.i_next_alloc_goal = 0;
@@ -648,6 +657,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	raw_inode->i_ctime = cpu_to_le32(inode->i_ctime);
 	raw_inode->i_mtime = cpu_to_le32(inode->i_mtime);
 	raw_inode->i_blocks = cpu_to_le32(inode->i_blocks);
+	raw_inode->i_generation = cpu_to_le32(inode->i_generation);
 	raw_inode->i_dtime = cpu_to_le32(inode->u.ext2_i.i_dtime);
 	raw_inode->i_flags = cpu_to_le32(inode->u.ext2_i.i_flags);
 	raw_inode->i_faddr = cpu_to_le32(inode->u.ext2_i.i_faddr);
@@ -664,7 +674,6 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 		raw_inode->i_size_high = cpu_to_le32(inode->i_size >> 32);
 #endif
 	}
-	raw_inode->i_version = cpu_to_le32(inode->u.ext2_i.i_version);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)

@@ -243,9 +243,12 @@ __initfunc(static int root_nfs_name(char *name))
 	memset(&nfs_data, 0, sizeof(nfs_data));
 	nfs_port          = -1;
 	nfs_data.version  = NFS_MOUNT_VERSION;
-	/* It is ok to have lockd in nfs root since it will be started
-	   later manually in the rc script. */
-	nfs_data.flags    = 0;
+	/*
+	 *  dhiggen: nobody has yet demonstrated a convincing need for NFS root
+	 *  locking, so I am reverting to automatic lockd start and disabling
+	 *  NLM locking on an NFS root.
+	 */
+	nfs_data.flags    = NFS_MOUNT_NONLM;
 	nfs_data.timeo    = 7;
 	nfs_data.retrans  = 3;
 	nfs_data.acregmin = 3;

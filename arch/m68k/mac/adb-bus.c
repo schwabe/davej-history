@@ -11,6 +11,28 @@
  *			- Guido Koerber's session with a logic analyzer
  *
  *	MSch (1/98) Integrated start of IIsi driver by Robert Thompson
+ *
+ *      1999-05-30 (JMT) - Added support for reading/writing the PRAM clock.
+ *			   We really need to clean up the reply_expected usage
+ *			   in here so that the special cases in adb_interrupt
+ *			   for faking replies can be removed.
+ *
+ *      1999-06-10 (JMT) - Wedged in some IOP support. This is really getting
+ *			   messy...
+ *
+ *      1999-06-11 (JMT) - IOP support sort of working. Autopolling of the
+ *			   keyboard works but if we transmit and get a timeout
+ *			   we'll get bombarded with timeout message from the
+ *			   IOP and I don't know how to make them stop. Thus
+ *			   I have disabled transmission until I can figure out
+ *			   how to handle the timeouts properly.
+ *      1999-06-12 (JMT) - Rewrote IOP support to match changes in IOP
+ *			   architecture. Also discovered that you need to send
+ *			   a sensible reply to an autopoll packet or else the
+ *			   keyboard will stop sending packets. I chose to send
+ *			   back what we received, as that was what we were
+ *			   essentially doing before the IOP rewrite and it
+ *			   seemed to work.
  */
  
 #include <stdarg.h>
@@ -22,7 +44,6 @@
 #include <linux/sched.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
-#include "via6522.h"
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -32,7 +53,9 @@
 #include <asm/setup.h>
 #include <asm/macintosh.h>
 #include <asm/macints.h>
-
+#include <asm/mac_via.h>
+#include <asm/mac_iop.h>
+#include <asm/adb_iop.h>
 
 #define MACII		/* For now - will be a switch */
 
@@ -51,11 +74,7 @@
 
 /* Bits in ACR */
 #define SR_CTRL		0x1c		/* Shift register control bits */
-#ifdef USE_ORIG
-#define SR_EXT		0x1c		/* Shift on external clock */
-#else
 #define SR_EXT		0x0c		/* Shift on external clock */
-#endif
 #define SR_OUT		0x10		/* Shift out if 1 */
 
 /* Bits in IFR and IER */
@@ -67,6 +86,17 @@
 
 /* JRT */
 #define ADB_DELAY 150
+
+#ifdef DEBUG_ADB_INTS
+static int nclock, ndata;
+#endif
+
+static int need_poll    = 0;
+static int command_byte = 0;
+static int last_reply   = 0;
+static int last_active  = 0;
+
+static struct adb_request *retry_req;
 
 static struct adb_handler {
     void (*handler)(unsigned char *, int, struct pt_regs *);
@@ -100,14 +130,23 @@ static int driver_running = 0;
 int in_keybinit = 1;
 
 static void adb_start(void);
-extern void adb_interrupt(int irq, void *arg, struct pt_regs *regs);
-extern void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs);
-extern void adb_clock_interrupt(int irq, void *arg, struct pt_regs *regs);
-extern void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs);
+static void adb_interrupt(int irq, void *arg, struct pt_regs *regs);
+static void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs);
+static void adb_pm_interrupt(int irq, void *arg, struct pt_regs *regs);
+#ifdef DEBUG_ADB_INTS
+static void adb_clock_interrupt(int irq, void *arg, struct pt_regs *regs);
+static void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs);
+#endif
 static void adb_input(unsigned char *buf, int nb, struct pt_regs *regs);
+static void adb_iop_receive(struct iop_msg *, struct pt_regs *);
 
+static void adb_hw_setup_macII(void);
 static void adb_hw_setup_IIsi(void);
 static void adb_hw_setup_cuda(void);
+static void adb_hw_setup_iop(void);
+static void adb_hw_setup_pm(void);
+
+void adb_retransmit(int);
 
 /*
  * debug level 10 required for ADB logging (should be && debug_adb, ideally)
@@ -149,7 +188,6 @@ extern int console_loglevel;
 void adb_bus_init(void)
 {
 	unsigned long flags;
-	unsigned char c, i;
 	
 	save_flags(flags);
 	cli();
@@ -162,122 +200,47 @@ void adb_bus_init(void)
 	{
 	
 		case MAC_ADB_II:
-			printk("adb: MacII style keyboard/mouse driver.\n");
-			/* Set the lines up. We want TREQ as input TACK|TIP as output */
-		 	via_write(via1, vDirB, ((via_read(via1,vDirB)|TACK|TIP)&~TREQ));
-			/*
-			 * Docs suggest TREQ should be output - that seems nuts
-			 * BSD agrees here :-)
-			 * Setup vPCR ??
-			 */
-
-#ifdef USE_ORIG
-		 	/* Lower the bus signals (MacII is active low it seems ???) */
-		 	via_write(via1, vBufB, via_read(via1, vBufB)&~TACK);
-#else
-			/* Corresponding state: idle (clear state bits) */
-		 	via_write(via1, vBufB, (via_read(via1, vBufB)&~ST_MASK)|ST_IDLE);
-			last_status = (via_read(via1, vBufB)&~ST_MASK);
-#endif
-		 	/* Shift register on input */
-		 	c=via_read(via1, vACR);
-		 	c&=~SR_CTRL;		/* Clear shift register bits */
-		 	c|=SR_EXT;		/* Shift on external clock; out or in? */
-		 	via_write(via1, vACR, c);
-		 	/* Wipe any pending data and int */
-		 	via_read(via1, vSR);
-
-		 	/* This is interrupts on enable SR for keyboard */
-		 	via_write(via1, vIER, IER_SET|SR_INT); 
-		 	/* This clears the interrupt bit */
-		 	via_write(via1, vIFR, SR_INT);
-
-		 	/*
-		 	 *	Ok we probably ;) have a ready to use adb bus. Its also
-		 	 *	hopefully idle (Im assuming the mac didnt leave a half
-		 	 *	complete transaction on booting us).
- 			 */
- 
+			printk(KERN_INFO "adb: MacII style keyboard/mouse driver.\n");
+			adb_hw_setup_macII(); 
 			request_irq(IRQ_MAC_ADB, adb_interrupt, IRQ_FLG_LOCK, 
 				    "adb interrupt", adb_interrupt);
 			adb_state = idle;
 			break;
-			/*
-			 *	Unsupported; but later code doesn't notice !!
-			 */
-		case MAC_ADB_CUDA:
-			printk("adb: CUDA interface.\n");
-#if 0
-			/* don't know what to set up here ... */
-			adb_state = idle;
-			/* Set the lines up. We want TREQ as input TACK|TIP as output */
-		 	via_write(via1, vDirB, ((via_read(via1,vDirB)|TACK|TIP)&~TREQ));
-#endif
-			adb_hw_setup_cuda();
-			adb_state = idle;
-			request_irq(IRQ_MAC_ADB, adb_cuda_interrupt, IRQ_FLG_LOCK, 
-				    "adb CUDA interrupt", adb_cuda_interrupt);
-			break;
 		case MAC_ADB_IISI:
 			printk("adb: Using IIsi hardware.\n");
-			printk("\tDEBUG_JRT\n");
-			/* Set the lines up. We want TREQ as input TACK|TIP as output */
-		 	via_write(via1, vDirB, ((via_read(via1,vDirB)|TACK|TIP)&~TREQ));
-
-			/*
-			 * MSch: I'm pretty sure the setup is mildly wrong
-			 * for the IIsi. 
-			 */
-			/* Initial state: idle (clear state bits) */
-		 	via_write(via1, vBufB, (via_read(via1, vBufB) & ~(TIP|TACK)) );
-			last_status = (via_read(via1, vBufB)&~ST_MASK);
-		 	/* Shift register on input */
-		 	c=via_read(via1, vACR);
-		 	c&=~SR_CTRL;		/* Clear shift register bits */
-		 	c|=SR_EXT;		/* Shift on external clock; out or in? */
-		 	via_write(via1, vACR, c);
-		 	/* Wipe any pending data and int */
-		 	via_read(via1, vSR);
-
-		 	/* This is interrupts on enable SR for keyboard */
-		 	via_write(via1, vIER, IER_SET|SR_INT); 
-		 	/* This clears the interrupt bit */
-		 	via_write(via1, vIFR, SR_INT);
-
-			/* get those pesky clock ticks we missed while booting */
-			for ( i = 0; i < 60; i++) {
-				udelay(ADB_DELAY);
-				adb_hw_setup_IIsi();
-				udelay(ADB_DELAY);
-				if (via_read(via1, vBufB) & TREQ)
-					break;
-			}
-			if (i == 60)
-				printk("adb_IIsi: maybe bus jammed ??\n");
-
-		 	/*
-		 	 *	Ok we probably ;) have a ready to use adb bus. Its also
- 			 */
+			adb_hw_setup_IIsi();
 			request_irq(IRQ_MAC_ADB, adb_cuda_interrupt, IRQ_FLG_LOCK, 
 				    "adb interrupt", adb_cuda_interrupt);
 			adb_state = idle;
  			break;
+		case MAC_ADB_CUDA:
+			printk(KERN_INFO "adb: CUDA interface.\n");
+			
+			adb_hw_setup_cuda();
+			request_irq(IRQ_MAC_ADB, adb_cuda_interrupt, IRQ_FLG_LOCK, 
+				    "adb CUDA interrupt", adb_cuda_interrupt);
+			adb_state = idle;
+			break;
+		case MAC_ADB_IOP:
+			printk("adb: using IOP for ADB...good luck.\n");
+			iop_listen(ADB_IOP, ADB_CHAN, adb_iop_receive, "ADB");
+			adb_hw_setup_iop();
+			adb_state = idle;
+			break;
+	        case MAC_ADB_PB1:
+        	case MAC_ADB_PB2:
+			printk("adb: using PowerManager for ADB... you are doomed.\n");
+			adb_hw_setup_pm();
+			request_irq(IRQ_MAC_ADB, adb_pm_interrupt, IRQ_FLG_LOCK, 
+				    "adb PowerManager interrupt", adb_pm_interrupt);
+			adb_state = idle;
+			break;
 		default:
 			printk("adb: Unknown hardware interface.\n");
-		nosupp:
-			printk("adb: Interface unsupported.\n");
 			restore_flags(flags);	
 			return;
 	}
 
-	/*
-	 * XXX: interrupt only registered if supported HW !!
-	 * -> unsupported HW will just time out on keyb_init!
-	 */
-#if 0
-	request_irq(IRQ_MAC_ADB, adb_interrupt, IRQ_FLG_LOCK, 
-		    "adb interrupt", adb_interrupt);
-#endif
 #ifdef DEBUG_ADB_INTS
 	request_irq(IRQ_MAC_ADB_CL, adb_clock_interrupt, IRQ_FLG_LOCK, 
 		    "adb clock interrupt", adb_clock_interrupt);
@@ -289,6 +252,100 @@ void adb_bus_init(void)
 	restore_flags(flags);	
 } 
 	
+/* Set up IOP ADB */
+
+void adb_hw_setup_iop(void)
+{
+#if 0
+	volatile struct adb_request req;
+#endif
+
+	printk("adb-iop: hardware setup in progress.\n");
+
+#if 0
+	adb_request((struct adb_request *) &req, NULL,
+			2, ADB_PACKET, AIF_RESET);
+	while (!req.complete);
+#endif
+
+	printk("adb-iop: hardware setup done!\n");
+}
+
+/* Strip the adb message out of an IOP message */
+
+static void adb_from_iopmsg(struct iop_msg *src, struct adb_iopmsg *dst,
+				int is_reply)
+{
+	if (is_reply) {
+		memcpy(dst, &src->reply[0], sizeof(struct adb_iopmsg));
+	} else {
+		memcpy(dst, &src->message[0], sizeof(struct adb_iopmsg));
+	}
+}
+
+/*
+ * Receive an ADB message from the IOP.
+ *
+ * This will be called in two cases:
+ *
+ * 1. A message has been successfully sent to the IOP.
+ * 4. An unsolicited message was received from the IOP.
+ */
+
+void adb_iop_receive(struct iop_msg *msg, struct pt_regs *regs)
+{
+	struct adb_iopmsg amsg;
+	struct adb_request *req;
+	unsigned char packet[16];
+	int i;
+
+	req = current_req;
+
+	if (msg->status == IOP_MSGSTATUS_COMPLETE) {
+		if (req->reply_expected) {
+			adb_from_iopmsg(msg, &amsg, 1);
+			req->reply_len = amsg.count + 1;
+			req->reply[0] = ADB_PACKET;
+			for (i = 0 ; i < sizeof(amsg.data) ; i++) {
+				req->reply[i+1] = amsg.data[i];
+			}
+		}
+		req->complete = 1;
+		current_req = req->next;
+		if (req->done) (*req->done)(req);
+		adb_state = idle;
+	} else if (msg->status == IOP_MSGSTATUS_UNSOL) {
+		adb_from_iopmsg(msg, &amsg, 0);
+		if (amsg.flags & ADB_IOP_TIMEOUT) {	/* timeout */
+			printk("adb_iop_receive: timeout, retransmitting to %d\n", last_active);
+			if (last_active == -1)
+				last_active = (amsg.cmd&0xf0)>>4;
+			if (current_req) {
+				adb_start();
+			} else {
+				adb_retransmit(last_active);
+			}
+		} else {
+			/* fake a CUDA-format packet */
+			packet[0] = ADB_PACKET;	/* packet type  */
+			packet[1] = 0;		/* ????         */
+			packet[2] = amsg.cmd;	/* command byte */
+			i = 0;
+			while (i < amsg.count) {
+				packet[i+3] = amsg.data[i];
+				i++;
+			}
+			adb_input(packet, amsg.count + 3, regs);
+			memcpy(&msg->reply[0], &msg->message[0], IOP_MSG_LEN);
+		}
+		iop_complete_message(msg);
+		adb_state = idle;
+	} else {
+		printk("adb_iop_receive: unknown IOP message state %d.\n",
+			msg->status);
+	}
+}
+
 void adb_hw_setup_cuda(void)
 {
 	int		x;
@@ -398,20 +455,45 @@ void adb_hw_setup_cuda(void)
 	printk("\nCUDA: HW Setup done!\n");
 }
 
-void adb_hw_setup_IIsi(void)
+static void adb_hw_setup_macII(void)
+{
+	/* Set the lines up. We want TREQ as input TACK|TIP as output */
+	via_write(via1, vDirB, ((via_read(via1,vDirB)|TACK|TIP)&~TREQ));
+	/*
+	 * Docs suggest TREQ should be output - that seems nuts
+	 * BSD agrees here :-)
+	 * Setup vPCR ??
+	 */
+
+	/* Set up state: idle */
+	via_write(via1, vBufB, via_read(via1, vBufB) | ST_IDLE);
+	last_status = (via_read(via1, vBufB)&~ST_MASK);
+
+	/* Shift register on input */
+	via_write(via1, vACR, (via_read(via1, vACR) & ~SR_CTRL) | SR_EXT);
+	/* Wipe any pending data and int */
+	via_read(via1, vSR);
+
+	/* This is interrupts on enable SR for keyboard */
+	via_write(via1, vIER, IER_SET|SR_INT); 
+	/* This clears the interrupt bit */
+	via_write(via1, vIFR, SR_INT);
+}
+
+static void adb_IIsi_cleanup(void)
 {
 	int dummy;
 	long poll_timeout;
 
-	printk("adb_IIsi: cleanup!\n");
+	printk(KERN_DEBUG "adb_IIsi: cleanup!\n");
 
 	/* ??? */
 	udelay(ADB_DELAY);
 
-	/* disable SR int. */
-	via_write(via1, vIER, IER_CLR|SR_INT);
 	/* set SR to shift in */
 	via_write(via1, vACR, via_read(via1, vACR ) & ~SR_OUT);
+	/* disable SR int. */
+	via_write(via1, vIER, IER_CLR|SR_INT);
 
 	/* this is required, especially on faster machines */
 	udelay(ADB_DELAY);
@@ -454,6 +536,44 @@ void adb_hw_setup_IIsi(void)
 	via_write(via1, vIER, IER_SET|SR_INT);
 }
 
+static void adb_hw_setup_IIsi(void)
+{
+	int i;
+
+	/* Set the lines up. We want TREQ as input TACK|TIP as output */
+	via_write(via1, vDirB, (via_read(via1,vDirB)|TACK|TIP) & ~TREQ);
+
+	/* Shift register on input */
+	via_write(via1, vACR, (via_read(via1, vACR) & ~SR_CTRL) | SR_EXT);
+	/* Wipe any pending data and int */
+	via_read(via1, vSR);
+
+	/* This is interrupts on enable SR for keyboard */
+	via_write(via1, vIER, IER_SET|SR_INT); 
+
+	/* Set initial state: idle */
+	via_write(via1, vBufB, via_read(via1, vBufB) & ~ST_IDLE);
+	last_status = (via_read(via1, vBufB)&~ST_MASK);
+
+	/* This clears the interrupt bit */
+	via_write(via1, vIFR, SR_INT);
+
+	/* get those pesky clock ticks we missed while booting */
+	for ( i = 0; i < 60; i++) {
+		udelay(ADB_DELAY);
+		adb_IIsi_cleanup();
+		udelay(ADB_DELAY);
+		if (via_read(via1, vBufB) & TREQ)
+			break;
+	}
+	if (i == 60)
+		printk("adb_IIsi: maybe bus jammed ??\n");
+}
+
+static void adb_hw_setup_pm(void)
+{
+}
+
 #define WAIT_FOR(cond, what)				\
     do {						\
 	for (x = 1000; !(cond); --x) {			\
@@ -477,7 +597,7 @@ void adb_hw_setup_IIsi(void)
  *	here depending on hardware type ...
  */
 int adb_request(struct adb_request *req, void (*done)(struct adb_request *),
-	     int nbytes, ...)
+		int nbytes, ...)
 {
 	va_list list;
 	int i, start;
@@ -488,6 +608,9 @@ int adb_request(struct adb_request *req, void (*done)(struct adb_request *),
 	 * skip first byte if not CUDA 
 	 */
 	if (macintosh_config->adb_type == MAC_ADB_II) {
+/*
+	    (macintosh_config->adb_type == MAC_ADB_IOP)) {
+*/
 		start =  va_arg(list, int);
 		nbytes--;
 	}
@@ -599,7 +722,7 @@ void adb_queue_poll(void)
 	r.reply_expected=0;
 	r.done=NULL;
 	r.sent=0;
-	r.got_reply=0;
+	r.complete=0;
 	r.reply_len=0;
 	save_flags(flags);
 	cli();
@@ -636,7 +759,7 @@ void adb_retransmit(int device)
 	rt.reply_expected = 0;
 	rt.done           = NULL;
 	rt.sent           = 0;
-	rt.got_reply      = 0;
+	rt.complete      = 0;
 	rt.reply_len      = 0;
 	rt.next           = NULL;
 
@@ -674,7 +797,7 @@ int adb_send_request(struct adb_request *req)
 
 	req->next = 0;
 	req->sent = 0;
-	req->got_reply = 0;
+	req->complete = 0;
 	req->reply_len = 0;
 	save_flags(flags); 
 	cli();
@@ -696,14 +819,92 @@ int adb_send_request(struct adb_request *req)
 	return 0;
 }
 
-static int nclock, ndata;
+/*
+ * Start sending an ADB packet, IOP style
+ *
+ * There isn't much to do other than hand the packet over to the IOP
+ * after encapsulating it in an adb_iopmsg.
+ */
 
-static int need_poll    = 0;
-static int command_byte = 0;
-static int last_reply   = 0;
-static int last_active  = 0;
+static void adb_start_iop(void)
+{
+	unsigned long flags;
+	struct adb_request *req;
+	struct adb_iopmsg amsg;
+	int reply_expected,i,nb;
 
-static struct adb_request *retry_req;
+	/* get the packet to send */
+	req = current_req;
+
+	/* TODO: re-enable transmits when timeout handling is fixed */
+
+	req->sent = 1;
+	req->complete = 1;
+	if (req->done) (*req->done)(req);
+	return;
+
+	/* assert adb_state == idle */
+	if (adb_state != idle) {
+		printk("adb-iop: adb_start_iop called while driver busy (%p %x)!\n",
+			req, adb_state);
+		return;
+	}
+
+	if (req->data[0] != ADB_PACKET) {
+		printk("abb-iop: attempt to send non-ADB packet through IOP\n");
+		return;
+	}
+
+	if (req == 0) return;
+	save_flags(flags); 
+	cli();
+	
+	/* Always expecting a reply could be fatal since it could clog */
+	/* the receive channel, not to mention it won't reset the adb  */
+	/* state back to idle since adb_iop_receive won't be called.   */
+	/* It's best to play it safe; if we aren't sure then don't     */
+	/* set reply_expected; it won't work right but at least it     */
+	/* won't clog the ADB subsystem.                               */
+
+	if ((req->data[1] & 0x0C) == AIF_TALK) {
+		reply_expected = 1;
+	} else {
+		reply_expected = 0;
+	}
+
+	/* The IOP appears to take MacII-style packets, not CUDA packets */
+
+	nb = req->nbytes - 2;
+	if (nb > sizeof(amsg.data)) nb = sizeof(amsg.data);
+
+	printk("adb-iop: sending packet, %d bytes:", nb);
+
+	amsg.flags = ADB_IOP_EXPLICIT;
+	amsg.cmd   = req->data[1];
+	amsg.count = nb;
+
+	printk(" %02X", (uint) amsg.cmd);
+
+	i = 0;
+	while(i < nb) {
+		amsg.data[i] = req->data[i+2];
+		printk(" %02X", (uint) amsg.data[i]);
+		i++;
+	}
+	printk("\n");
+
+	/* Now send it. The IOP manager will call */
+	/* adb_iop_receive when  the reply comes  */
+	/* or when the send is completed if no    */
+	/* reply is expected.                     */
+
+	iop_send_message(ADB_IOP, ADB_CHAN, req,
+			 sizeof(amsg), (__u8 *) &amsg, adb_iop_receive);
+
+	adb_state = sending;
+
+	restore_flags(flags);
+}
 
 /*
  * Start sending ADB packet 
@@ -713,10 +914,15 @@ static void adb_start(void)
 	unsigned long flags;
 	struct adb_request *req;
 
+	if (macintosh_config->adb_type == MAC_ADB_IOP) {
+		adb_start_iop();
+		return;
+	}
+
 	/*
 	 * We get here on three 'sane' conditions:
 	 * 1) called from send_adb_request, if adb_state == idle
-	 * 2) called from within adb_interrupt, if adb_state == idle 
+	 * 2) called from within adb_interrupt, if ade_state == idle 
 	 *    (after receiving, or after sending a LISTEN) 
 	 * 3) called from within adb_interrupt, if adb_state == sending 
 	 *    and no reply is expected (immediate next command).
@@ -741,8 +947,10 @@ static void adb_start(void)
 		printk("adb_start: request %p ", req);
 #endif
 
+#ifdef DEBUG_ADB_INTS
 	nclock = 0;
 	ndata  = 0;
+#endif
 
 	/* 
 	 * IRQ signaled ?? (means ADB controller wants to send, or might 
@@ -926,6 +1134,7 @@ void adb_poll(void)
 	restore_flags(flags);
 }
 
+#ifdef DEBUG_ADB_INTS
 /*
  * Debugging gimmicks
  */
@@ -938,6 +1147,7 @@ void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
 	ndata++;
 }
+#endif
 
 /*
  * The notorious ADB interrupt handler - does all of the protocol handling, 
@@ -1345,7 +1555,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 						/* XXX: fake ADB header? */
 						req->reply[0] = req->reply[1] = req->reply[2] = 0xFF;  
 						req->reply_len = 3;
-						req->got_reply = 1;
+						req->complete = 1;
 						current_req = req->next;
 						if (req->done)
 							(*req->done)(req);
@@ -1413,7 +1623,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					/* invert state bits, toggle ODD/EVEN */
 					x = via_read(via1, vBufB);
 					via_write(via1, vBufB,
-						(x&~ST_MASK)|~(x&ST_MASK));
+						(x&~ST_MASK)|(~(x&ST_MASK) & ST_MASK));
 				}
 			}
 			break;
@@ -1632,7 +1842,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					/* invert state bits, toggle ODD/EVEN */
 					x = via_read(via1, vBufB);
 					via_write(via1, vBufB,
-						(x&~ST_MASK)|~(x&ST_MASK));
+						(x&~ST_MASK)|(~(x&ST_MASK) & ST_MASK));
 #endif
 					/* adjust packet length */
 					reply_len--;
@@ -1655,7 +1865,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 						/* invert state bits, toggle ODD/EVEN */
 						x = via_read(via1, vBufB);
 						via_write(via1, vBufB,
-							(x&~ST_MASK)|~(x&ST_MASK));
+							(x&~ST_MASK)|(~(x&ST_MASK) & ST_MASK));
 					}
 				}
 			}
@@ -1672,7 +1882,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 			{
 				req = current_req;
 				req->reply_len = reply_ptr - req->reply;
-				req->got_reply = 1;
+				req->complete = 1;
 				current_req = req->next;
 				if (req->done)
 					(*req->done)(req);
@@ -1824,14 +2034,6 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 				udelay(150);
 		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
 			}
-			else if(macintosh_config->adb_type==MAC_ADB_II)
-			{
-				if (status != TREQ)
-					printk("adb_macII: state=idle status=%x want=%x\n",
-						status, TREQ);
-				x = via_read(via1, vSR);
-				via_write(via1, vBufB, via_read(via1, vBufB)&~(TIP|TACK));
-			}
 			adb_state = reading;
 			reply_ptr = cuda_rbuf;
 			reply_len = 0;
@@ -1949,26 +2151,13 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					/* delay */
 					udelay(ADB_DELAY);
 					/* set the shift register to shift out and send a byte */
-#if 0
 					via_write(via1, vACR, via_read(via1, vACR) | SR_OUT); 
-#endif
 					via_write(via1, vSR, current_req->data[1]);
 					/* signal 'byte ready' */
 					via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
 					data_index=2;			
 					adb_state = sending;
 				}
-			}
-			else if(macintosh_config->adb_type==MAC_ADB_II)
-			{
-				if(status!=TIP+SR_OUT)
-					printk("adb_macII: state=send_first_byte status=%x want=%x\n", 
-						status, TIP+SR_OUT);
-				via_write(via1, vSR, current_req->data[1]);
-				via_write(via1, vBufB,
-					via_read(via1, vBufB)^TACK);
-				data_index=2;			
-				adb_state = sending;
 			}
 			break;
 
@@ -1997,20 +2186,12 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					/* delay */
 					udelay(ADB_DELAY);
 					/* set the shift register to shift in */
-					via_write(via1, vACR, via_read(via1, vACR)|SR_OUT); 
+					via_write(via1, vACR, via_read(via1, vACR) & ~SR_OUT); 
 					/* clear SR int. */
 					x = via_read(via1, vSR); 
 					/* set ADB state 'idle' (end of frame) */
 					via_write(via1, vBufB,
 						via_read(via1,vBufB) & ~(TACK|TIP)); 
-				}
-				else if(macintosh_config->adb_type==MAC_ADB_II)
-				{
-					via_write(via1, vACR,
-						via_read(via1, vACR) & ~SR_OUT);
-					x=via_read(via1, vSR);
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)|TACK|TIP);
 				}
 				req->sent = 1;
 				if (req->reply_expected) 
@@ -2019,9 +2200,10 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					 * maybe fake a reply here on Listen ?? 
 					 * Otherwise, a Listen hangs on success
 					 * CUDA+IIsi: only ADB Talk considered
-					 * RTC/PRAM read (0x1 0x3) to follow.
 					 */
 					if ( (req->data[0] == 0x0) && ((req->data[1]&0xc) == 0xc) )
+						adb_state = awaiting_reply;
+					else if ((req->data[0] == 0x1) && (req->data[1] == 0x3) )
 						adb_state = awaiting_reply;
 					else {
 						/*
@@ -2036,7 +2218,7 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 						/* XXX: fake ADB header? */
 						req->reply[0] = req->reply[1] = req->reply[2] = 0xFF;  
 						req->reply_len = 3;
-						req->got_reply = 1;
+						req->complete = 1;
 						current_req = req->next;
 						if (req->done)
 							(*req->done)(req);
@@ -2087,12 +2269,6 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					via_write(via1, vSR, req->data[data_index++]);
 					/* signal 'byte ready' */
 					via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
-				}
-				else if(macintosh_config->adb_type==MAC_ADB_II)
-				{
-					via_write(via1, vSR, req->data[data_index++]);
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)^TACK);
 				}
 			}
 			break;
@@ -2169,24 +2345,6 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					   Handshake anyway?? */
 				}
 			}
-			if(macintosh_config->adb_type==MAC_ADB_II)
-			{
-				if( status == TIP)
-				{
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)|TACK|TIP);
-					adb_state = read_done;
-				}
-				else
-				{
-#if (ADBDEBUG & ADBDEBUG_STATUS)
-					if(status!=TIP+TREQ)
-						printk("macII_adb: state=reading status=%x\n", status);
-#endif
-					via_write(via1, vBufB, 
-						via_read(via1, vBufB)^TACK);
-				}
-			}
 			/* fall through for IIsi on end of frame */
 			if (macintosh_config->adb_type != MAC_ADB_IISI
 			    || adb_state != read_done)
@@ -2203,7 +2361,7 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 			{
 				req = current_req;
 				req->reply_len = reply_ptr - req->reply;
-				req->got_reply = 1;
+				req->complete = 1;
 				current_req = req->next;
 				if (req->done)
 					(*req->done)(req);
@@ -2247,31 +2405,38 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 
 }
 
+static void adb_pm_interrupt(int irq, void *arg, struct pt_regs *regs)
+{
+	printk("adb_pm_interrupt called!\n");
+}
+
 /*
  *	The 'reply delivery' routine; determines which device sent the 
  *	request and calls the appropriate handler. 
  *	Reply data are expected in CUDA format (again, argh...) so we need
  *	to fake this in the interrupt handler for MacII.
+ *
+ *      Note!  The PowerPC code now expects data in ADB format, and
+ *      has their CUDA handler throw non-ADB packets on the floor.  We
+ *      are going to sync with them.  It is only a matter of time.
+ *
  *	Only one handler per device ID is currently possible.
  *	XXX: is the ID field here representing the default or real ID?
  */
 static void adb_input(unsigned char *buf, int nb, struct pt_regs *regs)
 {
-	int i, id;
+	int id;
 
 	switch (buf[0]) 
 	{
 		case ADB_PACKET:
 			/* what's in buf[1] ?? */
+			/* according to via-cuda.c, buf[1] should tell
+			   us whether to autopoll or not */
 			id = buf[2] >> 4;
-#if 0
-			xmon_printf("adb packet: ");
-			for (i = 0; i < nb; ++i)
-				xmon_printf(" %x", buf[i]);
-			xmon_printf(", id = %d\n", id);
-#endif
 #if (ADBDEBUG & ADBDEBUG_INPUT)
 			if (console_loglevel == 10) {
+				int i;
 				printk("adb_input: adb packet ");
 				for (i = 0; i < nb; ++i)
 					printk(" %x", buf[i]);
@@ -2287,6 +2452,7 @@ static void adb_input(unsigned char *buf, int nb, struct pt_regs *regs)
 		default:
 #if (ADBDEBUG & ADBDEBUG_INPUT)
 			if (console_loglevel == 10) {
+				int i;
 				printk("adb_input: data from via (%d bytes):", nb);
 				for (i = 0; i < nb; ++i)
 					printk(" %.2x", buf[i]);
@@ -2338,7 +2504,7 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 	add_wait_queue(&adb_wait, &wait);
 	current->state = TASK_INTERRUPTIBLE;
 
-	while (!state->req.got_reply) {
+	while (!state->req.complete) {
 		if (file->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
 			break;
@@ -2358,9 +2524,9 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 
 static void adb_write_done(struct adb_request *req)
 {
-	if (!req->got_reply) {
+	if (!req->complete) {
 		req->reply_len = 0;
-		req->got_reply = 1;
+		req->complete = 1;
 	}
 	wake_up_interruptible(&adb_wait);
 }
@@ -2371,7 +2537,7 @@ struct file_operations *adb_cooked[16];
 
 static int adb_open(struct inode *inode, struct file *file)
 {
-	int adb_type, adb_subtype;
+	int adb_subtype;
 	struct adbdev_state *state;
 
 	if (MINOR(inode->i_rdev) > ADB_MAX_MINOR)
@@ -2401,28 +2567,29 @@ static int adb_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void adb_release(struct inode *inode, struct file *file)
+static int adb_release(struct inode *inode, struct file *file)
 {
 	struct adbdev_state *state = file->private_data;
 
 	if (state) {
+		int ret;
+		
 		file->private_data = NULL;
-		if (state->req.reply_expected && !state->req.got_reply)
-			if (adb_wait_reply(state, file))
-				return;
+		if (state->req.reply_expected && !state->req.complete)
+			if ((ret = adb_wait_reply(state, file)))
+				return ret;
 		kfree(state);
 	}
-	return;
+	return 0;
 }
 
-static int adb_lseek(struct inode *inode, struct file *file, 
-		     off_t offset, int origin)
+static loff_t adb_lseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 
-static int adb_read(struct inode *inode, struct file *file,
-		     char *buf, int count)
+static ssize_t adb_read(struct file *file, char *buf,
+			size_t count, loff_t *offset)
 {
 	int ret;
 	struct adbdev_state *state = file->private_data;
@@ -2449,8 +2616,8 @@ static int adb_read(struct inode *inode, struct file *file,
 	return ret;
 }
 
-static int adb_write(struct inode *inode, struct file *file,
-		      const char *buf, int count)
+static ssize_t adb_write(struct file *file, const char *buf,
+			 size_t count, loff_t *offset)
 {
 	int ret, i;
 	struct adbdev_state *state = file->private_data;
@@ -2461,7 +2628,7 @@ static int adb_write(struct inode *inode, struct file *file,
 	if (ret)
 		return ret;
 
-	if (state->req.reply_expected && !state->req.got_reply) {
+	if (state->req.reply_expected && !state->req.complete) {
 		/* A previous request is still being processed.
 		   Wait for it to finish. */
 		ret = adb_wait_reply(state, file);
@@ -2471,7 +2638,7 @@ static int adb_write(struct inode *inode, struct file *file,
 
 	state->req.nbytes = count;
 	state->req.done = adb_write_done;
-	state->req.got_reply = 0;
+	state->req.complete = 0;
 	copy_from_user(state->req.data, buf, count);
 #if 0
 	switch (adb_hardware) {
@@ -2508,7 +2675,12 @@ static struct file_operations adb_fops = {
 	NULL,		/* no mmap */
 	adb_open,
 	NULL,		/* flush */
-	adb_release
+	adb_release,
+	NULL,		/* fsync */
+	NULL,		/* fasync */
+	NULL,		/* check_media_change */
+	NULL,		/* revalidate */
+	NULL		/* lock */
 };
 
 int adbdev_register(int subtype, struct file_operations *fops)
@@ -2536,7 +2708,6 @@ void adbdev_init()
 	if (register_chrdev(ADB_MAJOR, "adb", &adb_fops))
 		printk(KERN_ERR "adb: unable to get major %d\n", ADB_MAJOR);
 }
-
 
 #if 0 /* old ADB device */
 
@@ -2566,7 +2737,7 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 	add_wait_queue(&adb_wait, &wait);
 	current->state = TASK_INTERRUPTIBLE;
 
-	while (!state->req.got_reply) {
+	while (!state->req.complete) {
 		if (file->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
 			break;
@@ -2586,9 +2757,9 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 
 static void adb_write_done(struct adb_request *req)
 {
-	if (!req->got_reply) {
+	if (!req->complete) {
 		req->reply_len = 0;
-		req->got_reply = 1;
+		req->complete = 1;
 	}
 	wake_up_interruptible(&adb_wait);
 }
@@ -2611,7 +2782,7 @@ static void adb_release(struct inode *inode, struct file *file)
 
 	if (state) {
 		file->private_data = NULL;
-		if (state->req.reply_expected && !state->req.got_reply)
+		if (state->req.reply_expected && !state->req.complete)
 			if (adb_wait_reply(state, file))
 				return;
 		kfree(state);
@@ -2619,14 +2790,13 @@ static void adb_release(struct inode *inode, struct file *file)
 	return;
 }
 
-static int adb_lseek(struct inode *inode, struct file *file,
-		     off_t offset, int origin)
+static int adb_lseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 
-static int adb_read(struct inode *inode, struct file *file,
-		    char *buf, int count)
+static int adb_read(struct file *file, char *buf, size_t count,
+		    loff_t *offset)
 {
 	int ret;
 	struct adbdev_state *state = file->private_data;
@@ -2653,8 +2823,8 @@ static int adb_read(struct inode *inode, struct file *file,
 	return ret;
 }
 
-static int adb_write(struct inode *inode, struct file *file,
-		     const char *buf, int count)
+static int adb_write(struct file *file, const char *buf,
+		     size_t count, loff_t *offset)
 {
 	int ret;
 	struct adbdev_state *state = file->private_data;
@@ -2665,7 +2835,7 @@ static int adb_write(struct inode *inode, struct file *file,
 	if (ret)
 		return ret;
 
-	if (state->req.reply_expected && !state->req.got_reply) {
+	if (state->req.reply_expected && !state->req.complete) {
 		/* A previous request is still being processed.
 		   Wait for it to finish. */
 		ret = adb_wait_reply(state, file);
@@ -2677,7 +2847,7 @@ static int adb_write(struct inode *inode, struct file *file,
 	state->req.done = adb_write_done;
 	memcpy_fromfs(state->req.data, buf, count);
 	state->req.reply_expected = 1;
-	state->req.got_reply = 0;
+	state->req.complete = 0;
 	adb_send_request(&state->req);
 
 	return count;

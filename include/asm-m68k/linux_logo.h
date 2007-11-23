@@ -890,6 +890,7 @@ unsigned char linux_logo[] __initdata = {
 
 #define INCLUDE_LINUX_LOGOBW
 #define INCLUDE_LINUX_LOGO16
+#define INCLUDE_LINUX_LOGO4
 #include <linux/linux_logo.h>
 
 #else
@@ -904,5 +905,9 @@ extern unsigned char linux_logo16_red[];
 extern unsigned char linux_logo16_green[];
 extern unsigned char linux_logo16_blue[];
 extern unsigned char linux_logo16[];
+extern unsigned char linux_logo4_red[];
+extern unsigned char linux_logo4_green[];
+extern unsigned char linux_logo4_blue[];
+extern unsigned char linux_logo4[];
 
 #endif

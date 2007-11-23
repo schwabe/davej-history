@@ -41,12 +41,17 @@
 #include <asm/kgdb.h>
 #endif
 
+/*#define DEBUG*/
+
 /* assembler routines */
 asmlinkage void system_call(void);
 asmlinkage void buserr(void);
 asmlinkage void trap(void);
 asmlinkage void inthandler(void);
 asmlinkage void nmihandler(void);
+#ifdef CONFIG_FPU_EMU
+asmlinkage void fpu_emu(void);
+#endif
 
 e_vector vectors[256] = {
 	0, 0, buserr, trap, trap, trap, trap, trap,
@@ -70,7 +75,7 @@ __initfunc(void base_trap_init(void))
 	/* setup the exception vector table */
 	__asm__ volatile ("movec %0,%%vbr" : : "r" ((void*)vectors));
 
-	if (CPU_IS_040) {
+	if (CPU_IS_040 && !FPU_IS_EMU) {
 		/* set up FPSP entry points */
 		asmlinkage void dz_vec(void) asm ("dz");
 		asmlinkage void inex_vec(void) asm ("inex");
@@ -93,6 +98,12 @@ __initfunc(void base_trap_init(void))
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 	}
 	if (CPU_IS_060) {
+		/* set up ISP entry points */
+		asmlinkage void unimp_vec(void) asm ("_060_isp_unimp");
+
+		vectors[VEC_UNIMPII] = unimp_vec;
+	}
+	if (CPU_IS_060 && !FPU_IS_EMU) {
 		/* set up IFPSP entry points */
 		asmlinkage void snan_vec(void) asm ("_060_fpsp_snan");
 		asmlinkage void operr_vec(void) asm ("_060_fpsp_operr");
@@ -104,8 +115,6 @@ __initfunc(void base_trap_init(void))
 		asmlinkage void unsupp_vec(void) asm ("_060_fpsp_unsupp");
 		asmlinkage void effadd_vec(void) asm ("_060_fpsp_effadd");
 
-		asmlinkage void unimp_vec(void) asm ("_060_isp_unimp");
-
 		vectors[VEC_FPNAN] = snan_vec;
 		vectors[VEC_FPOE] = operr_vec;
 		vectors[VEC_FPOVER] = ovfl_vec;
@@ -115,10 +124,6 @@ __initfunc(void base_trap_init(void))
 		vectors[VEC_LINE11] = fline_vec;
 		vectors[VEC_FPUNSUP] = unsupp_vec;
 		vectors[VEC_UNIMPEA] = effadd_vec;
-
-		/* set up ISP entry points */
-
-		vectors[VEC_UNIMPII] = unimp_vec;
 	}
 }
 
@@ -132,6 +137,11 @@ __initfunc(void trap_init (void))
 
 	for (i = 64; i < 256; i++)
 		vectors[i] = inthandler;
+
+#ifdef CONFIG_FPU_EMU
+	if (FPU_IS_EMU)
+		vectors[VEC_LINE11] = fpu_emu;
+#endif
 
         /* if running on an amiga, make the NMI interrupt do nothing */
 	if (MACH_IS_AMIGA) {
@@ -182,8 +192,9 @@ static char *space_names[] = {
 
 
 void die_if_kernel(char *,struct pt_regs *,int);
-asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
-                             unsigned long error_code);
+int do_page_fault(struct pt_regs *regs, unsigned long address,
+                  unsigned long error_code);
+int send_fault_sig(struct pt_regs *regs);
 
 asmlinkage void trap_c(struct frame *fp);
 
@@ -232,74 +243,141 @@ static inline void access_error060 (struct frame *fp)
 #endif /* CONFIG_M68060 */
 
 #if defined (CONFIG_M68040)
-static inline unsigned long probe040 (int iswrite, int fc, unsigned long addr)
+
+static inline unsigned long probe040(int iswrite, unsigned long addr)
 {
 	unsigned long mmusr;
-	mm_segment_t fs = get_fs();
 
-	set_fs (MAKE_MM_SEG(fc));
+	asm volatile (".chip 68040");
 
 	if (iswrite)
-		/* write */
-		asm volatile (".chip 68040\n\t"
-			      "ptestw (%1)\n\t"
-			      "movec %%mmusr,%0\n\t"
-			      ".chip 68k"
-			      : "=r" (mmusr)
-			      : "a" (addr));
+		asm volatile ("ptestw (%0)" : : "a" (addr));
 	else
-		asm volatile (".chip 68040\n\t"
-			      "ptestr (%1)\n\t"
-			      "movec %%mmusr,%0\n\t"
-			      ".chip 68k"
-			      : "=r" (mmusr)
-			      : "a" (addr));
+		asm volatile ("ptestr (%0)" : : "a" (addr));
 
-	set_fs (fs);
+	asm volatile ("movec %%mmusr,%0" : "=r" (mmusr));
+
+	asm volatile (".chip 68k");
 
 	return mmusr;
 }
 
-static inline void do_040writeback (unsigned short ssw,
-			     unsigned short wbs,
-			     unsigned long wba,
-			     unsigned long wbd,
-			     struct frame *fp)
+static inline int do_040writeback1(unsigned short wbs, unsigned long wba,
+				   unsigned long wbd)
 {
-	mm_segment_t fs = get_fs ();
-	unsigned long mmusr;
-	unsigned long errorcode;
+	mm_segment_t old_fs;
+	int res = 0;
 
-	/*
-	 * No special handling for the second writeback anymore.
-	 * It misinterpreted the misaligned status sometimes.
-	 * This way an extra page-fault may be caused (Martin Apel).
-	 */
+	old_fs = get_fs();
+	set_fs(MAKE_MM_SEG(wbs));
 
-	mmusr = probe040 (1, wbs & WBTM_040,  wba);
-	errorcode = (mmusr & MMU_R_040) ? 3 : 2;
-	if (do_page_fault (&fp->ptregs, wba, errorcode))
-	  /* just return if we can't perform the writeback */
-	  return;
-
-	set_fs (MAKE_MM_SEG(wbs & WBTM_040));
 	switch (wbs & WBSIZ_040) {
-	    case BA_SIZE_BYTE:
-		put_user (wbd & 0xff, (char *)wba);
+	case BA_SIZE_BYTE:
+		res = put_user(wbd & 0xff, (char *)wba);
 		break;
-	    case BA_SIZE_WORD:
-		put_user (wbd & 0xffff, (short *)wba);
+	case BA_SIZE_WORD:
+		res = put_user(wbd & 0xffff, (short *)wba);
 		break;
-	    case BA_SIZE_LONG:
-		put_user (wbd, (int *)wba);
+	case BA_SIZE_LONG:
+		res = put_user(wbd, (int *)wba);
 		break;
 	}
-	set_fs (fs);
+	set_fs(old_fs);
+
+#ifdef DEBUG
+	printk("do_040writeback1, res=%d\n",res);
+#endif
+
+	return res;
 }
 
-static inline void access_error040 (struct frame *fp)
+#define FIX_XFRAME(fp,_faddr_,_set_ma_,_wbs_)           \
+     do{ (fp)->un.fmt7.faddr = (_faddr_);                 \
+         (fp)->un.fmt7.ssw &= ~( 0x7f | MA_040 | RW_040); \
+         (fp)->un.fmt7.ssw |= (~0x7f & (_wbs_));          \
+         (fp)->un.fmt7.ssw |= ((_set_ma_) ? MA_040 : 0);  \
+       } while(0)
+
+/* after an exception in a writeback the stack frame coresponding
+ * to that exception is discarded, set a few bits in the old frame 
+ * to simulate what it should look like       */
+
+inline void fix_xframe040(struct frame *fp, unsigned long faddr, unsigned short wbs)
+{
+  unsigned short ssw=(fp)->un.fmt7.ssw;
+
+  ssw &= ~( 0x7f | MA_040 | RW_040);
+  ssw |= (~0x7f & wbs);
+  if (faddr != (unsigned long)(current->buserr_info.si_addr) )
+    ssw |= MA_040;
+  (fp)->un.fmt7.faddr = faddr;
+  (fp)->un.fmt7.ssw = ssw;
+}
+
+inline void do_040writebacks(struct frame *fp)
+{
+        unsigned long wbaddr;
+	int xp=0;
+#if 0
+	if (fp->un.fmt7.wb1s & WBV_040)
+		printk("access_error040: cannot handle 1st writeback. oops.\n");
+#endif
+
+	if ((fp->un.fmt7.wb2s & WBV_040) &&
+	    !(fp->un.fmt7.wb2s & WBTT_040)) {
+		wbaddr = fp->un.fmt7.wb2a;
+		if (xp=do_040writeback1(fp->un.fmt7.wb2s, wbaddr,
+				     fp->un.fmt7.wb2d))
+		  {
+		    fix_xframe040(fp,wbaddr,fp->un.fmt7.wb2s);
+		  }
+		else 
+		  fp->un.fmt7.wb2s &= ~WBV_040;
+	}
+
+	if (fp->un.fmt7.wb3s & WBV_040) {
+		wbaddr= fp->un.fmt7.wb3a;
+		if (do_040writeback1(fp->un.fmt7.wb3s, wbaddr,
+				     fp->un.fmt7.wb3d))
+		  {
+		    if (!xp)
+		      {
+			fix_xframe040(fp,wbaddr,fp->un.fmt7.wb3s);
+			fp->un.fmt7.wb2s = fp->un.fmt7.wb3s;
+			fp->un.fmt7.wb3s &= (~WBV_040);
+			fp->un.fmt7.wb2a = wbaddr;
+			fp->un.fmt7.wb2d = fp->un.fmt7.wb3d;
+			xp=1;
+		      }
+		  }
+		else 
+		  fp->un.fmt7.wb3s &= ~WBV_040;
+	}
+
+	if (!xp) return;
+
+	send_fault_sig(&fp->ptregs);
+}
+
+/*
+ * called from sigreturn(), must ensure userspace code didn't
+ * manipulate exception frame to circumvent protection, then complete
+ * pending writebacks
+ * Theory is that setting TT1=0 and TM2=0 will avoid all trouble
+ */
+asmlinkage void berr_040cleanup(struct frame *fp)
+{
+        fp->un.fmt7.ssw  &= ~(0x10 | 0x4);
+	fp->un.fmt7.wb2s &= ~(0x10 | 0x4);
+	fp->un.fmt7.wb3s &= ~(0x10 | 0x4);
+
+	do_040writebacks(fp);
+}
+
+static inline void access_error040(struct frame *fp)
 {
 	unsigned short ssw = fp->un.fmt7.ssw;
+	mm_segment_t old_fs = get_fs();
 	unsigned long mmusr;
 
 #ifdef DEBUG
@@ -323,43 +401,43 @@ static inline void access_error040 (struct frame *fp)
 		if (ssw & MA_040)
 			addr = PAGE_ALIGN (addr);
 
+		set_fs(MAKE_MM_SEG(ssw));
 		/* MMU error, get the MMUSR info for this access */
-		mmusr = probe040 (!(ssw & RW_040), ssw & TM_040, addr);
+		mmusr = probe040(!(ssw & RW_040), addr);
+		set_fs(old_fs);
 #ifdef DEBUG
 		printk("mmusr = %lx\n", mmusr);
 #endif
+
 		errorcode = ((mmusr & MMU_R_040) ? 1 : 0) |
-			((ssw & RW_040) ? 0 : 2);
-		do_page_fault (&fp->ptregs, addr, errorcode);
+			    ((ssw & RW_040) ? 0 : 2) |
+		            ((ssw & LK_040) ? 2 : 0);
+
+		if (do_page_fault(&fp->ptregs, addr, errorcode)) {
+#ifdef DEBUG
+		        printk("do_page_fault() !=0 \n");
+#endif
+			if (user_mode(&fp->ptregs)){
+				/* delay writebacks after signal delivery */
+#ifdef DEBUG
+			        printk(".. was usermode - return\n");
+#endif
+				return;
+			}
+			/* disable writeback into user space from kernel */
+#ifdef DEBUG
+			printk(".. disabling wb2\n");
+#endif
+			if (fp->un.fmt7.wb2a == fp->un.fmt7.faddr)
+				fp->un.fmt7.wb2s &= ~WBV_040;
+		}
+
 	} else {
-		printk ("68040 access error, ssw=%x\n", ssw);
-		trap_c (fp);
+		printk("68040 access error, ssw=%x\n", ssw);
+		trap_c(fp);
 	}
 
-#if 0
-	if (fp->un.fmt7.wb1s & WBV_040)
-		printk("access_error040: cannot handle 1st writeback. oops.\n");
-#endif
-
-/*
- *  We may have to do a couple of writebacks here.
- *
- *  MR: we can speed up the thing a little bit and let do_040writeback()
- *  not produce another page fault as wb2 corresponds to the address that
- *  caused the fault. on write faults no second fault is generated, but
- *  on read faults for security reasons (although per definitionem impossible)
- */
-
-	if (fp->un.fmt7.wb2s & WBV_040 && (fp->un.fmt7.wb2s &
-					   WBTT_040) != BA_TT_MOVE16)
-		do_040writeback (ssw,
-				 fp->un.fmt7.wb2s, fp->un.fmt7.wb2a,
-				 fp->un.fmt7.wb2d, fp);
-
-	if (fp->un.fmt7.wb3s & WBV_040)
-		do_040writeback (ssw, fp->un.fmt7.wb3s,
-				 fp->un.fmt7.wb3a, fp->un.fmt7.wb3d,
-				 fp);
+	do_040writebacks(fp);
 }
 #endif /* CONFIG_M68040 */
 
@@ -650,7 +728,7 @@ asmlinkage void buserr_c(struct frame *fp)
 	if (user_mode(&fp->ptregs))
 		current->tss.esp0 = (unsigned long) fp;
 
-#if DEBUG
+#if 0/*DEBUG*/
 	printk ("*** Bus Error *** Format is %x\n", fp->ptregs.format);
 #endif
 
@@ -673,7 +751,7 @@ asmlinkage void buserr_c(struct frame *fp)
 #endif
 	default:
 	  die_if_kernel("bad frame format",&fp->ptregs,0);
-#if DEBUG
+#if 0/*DEBUG*/
 	  printk("Unknown SIGSEGV - 4\n");
 #endif
 	  force_sig(SIGSEGV, current);
@@ -990,3 +1068,16 @@ asmlinkage void fpsp040_die(void)
 {
 	do_exit(SIGSEGV);
 }
+
+#ifdef CONFIG_FPU_EMU
+asmlinkage void fpemu_signal(int signal, int code, void *addr)
+{
+	siginfo_t info;
+
+	info.si_signo = signal;
+	info.si_errno = 0;
+	info.si_code = code;
+	info.si_addr = addr;
+	force_sig_info(signal, &info, current);
+}
+#endif

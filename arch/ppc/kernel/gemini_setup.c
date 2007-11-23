@@ -21,6 +21,7 @@
 #include <linux/blk.h>
 #include <linux/console.h>
 #include <linux/openpic.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -166,8 +167,6 @@ void __init gemini_openpic_init(void)
 	ioremap( GEMINI_MPIC_ADDR, sizeof( struct OpenPIC ));
 }
 
-
-extern unsigned long loops_per_sec;
 extern int root_mountflags;
 extern char cmd_line[];
 
@@ -179,7 +178,7 @@ gemini_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 	extern char cmd_line[];
 
 
-	loops_per_sec = 50000000;
+	loops_per_jiffy = 50000000/HZ;
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* bootable off CDROM */

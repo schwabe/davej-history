@@ -178,6 +178,7 @@ __initfunc(static int ariadne2_init(struct device *dev, unsigned int key,
     name = "NE2000";
 
     dev->base_addr = ioaddr;
+    dev->irq = IRQ_AMIGA_PORTS;
 
     /* Install the Interrupt handler */
     if (request_irq(IRQ_AMIGA_PORTS, ei_interrupt, 0, "AriadNE2 Ethernet",
@@ -192,7 +193,9 @@ __initfunc(static int ariadne2_init(struct device *dev, unsigned int key,
     ((struct ei_device *)dev->priv)->priv = key;
 
     for(i = 0; i < ETHER_ADDR_LEN; i++) {
+#ifdef DEBUG
 	printk(" %2.2x", SA_prom[i]);
+#endif
 	dev->dev_addr[i] = SA_prom[i];
     }
 

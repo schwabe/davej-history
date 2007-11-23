@@ -69,6 +69,7 @@ isdn_divert_if *divert_if = NULL; /* interface to diversion module */
 
 static int isdn_writebuf_stub(int, int, const u_char *, int, int);
 static void set_global_features(void);
+static int isdn_wildmat(char *s, char *p);
 
 void
 isdn_MOD_INC_USE_COUNT(void)
@@ -150,7 +151,7 @@ isdn_star(char *s, char *p)
  * [^xyz]  matches any single character not in the set of characters
  */
 
-int
+static int
 isdn_wildmat(char *s, char *p)
 {
 	register int last;
@@ -194,6 +195,23 @@ isdn_wildmat(char *s, char *p)
 				continue;
 		}
 	return (*s == '\0')?0:nostar;
+}
+
+int isdn_msncmp( const char * msn1, const char * msn2 )
+{
+	char TmpMsn1[ ISDN_MSNLEN ];
+	char TmpMsn2[ ISDN_MSNLEN ];
+	char *p;
+
+	for ( p = TmpMsn1; *msn1 && *msn1 != ':'; )  // Strip off a SPID
+		*p++ = *msn1++;
+	*p = '\0';
+
+	for ( p = TmpMsn2; *msn2 && *msn2 != ':'; )  // Strip off a SPID
+		*p++ = *msn2++;
+	*p = '\0';
+
+	return isdn_wildmat( TmpMsn1, TmpMsn2 );
 }
 
 static void
@@ -267,9 +285,7 @@ isdn_timer_funct(ulong dummy)
 
 		save_flags(flags);
 		cli();
-		del_timer(&dev->timer);
-		dev->timer.expires = jiffies + ISDN_TIMER_RES;
-		add_timer(&dev->timer);
+		mod_timer(&dev->timer, jiffies+ISDN_TIMER_RES);
 		restore_flags(flags);
 	}
 }
@@ -290,11 +306,8 @@ isdn_timer_ctrl(int tf, int onoff)
 		dev->tflags |= tf;
 	else
 		dev->tflags &= ~tf;
-	if (dev->tflags) {
-		if (!del_timer(&dev->timer))	/* del_timer is 1, when active */
-			dev->timer.expires = jiffies + ISDN_TIMER_RES;
-		add_timer(&dev->timer);
-	}
+	if (dev->tflags)
+		mod_timer(&dev->timer, jiffies+ISDN_TIMER_RES);
 	restore_flags(flags);
 }
 
@@ -472,7 +485,7 @@ isdn_status_callback(isdn_ctrl * c)
 				return 0;
 			}
 			/* Try to find a network-interface which will accept incoming call */
-			r = ((c->command == ISDN_STAT_ICALLW) ? 0 : isdn_net_find_icall(di, c->arg, i, c->parm.setup));
+			r = ((c->command == ISDN_STAT_ICALLW) ? 0 : isdn_net_find_icall(di, c->arg, i, &c->parm.setup));
 			switch (r) {
 				case 0:
 					/* No network-device replies.
@@ -481,7 +494,7 @@ isdn_status_callback(isdn_ctrl * c)
 					 * 3 on eventually match, if CID is longer.
 					 */
                                         if (c->command == ISDN_STAT_ICALL)
-					  if ((retval = isdn_tty_find_icall(di, c->arg, c->parm.setup))) return(retval);
+					  if ((retval = isdn_tty_find_icall(di, c->arg, &c->parm.setup))) return(retval);
 #ifdef CONFIG_ISDN_DIVERSION 
                                          if (divert_if)
                  	                  if ((retval = divert_if->stat_callback(c))) 
@@ -1027,7 +1040,7 @@ isdn_read(struct file *file, char *buf, size_t count, loff_t * off)
 }
 
 static loff_t
-isdn_lseek(struct file *file, loff_t offset, int orig)
+isdn_llseek(struct file *file, loff_t offset, int orig)
 {
 	return -ESPIPE;
 }
@@ -1661,7 +1674,7 @@ isdn_close(struct inode *ino, struct file *filep)
 
 static struct file_operations isdn_fops =
 {
-	llseek:		isdn_lseek,
+	llseek:		isdn_llseek,
 	read:		isdn_read,
 	write:		isdn_write,
 	poll:		isdn_poll,
@@ -1846,7 +1859,6 @@ isdn_writebuf_skb_stub(int drvidx, int chan, int ack, struct sk_buff *skb)
 		skb_pull(nskb, sizeof(int));
 		if (!nskb->len) {
 			dev_kfree_skb(nskb);
-			dev_kfree_skb(skb);
 			return v110_ret;
 		}
 		/* V.110 must always be acknowledged */
@@ -1885,9 +1897,10 @@ isdn_writebuf_skb_stub(int drvidx, int chan, int ack, struct sk_buff *skb)
 			atomic_inc(&dev->v110use[idx]);
 			dev->v110[idx]->skbuser++;
 			atomic_dec(&dev->v110use[idx]);
-			dev_kfree_skb(skb);
 			/* For V.110 return unencoded data length */
 			ret = v110_ret;
+			/* if the complete frame was send we free the skb;
+			   if not upper function will requeue the skb */ 
 			if (ret == skb->len)
 				dev_kfree_skb(skb);
 		}

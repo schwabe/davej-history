@@ -61,6 +61,7 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
 	for (;;) {
 		if (!current->need_resched)
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
@@ -78,14 +79,21 @@ void machine_restart(char * __unused)
 {
 	if (mach_reset)
 		mach_reset();
+	for (;;);
 }
 
 void machine_halt(void)
 {
+	if (mach_halt)
+		mach_halt();
+	for (;;);
 }
 
 void machine_power_off(void)
 {
+	if (mach_power_off)
+		mach_power_off();
+	for (;;);
 }
 
 void show_regs(struct pt_regs * regs)
@@ -146,9 +154,10 @@ void flush_thread(void)
 	unsigned long zero = 0;
 	set_fs(USER_DS);
 	current->tss.fs = __USER_DS;
-	asm volatile (".chip 68k/68881\n\t"
-		      "frestore %0@\n\t"
-		      ".chip 68k" : : "a" (&zero));
+	if (!FPU_IS_EMU)
+		asm volatile (".chip 68k/68881\n\t"
+			      "frestore %0\n\t"
+			      ".chip 68k" : : "m" (zero));
 }
 
 /*
@@ -209,16 +218,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	 */
 	p->tss.fs = get_fs().seg;
 
-	/* Copy the current fpu state */
-	asm volatile ("fsave %0" : : "m" (p->tss.fpstate[0]) : "memory");
+	if (!FPU_IS_EMU) {
+		/* Copy the current fpu state */
+		asm volatile ("fsave %0" : : "m" (p->tss.fpstate[0]) : "memory");
 
-	if (!CPU_IS_060 ? p->tss.fpstate[0] : p->tss.fpstate[2])
-	  asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
-			"fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
-			: : "m" (p->tss.fp[0]), "m" (p->tss.fpcntl[0])
-			: "memory");
-	/* Restore the state in case the fpu was busy */
-	asm volatile ("frestore %0" : : "m" (p->tss.fpstate[0]));
+		if (!CPU_IS_060 ? p->tss.fpstate[0] : p->tss.fpstate[2])
+		  asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
+				"fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
+				: : "m" (p->tss.fp[0]), "m" (p->tss.fpcntl[0])
+				: "memory");
+		/* Restore the state in case the fpu was busy */
+		asm volatile ("frestore %0" : : "m" (p->tss.fpstate[0]));
+	}
 
 	return 0;
 }
@@ -227,20 +238,34 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 
 int dump_fpu (struct pt_regs *regs, struct user_m68kfp_struct *fpu)
 {
-  char fpustate[216];
+	char fpustate[216];
 
-  /* First dump the fpu context to avoid protocol violation.  */
-  asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
-  if (!CPU_IS_060 ? !fpustate[0] : !fpustate[2])
-     return 0;
+	if (FPU_IS_EMU) {
+		int i;
 
-  asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"
+		memcpy(fpu->fpcntl, current->tss.fpcntl, 12);
+		memcpy(fpu->fpregs, current->tss.fp, 96);
+		/* Convert internal fpu reg representation
+		 * into long double format
+		 */
+		for (i = 0; i < 24; i += 3)
+			fpu->fpregs[i] = ((fpu->fpregs[i] & 0xffff0000) << 15) |
+			                 ((fpu->fpregs[i] & 0x0000ffff) << 16);
+		return 1;
+	}
+
+	/* First dump the fpu context to avoid protocol violation.  */
+	asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
+	if (!CPU_IS_060 ? !fpustate[0] : !fpustate[2])
+		return 0;
+
+	asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"
 		:: "m" (fpu->fpcntl[0])
 		: "memory");
-  asm volatile ("fmovemx %/fp0-%/fp7,%0"
+	asm volatile ("fmovemx %/fp0-%/fp7,%0"
 		:: "m" (fpu->fpregs[0])
 		: "memory");
-  return 1;
+	return 1;
 }
 
 /*

@@ -106,6 +106,7 @@ enum
 	KERN_SYSRQ=38,		/* int: Sysreq enable */
 	KERN_SHMALL=41,		/* int: maximum size of shared memory */
 	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
+	KERN_HOTPLUG=49,	/* string: path to hotplug policy agent */
 };
 
 

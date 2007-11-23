@@ -1,4 +1,4 @@
-/* $Id: delay.h,v 1.10 1997/11/07 18:24:30 mj Exp $
+/* $Id: delay.h,v 1.10.6.1 2000/10/05 04:23:32 anton Exp $
  * delay.h: Linux delay routines on the Sparc.
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu).
@@ -6,8 +6,6 @@
 
 #ifndef __SPARC_DELAY_H
 #define __SPARC_DELAY_H
-
-extern unsigned long loops_per_sec;
 
 extern __inline__ void __delay(unsigned long loops)
 {

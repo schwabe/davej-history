@@ -260,13 +260,13 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 			case 10:	/* mach V (604ev5) */
 			case 12:	/* G4 */
 			case 20:	/* 620 */
-				loops_per_sec = *fp;
+				loops_per_jiffy = (*fp)/HZ;
 				break;
 			default:	/* 601, 603, etc. */
-				loops_per_sec = *fp / 2;
+				loops_per_jiffy = (*fp / 2)/HZ;
 			}
 		} else
-			loops_per_sec = 50000000;
+			loops_per_jiffy = 50000000/HZ;
 	}
 
 	/* this area has the CPU identification register

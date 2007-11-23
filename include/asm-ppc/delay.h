@@ -1,6 +1,8 @@
 #ifndef _PPC_DELAY_H
 #define _PPC_DELAY_H
 
+#include <asm/param.h>
+
 /*
  * Copyright 1996, Paul Mackerras.
  *
@@ -9,8 +11,6 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
-
-extern unsigned long loops_per_sec;
 
 extern __inline__ void __delay(unsigned int loops)
 {
@@ -23,10 +23,10 @@ extern __inline__ void udelay(unsigned long usecs)
 {
 	unsigned long loops;
 
-	/* compute (usecs * 2^32 / 10^6) * loops_per_sec / 2^32 */
+	/* compute (usecs * 2^32 / 10^6) * (loops_per_jiffy*HZ) / 2^32 */
 	usecs *= 0x10c6;		/* 2^32 / 10^6 */
 	__asm__("mulhwu %0,%1,%2" : "=r" (loops) :
-		"r" (usecs), "r" (loops_per_sec));
+		"r" (usecs), "r" (loops_per_jiffy*HZ));
 	__delay(loops);
 }
 

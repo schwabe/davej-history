@@ -8,7 +8,7 @@
 #define TASK_SIGPENDING 8
 #define TASK_NEEDRESCHED 20
 #define TASK_TSS 470
-#define TASK_MM 622
+#define TASK_MM 826
 #define TSS_KSP 0
 #define TSS_USP 4
 #define TSS_SR 8
@@ -20,6 +20,15 @@
 #define TSS_FPSTATE 132
 #define PT_D0 32
 #define PT_ORIG_D0 36
+#define PT_D1 0
+#define PT_D2 4
+#define PT_D3 8
+#define PT_D4 12
+#define PT_D5 16
+#define PT_A0 20
+#define PT_A1 24
+#define PT_A2 28
+#define PT_PC 46
 #define PT_SR 44
 #define PT_VECTOR 50
 #define IRQ_HANDLER 0
@@ -35,6 +44,10 @@
 #define FBCON_FONT_DESC_HEIGHT 12
 #define FBCON_FONT_DESC_DATA 16
 #define FBCON_FONT_DESC_PREF 20
+#define SIGSEGV 11
+#define SEGV_MAPERR 1
+#define SIGTRAP 5
+#define TRAP_TRACE 2
 #define CUSTOMBASE -2132807680
 #define C_INTENAR 28
 #define C_INTREQR 30

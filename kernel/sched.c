@@ -1931,13 +1931,21 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 	if (t.tv_sec == 0 && t.tv_nsec <= 2000000L &&
 	    current->policy != SCHED_OTHER)
 	{
+		unsigned long delay;
+		
 		/*
 		 * Short delay requests up to 2 ms will be handled with
 		 * high precision by a busy wait for all real-time processes.
 		 *
 		 * Its important on SMP not to do this holding locks.
 		 */
-		udelay((t.tv_nsec + 999) / 1000);
+		 
+		delay=(t.tv_nsec + 999) / 1000;
+		
+		if(delay>10000)
+			mdelay(delay);
+		else
+			udelay(delay);
 		return 0;
 	}
 

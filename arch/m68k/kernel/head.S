@@ -130,7 +130,7 @@
  *
  * mmu_engage
  * ----------
- *	Thanks to a small helping routine enabling the mmu got quiet simple
+ *	Thanks to a small helping routine enabling the mmu got quite simple
  * and there is only one way left. mmu_engage makes a complete a new mapping
  * that only includes the absolute necessary to be able to jump to the final
  * postion and to restore the original mapping.
@@ -271,6 +271,7 @@
  */
 
 #define CONSOLE
+#define CONSOLE_PENGUIN
 
 /*
  * Macintosh serial debug support; outputs boot info to the printer
@@ -305,7 +306,7 @@
 .globl SYMBOL_NAME(m68k_pgtable_cachemode)
 .globl SYMBOL_NAME(m68k_supervisor_cachemode)
 #ifdef CONFIG_MVME16x
-.globl SYMBOL_NAME(mvme_bdid_ptr)
+.globl SYMBOL_NAME(mvme_bdid)
 #endif
 #ifdef CONFIG_Q40
 .globl SYMBOL_NAME(q40_mem_cptr)	
@@ -385,6 +386,17 @@ PAGE_INDEX_SHIFT = 12
 #define L(name) .L/**/name
 #endif
 #endif
+
+/* A macro to make relocating pointers read from memory structures easier.
+ * Remember, we're not necessarily running where the linker thinks we are,
+ * yet, so pointers given by the linker must be manually relocated to be
+ * valid. [CSA 13-May-1999]
+ */
+.macro	load_and_relocate	reference,dest
+0:	lea	%pc@(0b),\dest
+	subl	#0b,\dest
+	addl	\reference,\dest
+.endm
 
 /* Several macros to make the writing of subroutines easier:
  * - func_start marks the beginning of the routine which setups the frame
@@ -472,6 +484,12 @@ func_define	set_leds
 func_define	serial_putc,1
 func_define	console_putc,1
 
+func_define	console_init
+func_define	console_put_stats
+func_define	console_put_penguin
+func_define	console_plot_pixel,3
+func_define	console_scroll
+
 .macro	putc	ch
 #if defined(CONSOLE) || defined(SERIAL_DEBUG)
 	pea	\ch
@@ -503,10 +521,18 @@ func_define	putn,1
 
 .macro	puts		string
 #if defined(CONSOLE) || defined(SERIAL_DEBUG)
+/* The __INITDATA stuff is a no-op when ftrace or kgdb are turned on */
+#if defined(CONFIG_FTRACE) || defined(CONFIG_KGDB)
+	bra 1f
+#endif
 	__INITDATA
 .Lstr\@:
 	.string	"\string"
 	__FINIT
+#if defined(CONFIG_FTRACE) || defined(CONFIG_KGDB)
+	.align 2
+1:
+#endif
 	pea	%pc@(.Lstr\@)
 	func_call	puts
 	addql	#4,%sp
@@ -525,6 +551,9 @@ func_define	putn,1
 #define is_not_mvme147(lab) cmpl &MACH_MVME147,%pc@(m68k_machtype); jne lab
 #define is_not_mvme16x(lab) cmpl &MACH_MVME16x,%pc@(m68k_machtype); jne lab
 #define is_not_bvme6000(lab) cmpl &MACH_BVME6000,%pc@(m68k_machtype); jne lab
+#define is_mvme147(lab) cmpl &MACH_MVME147,%pc@(m68k_machtype); jeq lab
+#define is_mvme16x(lab) cmpl &MACH_MVME16x,%pc@(m68k_machtype); jeq lab
+#define is_bvme6000(lab) cmpl &MACH_BVME6000,%pc@(m68k_machtype); jeq lab
 #define is_not_hp300(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); jne lab
 #define is_not_q40(lab) cmpl &MACH_Q40,%pc@(m68k_machtype); jne lab
 #define is_not_sun3x(lab) cmpl &MACH_SUN3X,%pc@(m68k_machtype); jne lab
@@ -801,6 +830,57 @@ L(save_cachetype):
 L(notypetest):
 #endif
 
+#ifdef CONFIG_VME
+	is_mvme147(L(getvmetype))
+	is_bvme6000(L(getvmetype))
+	is_not_mvme16x(L(gvtdone))
+
+	/* See if the loader has specified the BI_VME_TYPE tag.  Recent
+	 * versions of VMELILO and TFTPLILO do this.  We have to do this
+	 * early so we know how to handle console output.  If the tag
+	 * doesn't exist then we use the Bug for output on MVME16x.
+	 */
+L(getvmetype):
+	get_bi_record	BI_VME_TYPE
+	tstl	%d0
+	jbmi	1f
+	movel	%a0@,%d3
+	lea	%pc@(SYMBOL_NAME(vme_brdtype)),%a0
+	movel	%d3,%a0@
+1:
+#ifdef CONFIG_MVME16x
+	is_not_mvme16x(L(gvtdone))
+
+	/* Need to get the BRD_ID info to diferentiate between 162, 167,
+	 * etc.  This is available as a BI_VME_BRDINFO tag with later
+	 * versions of VMELILO and TFTPLILO, otherwise we call the Bug.
+	 */
+	get_bi_record	BI_VME_BRDINFO
+	tstl	%d0
+	jpl	1f
+
+	/* Get pointer to board ID data from Bug */
+	movel	%d2,%sp@-
+	trap	#15
+	.word	0x70		/* trap 0x70 - .BRD_ID */
+	movel	%sp@+,%a0
+1:
+	lea	%pc@(SYMBOL_NAME(mvme_bdid)),%a1
+	/* Structure is 32 bytes long */
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+	movel	%a0@+,%a1@+
+#endif
+
+L(gvtdone):
+
+#endif
+
 /*
  * Initialize serial port
  */
@@ -812,11 +892,11 @@ L(notypetest):
 #ifdef CONFIG_MAC
 	is_not_mac(L(nocon))
 #ifdef CONSOLE
-	jbsr	L(console_init)
+	console_init
 #ifdef CONSOLE_PENGUIN
-	jbsr	L(console_put_penguin)
+	console_put_penguin
 #endif	/* CONSOLE_PENGUIN */
-	jbsr	L(console_put_stats)
+	console_put_stats
 #endif	/* CONSOLE */
 L(nocon):
 #endif	/* CONFIG_MAC */
@@ -998,14 +1078,6 @@ L(not147):
 
 	is_not_mvme16x(L(not16x))
 
-	/* Get pointer to board ID data */
-	movel	%d2,%sp@-
-	trap	#15
-	.word	0x70		/* trap 0x70 - .BRD_ID */
-	movel	%sp@+,%d2
-	lea	%pc@(SYMBOL_NAME(mvme_bdid_ptr)),%a0
-	movel	%d2,%a0@
-
 	/*
 	 * On MVME16x we have already created kernel page tables for
 	 * 4MB of RAM at address 0, so now need to do a transparent
@@ -1082,10 +1154,6 @@ L(mmu_init_mac):
 
 	putc	'F'
 
-	lea	%pc@(L(mac_videobase)),%a0
-	lea	%pc@(L(console_video_virtual)),%a1
-	movel	%a0@,%a1@
-
 	is_not_040_or_060(1f)
 
 	moveq	#_PAGE_NOCACHE_S,%d3
@@ -1099,15 +1167,16 @@ L(mmu_init_mac):
 	 */
 
 	movel	#VIDEOMEMMASK,%d0
-	andl	L(mac_videobase),%d0
+	andl	%pc@(L(mac_videobase)),%d0
 
 	mmu_map		#VIDEOMEMBASE,%d0,#VIDEOMEMSIZE,%d3
-	mmu_map_eq	#0x40800000,#0x02000000,%d3	/* rom ? */
-	mmu_map_eq	#0x50000000,#0x02000000,%d3
-	mmu_map_eq	#0x60000000,#0x00400000,%d3
-	mmu_map_eq	#0x9c000000,#0x00400000,%d3
+	/* IO devices (incl. serial port) from 5000 0000 to 5300 0000 */
+	mmu_map_eq	#0x50000000,#0x03000000,%d3
+	/* Nubus slot space (video at 0xF0000000, rom at 0xF0F80000) */
 	mmu_map_tt	#1,#0xf8000000,#0x08000000,%d3
-
+	/* ROM from 4000 0000 to 4200 0000 */
+	mmu_map_eq	#0x40000000,#0x02000000,%d3 /* only for mac_reset() */
+	
 	jbra	L(mmu_init_done)
 
 L(mmu_init_not_mac):
@@ -1261,6 +1330,9 @@ L(mmu_fixup_done):
 	andl	L(mac_videobase),%d0
 	addl	#VIDEOMEMBASE,%d0
 	movel	%d0,L(mac_videobase)
+#ifdef MAC_SERIAL_DEBUG
+	orl	#0x50000000,L(mac_sccbase)
+#endif
 1:
 #endif
 
@@ -1661,7 +1733,7 @@ mmu_030_print_flags:
 	putZc('C','I')	/* write through or copy-back */
 	rts
 
-mmu_030_print:
+mmu_030_print: /* print a 3-level (max) translation tree using 3 nested loops*/
 	puts	"\nMMU030\n"
 	puts	"\nrp:"
 	putn	%a5
@@ -1670,62 +1742,66 @@ mmu_030_print:
 	andil	#0xfffffff0,%d0
 	movel	%d0,%a0
 	movel	#0x00000000,%a4		/* logical address */
-	movel	#0,%d0
+	movel	#0,%d0	/* iteration counter for outer loop */
 30:
 	movel	%a4,%d5
-	addil	#PAGESIZE<<13,%d5
+	addil	#PAGESIZE<<13,%d5	/* next logical address */
 	movel	%a0@+,%d6
-	btst	#1,%d6			/* is it a ptr? */
-	jbne	31f			/* yes */
+	btst	#1,%d6			/* is it a table ptr? */
+	jbne	31f			/* if yes, jump */
 	btst	#0,%d6			/* is it early terminating? */
-	jbeq	1f			/* no */
-	jbsr	mmu_030_print_helper
+	jbeq	1f			/* if no, jump */
+	/* DT (descriptor tag) = $01 (PAGE DESCRIPTOR) (early termination) */
+	jbsr	mmu_030_print_helper	/* print " %a4-> %d6"+flags(%d6) */
 	jbra	38f
-1:
-	jbsr	mmu_print_tuple_invalidate
+1:	/* DT (descriptor tag) = $00 (INVALID) */
+	jbsr	mmu_print_tuple_invalidate /* prints " %a4##" */
 	jbra	38f
-31:
-	movel	#0,%d1
+31:	/* DT (descriptor tag) = $1x (table pointer with 4 or 8 byte entries)*/
+	movel	#0,%d1	/* iteration counter for middle loop */
 	andil	#0xfffffff0,%d6
 	movel	%d6,%a1
 32:
 	movel	%a4,%d5
 	addil	#PAGESIZE<<6,%d5
 	movel	%a1@+,%d6
-	btst	#1,%d6
-	jbne	33f
-	btst	#0,%d6
-	jbeq	1f			/* no */
-	jbsr	mmu_030_print_helper
+	btst	#1,%d6			/* is it a table ptr? */
+	jbne	33f			/* if so, jump */
+	btst	#0,%d6			/* is it a page descriptor? */
+	jbeq	1f			/* if no, jump */
+	/* DT (descriptor tag) = $01 (PAGE DESCRIPTOR) */
+	jbsr	mmu_030_print_helper	/* prints " %a4-> %d6"+flags(%d6) */
 	jbra	37f
-1:
-	jbsr	mmu_print_tuple_invalidate
+1:	/* DT (descriptor tag) = $00 (INVALID) */
+	jbsr	mmu_print_tuple_invalidate /* prints " %a4##" */
 	jbra	37f
-33:
-	movel	#0,%d2
+33:	/* DT (descriptor tag) = $1x (table pointer with 4 or 8 byte entries)*/
+	movel	#0,%d2	/* iteration counter for inner loop */
 	andil	#0xfffffff0,%d6
 	movel	%d6,%a2
 34:
 	movel	%a4,%d5
 	addil	#PAGESIZE,%d5
 	movel	%a2@+,%d6
+	/* note that we assume there are no more table indirections left */
 	btst	#0,%d6
 	jbne	35f
-	jbsr	mmu_print_tuple_invalidate
+	/* DT (descriptor tag) = $00 (INVALID) */
+	jbsr	mmu_print_tuple_invalidate /* prints " %a4##" */
 	jbra	36f
-35:
-	jbsr	mmu_030_print_helper
-36:
+35:	/* DT (descriptor tag) = $01 (PAGE DESCRIPTOR) */
+	jbsr	mmu_030_print_helper	/* prints " %a4-> %d6"+flags(%d6) */
+36:	/* continue inner loop */
 	movel	%d5,%a4
 	addq	#1,%d2
 	cmpib	#64,%d2
 	jbne	34b
-37:
-	movel	%d5,%a4
+37:	/* continue middle loop */
+	movel	%d5,%a4			/* move to the next logical address */
 	addq	#1,%d1
 	cmpib	#128,%d1
 	jbne	32b
-38:
+38:	/* continue outer loop */
 	movel	%d5,%a4			/* move to the next logical address */
 	addq	#1,%d0
 	cmpib	#128,%d0
@@ -1746,6 +1822,13 @@ mmu_030_print_helper:
 	moveml	%sp@+,%d0-%d1
 	rts
 
+/* mmu_print_tuple_invalidate(%a4=this_logical) {
+ *	if (mmu_print_data.mmu_next_valid != INVALID) {
+ *	    mmu_print_data.mmu_next_valid =  INVALID;
+ *	    printf(" %08x##\n", this_logical);
+ *	}
+ * } [rough C translation by CSA, not the original author]
+ */
 mmu_print_tuple_invalidate:
 	moveml	%a0/%d7,%sp@-
 
@@ -1764,6 +1847,19 @@ mmu_print_tuple_invalidate_exit:
 	rts
 
 
+/* mmu_print_tuple(%d0=logical,%d1=physical,
+ *		   %d5=next_logical,%a4=this_logical,
+ *		   %a6=print_flags) {
+ *	if (mmu_print_data.mmu_next_valid != VALID ||
+ *	    mmu_print_data.mmu_next_physical != physical) {
+ *	    printf(" %08x-> %08x", logical, physical);
+ *	    print_flags(physical);
+ *	    mmu_print_data.mmu_next_valid =  VALID;
+ *	    mmu_print_data.mmu_next_physical=physical;
+ *	}
+ *	mmu_print_data.mmu_next_physical += (next_logical-this_logical);
+ * } [rough C translation by CSA, not the original author]
+ */
 mmu_print_tuple:
 	moveml	%d0-%d7/%a0,%sp@-
 
@@ -2168,7 +2264,7 @@ func_start	mmu_fixup_page_mmu_cache,%d0/%a0
 func_return	mmu_fixup_page_mmu_cache
 
 /*
- *	mmu_temp_map
+ *	mmu_temp_map (ARG1=physical_addr, ARG2=logical_addr)
  *
  *	create a temporary mapping to enable the mmu,
  *	this we don't need any transparation translation tricks.
@@ -2834,10 +2930,6 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 #ifdef CONFIG_MAC
 	is_not_mac(5f)
 
-#ifdef CONSOLE
-	console_putc	%d0
-#endif /* CONSOLE */
-
 #ifdef MAC_SERIAL_DEBUG
 
 #ifdef MAC_USE_SCC_A
@@ -2903,13 +2995,54 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 #ifdef CONFIG_MVME16x
 	is_not_mvme16x(2f)
 	/*
-	 * The VME 16x class has PROM support for serial output
-	 * of some kind;  the TRAP table is still valid.
+	 * If the loader gave us a board type then we can use that to
+	 * select an appropriate output routine; otherwise we just use
+	 * the Bug code.  If we haev to use the Bug that means the Bug
+	 * workspace has to be valid, which means the Bug has to use
+	 * the SRAM, which is non-standard.
 	 */
 	moveml	%d0-%d7/%a2-%a6,%sp@-
+	movel	SYMBOL_NAME(vme_brdtype),%d1
+	jeq	1f			| No tag - use the Bug
+	cmpi	#VME_TYPE_MVME162,%d1
+	jeq	6f
+	cmpi	#VME_TYPE_MVME172,%d1
+	jne	5f
+	/* 162/172; it's an SCC */
+6:	btst	#2,M162_SCC_CTRL_A
+	nop
+	nop
+	nop
+	jeq	6b
+	moveb	#8,M162_SCC_CTRL_A
+	nop
+	nop
+	nop
+	moveb	%d0,M162_SCC_CTRL_A
+	jra	3f
+5:
+	/* 166/167/177; its a CD2401 */
+	moveb	#0,M167_CYCAR
+	moveb	M167_CYIER,%d2
+	moveb	#0x02,M167_CYIER
+7:
+	btst	#5,M167_PCSCCTICR
+	jeq	7b
+	moveb	M167_PCTPIACKR,%d1
+	moveb	M167_CYLICR,%d1
+	jeq	8f
+	moveb	#0x08,M167_CYTEOIR
+	jra	7b
+8:
+	moveb	%d0,M167_CYTDR
+	moveb	#0,M167_CYTEOIR
+	moveb	%d2,M167_CYIER
+	jra	3f
+1:
 	moveb	%d0,%sp@-
 	trap	#15
 	.word	0x0020	/* TRAP 0x020 */
+3:
 	moveml	%sp@+,%d0-%d7/%a2-%a6
 	jbra	L(serial_putc_done)
 2:
@@ -3004,20 +3137,18 @@ func_return	putn
  *	simple strings!
  */
 ENTRY(mac_serial_print)
+#ifdef MAC_SERIAL_DEBUG
 	moveml	%d0/%a0,%sp@-
-#if 1
 	move	%sr,%sp@-
 	ori	#0x0700,%sr
-#endif
-	movel	%sp@(10),%a0		/* fetch parameter */
+	movel	%sp@(14),%a0		/* fetch parameter */
 	jra	2f
 1:	serial_putc	%d0
 2:	moveb	%a0@+,%d0
 	jne	1b
-#if 1
 	move	%sp@+,%sr
-#endif
 	moveml	%sp@+,%d0/%a0
+#endif /* MAC_SERIAL_DEBUG */
 	rts
 #endif /* CONFIG_MAC */
 
@@ -3041,7 +3172,7 @@ func_return	set_leds
 #define Lconsole_struct_left_edge	16
 #define Lconsole_struct_penguin_putc	20
 
-L(console_init):
+func_start	console_init,%a0-%a4/%d0-%d7
 	/*
 	 *	Some of the register usage that follows
 	 *		a0 = pointer to boot_info
@@ -3055,49 +3186,57 @@ L(console_init):
 	 *		d5 = number of bytes per scan line
 	 *		d6 = number of bytes on the entire screen
 	 */
-	moveml	%a0-%a4/%d0-%d7,%sp@-
 
 	lea	%pc@(L(console_globals)),%a2
-	lea	%pc@(L(mac_videobase)),%a0
-	movel	%a0@,%a1
-	lea	%pc@(L(mac_rowbytes)),%a0
-	movel	%a0@,%d5
-	lea	%pc@(L(mac_dimensions)),%a0
-	movel	%a0@,%d3	/* -> low byte */
+	movel	%pc@(L(mac_videobase)),%a1
+	movel	%pc@(L(mac_rowbytes)),%d5
+	movel	%pc@(L(mac_dimensions)),%d3	/* -> low word */
 	movel	%d3,%d4
-	swap	%d4		/* -> high byte */
-	andl	#0xffff,%d3	/* d3 = screen width in pixels */
-	andl	#0xffff,%d4	/* d4 = screen height in pixels */
+	swap	%d4				/* -> high word */
+	andl	#0xffff,%d3			/* d3 = screen width in pixels */
+	andl	#0xffff,%d4			/* d4 = screen height in pixels */
 
 	movel	%d5,%d6
-	subl	#20,%d6
-	mulul	%d4,%d6		/* scan line bytes x num scan lines */
-	divul	#8,%d6		/* we'll clear 8 bytes at a time */
+|	subl	#20,%d6
+	mulul	%d4,%d6				/* scan line bytes x num scan lines */
+	lsrl	#3,%d6				/* we'll clear 8 bytes at a time */
+	moveq	#-1,%d0				/* Mac_black */
 	subq	#1,%d6
 
-console_clear_loop:
-	movel	#0xffffffff,%a1@+	/* Mac_black */
-	movel	#0xffffffff,%a1@+	/* Mac_black */
-	dbra	%d6,console_clear_loop
+L(console_clear_loop):
+	movel	%d0,%a1@+
+	movel	%d0,%a1@+
+	dbra	%d6,L(console_clear_loop)
 
 	/* Calculate font size */
-
+	/* Use absolute (not pc-relative) pointer here; which means we'll
+	 * have to do relocation every time before we use it.
+	 * (remember, before mmu_engage we're probably not running where
+	 * the linker expected that we'd end up.)  We could store
+	 * %pc@(SYMBOL_NAME(font_xxx)) in memory instead, but if 
+	 * everyone did this we'd end up with quite a motley collection of
+	 * fixup code after mmu_engage, which offends our spirit of 
+	 * disentangledness (code for similar things together, code for
+	 * unrelated things apart).
+	 */
+	
 #if   defined(FONT_8x8)
-	lea	%pc@(SYMBOL_NAME(font_vga_8x8)), %a0
+	lea	SYMBOL_NAME(font_vga_8x8), %a0
 #elif defined(FONT_8x16)
-	lea	%pc@(SYMBOL_NAME(font_vga_8x16)),%a0
+	lea	SYMBOL_NAME(font_vga_8x16),%a0
 #elif defined(FONT_6x11)
-	lea	%pc@(SYMBOL_NAME(font_vga_6x11)),%a0
+	lea	SYMBOL_NAME(font_vga_6x11),%a0
 #else	/*   (FONT_8x8) default */
-	lea	%pc@(SYMBOL_NAME(font_vga_8x8)), %a0
+	lea	SYMBOL_NAME(font_vga_8x8), %a0
 #endif
 
 	/*
 	 *	At this point we make a shift in register usage
-	 *	a1 = address of Lconsole_font pointer
+	 *	a1 = address of console_font pointer
 	 */
 	lea	%pc@(L(console_font)),%a1
-	movel	%a0,%a1@	/* store pointer to struct fbcon_font_desc in Lconsole_font */
+	movel	%a0,%a1@	/* store pointer to struct fbcon_font_desc in console_font */
+	load_and_relocate %a1@,%a0	/* now relocate the pointer. */
 
 	/*
 	 *	Calculate global maxs
@@ -3106,11 +3245,11 @@ console_clear_loop:
 	 *	6 x 11 also supported
 	 */
 		/* ASSERT: a0 = contents of Lconsole_font */
-	movel	%d3,%d0			/* screen width in pixels */
-	divul	%a0@(FBCON_FONT_DESC_WIDTH),%d0		/* d0 = max num chars per row */
+	movel	%d3,%d0				/* screen width in pixels */
+	divul	%a0@(FBCON_FONT_DESC_WIDTH),%d0	/* d0 = max num chars per row */
 
-	movel	%d4,%d1			 /* screen height in pixels */
-	divul	%a0@(FBCON_FONT_DESC_HEIGHT),%d1	 /* d1 = max num rows */
+	movel	%d4,%d1				 /* screen height in pixels */
+	divul	%a0@(FBCON_FONT_DESC_HEIGHT),%d1 /* d1 = max num rows */
 
 	movel	%d0,%a2@(Lconsole_struct_num_columns)
 	movel	%d1,%a2@(Lconsole_struct_num_rows)
@@ -3125,16 +3264,14 @@ console_clear_loop:
 	/*
 	 * Initialization is complete
 	 */
-	moveml	%sp@+,%a0-%a4/%d0-%d7
-	rts
+func_return	console_init
 
-L(console_put_stats):
+func_start	console_put_stats,%a0/%d7
 	/*
 	 *	Some of the register usage that follows
 	 *		a0 = pointer to boot_info
 	 *		d7 = value of boot_info fields
 	 */
-	moveml	%a0/%d7,%sp@-
 
 	puts	"\nMacLinux\n\n"
 
@@ -3154,21 +3291,28 @@ L(console_put_stats):
 	putn	%pc@(L(cputype))
 	putc	'\n'
 
+	putn	%pc@(L(mac_videodepth))
+	putn	%pc@(L(mac_dimensions))
+	putn	%pc@(L(mac_rowbytes))
+	putn	%pc@(L(mac_videodepth))
+#ifdef MAC_SERIAL_DEBUG
+	putn	%pc@(L(mac_sccbase))
+#endif
+	putc	'\n'
+
 #  if defined(MMU_PRINT)
 	jbsr	mmu_print_machine_cpu_types
 #  endif /* MMU_PRINT */
 #endif /* SERIAL_DEBUG */
 
-	moveml	%sp@+,%a0/%d7
-	rts
+func_return	console_put_stats
 
 #ifdef CONSOLE_PENGUIN
-L(console_put_penguin):
+func_start	console_put_penguin,%a0-%a1/%d0-%d7
 	/*
 	 *	Get 'that_penguin' onto the screen in the upper right corner
 	 *	penguin is 64 x 74 pixels, align against right edge of screen
 	 */
-	moveml	%a0-%a1/%d0-%d7,%sp@-
 
 	lea	%pc@(L(mac_dimensions)),%a0
 	movel	%a0@,%d0
@@ -3177,40 +3321,42 @@ L(console_put_penguin):
 	clrl	%d1		/* start at the top */
 	movel	#73,%d7
 	lea	%pc@(SYMBOL_NAME(that_penguin)),%a1
-console_penguin_row:
+L(console_penguin_row):
 	movel	#31,%d6
-console_penguin_pixel_pair:
+L(console_penguin_pixel_pair):
 	moveb	%a1@,%d2
 	lsrb	#4,%d2
-	jbsr	console_plot_pixel
+	console_plot_pixel %d0,%d1,%d2
 	addq	#1,%d0
 	moveb	%a1@+,%d2
-	jbsr	console_plot_pixel
+	console_plot_pixel %d0,%d1,%d2
 	addq	#1,%d0
-	dbra	%d6,console_penguin_pixel_pair
+	dbra	%d6,L(console_penguin_pixel_pair)
 
 	subil	#64,%d0
 	addq	#1,%d1
-	dbra	%d7,console_penguin_row
+	dbra	%d7,L(console_penguin_row)
 
-	moveml	%sp@+,%a0-%a1/%d0-%d7
-	rts
+func_return	console_put_penguin
+
+/* include penguin bitmap */
+SYMBOL_NAME_LABEL(that_penguin)
+#include "../mac/mac_penguin.S"	
 #endif
-
-console_scroll:
-	moveml	%a0-%a4/%d0-%d7,%sp@-
 
 	/*
 	 * Calculate source and destination addresses
 	 *	output	a1 = dest
 	 *		a2 = source
 	 */
+
+func_start	console_scroll,%a0-%a4/%d0-%d7
 	lea	%pc@(L(mac_videobase)),%a0
 	movel	%a0@,%a1
 	movel	%a1,%a2
 	lea	%pc@(L(mac_rowbytes)),%a0
 	movel	%a0@,%d5
-	movel	%pc@(L(console_font)),%a0
+	load_and_relocate %pc@(L(console_font)),%a0
 	mulul	%a0@(FBCON_FONT_DESC_HEIGHT),%d5	/* account for # scan lines per character */
 	addal	%d5,%a2
 
@@ -3229,13 +3375,13 @@ console_scroll:
 	 */
 	lea	%pc@(L(mac_rowbytes)),%a0
 	movel	%a0@,%d6
-	movel	%pc@(L(console_font)),%a0
+	load_and_relocate %pc@(L(console_font)),%a0
 	subl	%a0@(FBCON_FONT_DESC_HEIGHT),%d4	/* we're not scrolling the top row! */
 	mulul	%d4,%d6		/* scan line bytes x num scan lines */
 	divul	#32,%d6		/* we'll move 8 longs at a time */
 	subq	#1,%d6
 
-console_scroll_loop:
+L(console_scroll_loop):
 	movel	%a2@+,%a1@+
 	movel	%a2@+,%a1@+
 	movel	%a2@+,%a1@+
@@ -3244,17 +3390,17 @@ console_scroll_loop:
 	movel	%a2@+,%a1@+
 	movel	%a2@+,%a1@+
 	movel	%a2@+,%a1@+
-	dbra	%d6,console_scroll_loop
+	dbra	%d6,L(console_scroll_loop)
 
 	lea	%pc@(L(mac_rowbytes)),%a0
 	movel	%a0@,%d6
-	movel	%pc@(L(console_font)),%a0
+	load_and_relocate %pc@(L(console_font)),%a0
 	mulul	%a0@(FBCON_FONT_DESC_HEIGHT),%d6	/* scan line bytes x font height */
 	divul	#32,%d6			/* we'll move 8 words at a time */
 	subq	#1,%d6
 
 	moveq	#-1,%d0
-console_scroll_clear_loop:
+L(console_scroll_clear_loop):
 	movel	%d0,%a1@+
 	movel	%d0,%a1@+
 	movel	%d0,%a1@+
@@ -3263,15 +3409,13 @@ console_scroll_clear_loop:
 	movel	%d0,%a1@+
 	movel	%d0,%a1@+
 	movel	%d0,%a1@+
-	dbra	%d6,console_scroll_clear_loop
+	dbra	%d6,L(console_scroll_clear_loop)
 
-	moveml	%sp@+,%a0-%a4/%d0-%d7
-	rts
-
+func_return	console_scroll
 
 func_start	console_putc,%a0/%a1/%d0-%d7
 
-	is_not_mac(console_exit)
+	is_not_mac(L(console_exit))
 
 	/* Output character in d7 on console.
 	 */
@@ -3285,7 +3429,7 @@ func_start	console_putc,%a0/%a1/%d0-%d7
 	lea	%pc@(L(console_globals)),%a0
 
 	cmpib	#10,%d7
-	jne	console_not_lf
+	jne	L(console_not_lf)
 	movel	%a0@(Lconsole_struct_cur_row),%d0
 	addil	#1,%d0
 	movel	%d0,%a0@(Lconsole_struct_cur_row)
@@ -3294,22 +3438,22 @@ func_start	console_putc,%a0/%a1/%d0-%d7
 	jcs	1f
 	subil	#1,%d0
 	movel	%d0,%a0@(Lconsole_struct_cur_row)
-	jbsr	console_scroll
+	console_scroll
 1:
-	jra	console_exit
+	jra	L(console_exit)
 
-console_not_lf:
+L(console_not_lf):
 	cmpib	#13,%d7
-	jne	console_not_cr
+	jne	L(console_not_cr)
 	clrl	%a0@(Lconsole_struct_cur_column)
-	jra	console_exit
+	jra	L(console_exit)
 
-console_not_cr:
+L(console_not_cr):
 	cmpib	#1,%d7
-	jne	console_not_home
+	jne	L(console_not_home)
 	clrl	%a0@(Lconsole_struct_cur_row)
 	clrl	%a0@(Lconsole_struct_cur_column)
-	jra	console_exit
+	jra	L(console_exit)
 
 /*
  *	At this point we know that the %d7 character is going to be
@@ -3320,13 +3464,13 @@ console_not_cr:
  *		d1 = cursor row to draw the character
  *		d7 = character number
  */
-console_not_home:
+L(console_not_home):
 	movel	%a0@(Lconsole_struct_cur_column),%d0
-	addil	#1,%a0@(Lconsole_struct_cur_column)
+	addql	#1,%a0@(Lconsole_struct_cur_column)
 	movel	%a0@(Lconsole_struct_num_columns),%d1
 	cmpl	%d1,%d0
 	jcs	1f
-	putc	'\n'	/* recursion is OK! */
+	console_putc	#'\n'	/* recursion is OK! */
 1:
 	movel	%a0@(Lconsole_struct_cur_row),%d1
 
@@ -3334,8 +3478,8 @@ console_not_home:
 	 *	At this point we make a shift in register usage
 	 *	a0 = address of pointer to font data (fbcon_font_desc)
 	 */
-	movel	%pc@(L(console_font)),%a0
-	movel	%a0@(FBCON_FONT_DESC_DATA),%a1	/* Load fbcon_font_desc.data into a1 */
+	load_and_relocate %pc@(L(console_font)),%a0
+	load_and_relocate %a0@(FBCON_FONT_DESC_DATA),%a1
 	andl	#0x000000ff,%d7
 		/* ASSERT: a0 = contents of Lconsole_font */
 	mulul	%a0@(FBCON_FONT_DESC_HEIGHT),%d7	/* d7 = index into font data */
@@ -3350,35 +3494,34 @@ console_not_home:
 	 *	d6 = count down for the font's pixel width (8)
 	 *	d7 = count down for the font's pixel count in height
 	 */
+
 		/* ASSERT: a0 = contents of Lconsole_font */
 	mulul	%a0@(FBCON_FONT_DESC_WIDTH),%d0
 	mulul	%a0@(FBCON_FONT_DESC_HEIGHT),%d1
 	movel	%a0@(FBCON_FONT_DESC_HEIGHT),%d7	/* Load fbcon_font_desc.height into d7 */
 	subq	#1,%d7
-console_read_char_scanline:
+L(console_read_char_scanline):
 	moveb	%a1@+,%d3
 
 		/* ASSERT: a0 = contents of Lconsole_font */
 	movel	%a0@(FBCON_FONT_DESC_WIDTH),%d6	/* Load fbcon_font_desc.width into d6 */
 	subql	#1,%d6
 
-console_do_font_scanline:
+L(console_do_font_scanline):
 	lslb	#1,%d3
 	scsb	%d2		/* convert 1 bit into a byte */
-	jbsr	console_plot_pixel
+	console_plot_pixel %d0,%d1,%d2
 	addq	#1,%d0
-	dbra	%d6,console_do_font_scanline
+	dbra	%d6,L(console_do_font_scanline)
 
 		/* ASSERT: a0 = contents of Lconsole_font */
 	subl	%a0@(FBCON_FONT_DESC_WIDTH),%d0
 	addq	#1,%d1
-	dbra	%d7,console_read_char_scanline
+	dbra	%d7,L(console_read_char_scanline)
 
-console_exit:
-
+L(console_exit):
 func_return	console_putc
 
-console_plot_pixel:
 	/*
 	 *	Input:
 	 *		d0 = x coordinate
@@ -3386,14 +3529,14 @@ console_plot_pixel:
 	 *		d2 = (bit 0) 1/0 for white/black (!)
 	 *	All registers are preserved
 	 */
-	moveml	%a0-%a1/%d0-%d4,%sp@-
+func_start	console_plot_pixel,%a0-%a1/%d0-%d4
 
-	lea	%pc@(L(mac_videobase)),%a0
-	movel	%a0@,%a1
-	lea	%pc@(L(mac_videodepth)),%a0
-	movel	%a0@,%d3
-	lea	%pc@(L(mac_rowbytes)),%a0
-	mulul	%a0@,%d1
+	movel	%pc@(L(mac_videobase)),%a1
+	movel	%pc@(L(mac_videodepth)),%d3
+	movel	ARG1,%d0
+	movel	ARG2,%d1
+	mulul	%pc@(L(mac_rowbytes)),%d1
+	movel	ARG3,%d2
 
 	/*
 	 *	Register usage:
@@ -3402,13 +3545,10 @@ console_plot_pixel:
 	 *		d2 = black or white (0/1)
 	 *		d3 = video depth
 	 *		d4 = temp of x (d0) for many bit depths
-	 *		d5 = unused
-	 *		d6 = unused
-	 *		d7 = unused
 	 */
-test_1bit:
+L(test_1bit):
 	cmpb	#1,%d3
-	jbne	test_2bit
+	jbne	L(test_2bit)
 	movel	%d0,%d4		/* we need the low order 3 bits! */
 	divul	#8,%d0
 	addal	%d0,%a1
@@ -3416,16 +3556,16 @@ test_1bit:
 	andb	#7,%d4
 	eorb	#7,%d4		/* reverse the x-coordinate w/ screen-bit # */
 	andb	#1,%d2
-	jbne	white_1
+	jbne	L(white_1)
 	bsetb	%d4,%a1@
-	jbra	console_plot_pixel_exit
-white_1:
+	jbra	L(console_plot_pixel_exit)
+L(white_1):
 	bclrb	%d4,%a1@
-	jbra	console_plot_pixel_exit
+	jbra	L(console_plot_pixel_exit)
 
-test_2bit:
+L(test_2bit):
 	cmpb	#2,%d3
-	jbne	test_4bit
+	jbne	L(test_4bit)
 	movel	%d0,%d4		/* we need the low order 2 bits! */
 	divul	#4,%d0
 	addal	%d0,%a1
@@ -3434,20 +3574,20 @@ test_2bit:
 	eorb	#3,%d4		/* reverse the x-coordinate w/ screen-bit # */
 	lsll	#1,%d4		/* ! */
 	andb	#1,%d2
-	jbne	white_2
+	jbne	L(white_2)
 	bsetb	%d4,%a1@
 	addq	#1,%d4
 	bsetb	%d4,%a1@
-	jbra	console_plot_pixel_exit
-white_2:
+	jbra	L(console_plot_pixel_exit)
+L(white_2):
 	bclrb	%d4,%a1@
 	addq	#1,%d4
 	bclrb	%d4,%a1@
-	jbra	console_plot_pixel_exit
+	jbra	L(console_plot_pixel_exit)
 
-test_4bit:
+L(test_4bit):
 	cmpb	#4,%d3
-	jbne	test_8bit
+	jbne	L(test_8bit)
 	movel	%d0,%d4		/* we need the low order bit! */
 	divul	#2,%d0
 	addal	%d0,%a1
@@ -3456,7 +3596,7 @@ test_4bit:
 	eorb	#1,%d4
 	lsll	#2,%d4		/* ! */
 	andb	#1,%d2
-	jbne	white_4
+	jbne	L(white_4)
 	bsetb	%d4,%a1@
 	addq	#1,%d4
 	bsetb	%d4,%a1@
@@ -3464,8 +3604,8 @@ test_4bit:
 	bsetb	%d4,%a1@
 	addq	#1,%d4
 	bsetb	%d4,%a1@
-	jbra	console_plot_pixel_exit
-white_4:
+	jbra	L(console_plot_pixel_exit)
+L(white_4):
 	bclrb	%d4,%a1@
 	addq	#1,%d4
 	bclrb	%d4,%a1@
@@ -3473,38 +3613,37 @@ white_4:
 	bclrb	%d4,%a1@
 	addq	#1,%d4
 	bclrb	%d4,%a1@
-	jbra	console_plot_pixel_exit
+	jbra	L(console_plot_pixel_exit)
 
-test_8bit:
+L(test_8bit):
 	cmpb	#8,%d3
-	jbne	test_16bit
+	jbne	L(test_16bit)
 	addal	%d0,%a1
 	addal	%d1,%a1
 	andb	#1,%d2
-	jbne	white_8
+	jbne	L(white_8)
 	moveb	#0xff,%a1@
-	jbra	console_plot_pixel_exit
-white_8:
+	jbra	L(console_plot_pixel_exit)
+L(white_8):
 	clrb	%a1@
-	jbra	console_plot_pixel_exit
+	jbra	L(console_plot_pixel_exit)
 
-test_16bit:
+L(test_16bit):
 	cmpb	#16,%d3
-	jbne	console_plot_pixel_exit
+	jbne	L(console_plot_pixel_exit)
 	addal	%d0,%a1
 	addal	%d0,%a1
 	addal	%d1,%a1
 	andb	#1,%d2
-	jbne	white_16
+	jbne	L(white_16)
 	clrw	%a1@
-	jbra	console_plot_pixel_exit
-white_16:
+	jbra	L(console_plot_pixel_exit)
+L(white_16):
 	movew	#0x0fff,%a1@
-	jbra	console_plot_pixel_exit
+	jbra	L(console_plot_pixel_exit)
 
-console_plot_pixel_exit:
-	moveml	%sp@+,%a0-%a1/%d0-%d4
-	rts
+L(console_plot_pixel_exit):
+func_return	console_plot_pixel
 #endif /* CONSOLE */
 
 #if 0
@@ -3549,11 +3688,6 @@ L(iobase):
 	.long 0
 #endif
 
-#ifdef CONFIG_MAC
-L(console_video_virtual):
-	.long	0
-#endif	/* CONFIG_MAC */
-
 #if defined(CONSOLE)
 L(console_globals):
 	.long	0		/* cursor column */
@@ -3597,6 +3731,17 @@ M147_SCC_CTRL_A = 0xfffe3002
 M147_SCC_DATA_A = 0xfffe3003
 #endif
 
+#if defined (CONFIG_MVME16x)
+M162_SCC_CTRL_A = 0xfff45005
+M167_CYCAR = 0xfff450ee
+M167_CYIER = 0xfff45011
+M167_CYLICR = 0xfff45026
+M167_CYTEOIR = 0xfff45085
+M167_CYTDR = 0xfff450f8
+M167_PCSCCTICR = 0xfff4201e
+M167_PCTPIACKR = 0xfff42025
+#endif
+
 #if defined (CONFIG_BVME6000)
 BVME_SCC_CTRL_A	= 0xffb0000b
 BVME_SCC_DATA_A	= 0xffb0000f
@@ -3630,8 +3775,8 @@ SYMBOL_NAME_LABEL(m68k_pgtable_cachemode)
 SYMBOL_NAME_LABEL(m68k_supervisor_cachemode)
 	.long	0
 #if defined(CONFIG_MVME16x)
-SYMBOL_NAME_LABEL(mvme_bdid_ptr)
-	.long	0
+SYMBOL_NAME_LABEL(mvme_bdid)
+	.long	0,0,0,0,0,0,0,0
 #endif
 #if defined(CONFIG_Q40)
 SYMBOL_NAME_LABEL(q40_mem_cptr)

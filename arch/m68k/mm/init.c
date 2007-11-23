@@ -139,6 +139,7 @@ __initfunc(static pte_t * kernel_page_table(unsigned long *memavailp))
 }
 
 static pmd_t *last_pgtable __initdata = NULL;
+static pmd_t *zero_pgtable __initdata = NULL;
 
 __initfunc(static pmd_t * kernel_ptr_table(unsigned long *memavailp))
 {
@@ -236,7 +237,8 @@ map_chunk (unsigned long addr, long size, unsigned long *memavailp))
 #ifdef DEBUG
 				printk ("[zero map]");
 #endif
-				pte_dir = (pte_t *)kernel_ptr_table(memavailp);
+				zero_pgtable = kernel_ptr_table(memavailp);
+				pte_dir = (pte_t *)zero_pgtable;
 				pmd_dir->pmd[0] = virt_to_phys(pte_dir) |
 					_PAGE_TABLE | _PAGE_ACCESSED;
 				pte_val(*pte_dir++) = 0;
@@ -380,7 +382,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 				  "pmove %0,%%crp\n\t"
 				  ".chip 68k"
 				  : /* no outputs */
-				  : "m" (task[0]->tss.crp[0]));
+				  : "m" (task[0]->tss.crp[1]|_PAGE_TABLE));
 #ifdef DEBUG
 	printk ("set crp\n");
 #endif
@@ -450,6 +452,9 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		if (pgd_present(kernel_pg_dir[i]))
 			init_pointer_table(pgd_page(kernel_pg_dir[i]));
 	}
+	/* insert also pointer table that we used to unmap the zero page */
+	if (zero_pgtable)
+		init_pointer_table((unsigned long)zero_pgtable);
 
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk data, %dk init)\n",
 	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),

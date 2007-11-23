@@ -230,6 +230,7 @@ lockd_up(void)
 
 	error = -ENOMEM;
 	serv = svc_create(&nlmsvc_program, 0, NLMSVC_XDRSIZE);
+
 	if (!serv) {
 		printk(KERN_WARNING "lockd_up: create service failed\n");
 		goto out;
@@ -353,7 +354,7 @@ static struct svc_version	nlmsvc_version1 = {
 static struct svc_version	nlmsvc_version3 = {
 	3, 24, nlmsvc_procedures, NULL
 };
-#ifdef CONFIG_NFSD_NFS3
+#if (defined(CONFIG_NFSD) || defined(CONFIG_NFSD_MODULE)) && defined(CONFIG_NFS_V3)
 static struct svc_version	nlmsvc_version4 = {
 	4, 24, nlmsvc_procedures4, NULL
 };
@@ -363,7 +364,7 @@ static struct svc_version *	nlmsvc_version[] = {
 	&nlmsvc_version1,
 	NULL,
 	&nlmsvc_version3,
-#ifdef CONFIG_NFSD_NFS3
+#if (defined(CONFIG_NFSD) || defined(CONFIG_NFSD_MODULE)) && defined(CONFIG_NFS_V3)
 	&nlmsvc_version4,
 #endif
 };
@@ -383,6 +384,7 @@ struct svc_program		nlmsvc_program = {
 int
 lockdctl(int cmd, void *opaque_argp, void *opaque_resp)
 {
+#if 0
 	int err;
 
 	MOD_INC_USE_COUNT;
@@ -398,4 +400,17 @@ lockdctl(int cmd, void *opaque_argp, void *opaque_resp)
 	MOD_DEC_USE_COUNT;
 
 	return err;
+#else
+	/*
+	 *  For the moment, unless a real need for locks on NFS root
+	 *  emerges, we revert to automatic lockd start.  But we will leave the
+	 *  manual call machinery in place in case we ever want to go
+	 *  back to it.  I felt a warning was useful here, but many didn't like
+	 *  that, so I'll suppress it.  - dhiggen
+	 */
+#if 0
+	 printk("lockd: note, lockd is automatic in this kernel.  Remove rpc.lockd from any rc scripts.\n"); 
+#endif
+	return (0);
+#endif
 }

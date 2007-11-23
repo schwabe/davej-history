@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/major.h>
 
+#include <asm/bootinfo.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/setup.h>
@@ -62,6 +63,14 @@ static int bcd2int (unsigned char b);
 
 void (*tick_handler)(int, void *, struct pt_regs *);
 
+
+int mvme147_parse_bootinfo(const struct bi_record *bi)
+{
+	if (bi->tag == BI_VME_TYPE || bi->tag == BI_VME_BRDINFO)
+		return 0;
+	else
+		return 1;
+}
 
 int mvme147_kbdrate (struct kbd_repeat *k)
 {

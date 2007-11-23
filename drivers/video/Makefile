@@ -153,7 +153,7 @@ else
 endif
 
 ifeq ($(CONFIG_FB_MAC),y)
-L_OBJS += macfb.o
+L_OBJS += macfb.o macmodes.o
 endif
 
 ifeq ($(CONFIG_FB_HP300),y)

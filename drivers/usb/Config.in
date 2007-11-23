@@ -10,6 +10,7 @@ if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'Miscellaneous USB options'
    bool '  Preliminary USB device filesystem' CONFIG_USB_DEVICEFS
+   bool '  Support for hot-pluggable USB devices' CONFIG_HOTPLUG
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '  Enforce USB bandwidth allocation (EXPERIMENTAL)' CONFIG_USB_BANDWIDTH
    else

@@ -183,9 +183,9 @@ static char isdn_audio_ulaw_to_alaw[] =
 };
 
 #define NCOEFF           16     /* number of frequencies to be analyzed       */
-#define DTMF_TRESH    50000     /* above this is dtmf                         */
-#define SILENCE_TRESH   100     /* below this is silence                      */
-#define H2_TRESH      10000     /* 2nd harmonic                               */
+#define DTMF_TRESH    25000     /* above this is dtmf                         */
+#define SILENCE_TRESH   200     /* below this is silence                      */
+#define H2_TRESH      20000     /* 2nd harmonic                               */
 #define AMP_BITS          9     /* bits per sample, reduced to avoid overflow */
 #define LOGRP             0
 #define HIGRP             1
@@ -225,38 +225,25 @@ static char dtmf_matrix[4][4] =
 	{'*', '0', '#', 'D'}
 };
 
-
-/*
- * egcs 2.95 complain about invalid asm statement:
- * "fixed or forbidden register 2 (cx) was spilled for class CREG."
- */
-#if ((CPU == 386) || (CPU == 486) || (CPU == 586)) && defined(__GNUC__)
-#if __GNUC__ == 2 && __GNUC_MINOR__ < 95
-#define ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
-#endif
-#endif
-
-#ifdef ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
 static inline void
-isdn_audio_tlookup(const void *table, void *buff, unsigned long n)
+isdn_audio_tlookup(const u_char *table, u_char *buff, unsigned long n)
 {
-	__asm__("cld\n"
+#ifdef __i386__
+	unsigned long d0, d1, d2, d3;
+	__asm__ __volatile__(
+		"cld\n"
 		"1:\tlodsb\n\t"
 		"xlatb\n\t"
 		"stosb\n\t"
 		"loop 1b\n\t"
-      : :  "b"((long) table), "c"(n), "D"((long) buff), "S"((long) buff)
-      :        "bx", "cx", "di", "si", "ax");
-}
-
+	:	"=&b"(d0), "=&c"(d1), "=&D"(d2), "=&S"(d3)
+	:	"0"((long) table), "1"(n), "2"((long) buff), "3"((long) buff)
+	:	"memory", "ax");
 #else
-static inline void
-isdn_audio_tlookup(const char *table, char *buff, unsigned long n)
-{
 	while (n--)
 		*buff++ = table[*(unsigned char *)buff];
-}
 #endif
+}
 
 void
 isdn_audio_ulaw2alaw(unsigned char *buff, unsigned long len)

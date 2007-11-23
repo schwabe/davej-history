@@ -461,7 +461,7 @@ void __init smp_store_cpu_info(int id)
 {
         struct cpuinfo_PPC *c = &cpu_data[id];
 	/* assume bogomips are same for everything */
-        c->loops_per_sec = loops_per_sec;
+        c->loops_per_jiffy = loops_per_jiffy;
         c->pvr = _get_PVR();
 }
 

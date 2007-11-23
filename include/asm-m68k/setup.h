@@ -244,6 +244,9 @@ extern unsigned long m68k_machtype;
 extern unsigned long m68k_cputype;
 extern unsigned long m68k_fputype;
 extern unsigned long m68k_mmutype;			/* Not really used yet */
+#ifdef CONFIG_VME
+extern unsigned long vme_brdtype;
+#endif
 
     /*
      *  m68k_is040or060 is != 0 for a '040 or higher;
@@ -314,6 +317,16 @@ extern int m68k_is040or060;
 #endif
 
 #define CPU_TYPE (m68k_cputype)
+
+#ifdef CONFIG_FPU_EMU
+#  ifdef CONFIG_FPU_EMU_ONLY
+#    define FPU_IS_EMU (1)
+#  else
+#    define FPU_IS_EMU (!m68k_fputype)
+#  endif
+#else
+#  define FPU_IS_EMU (0)
+#endif
 
 
     /*

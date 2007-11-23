@@ -483,7 +483,7 @@ static void parse(int argc,
 	multi_opt(spec_m, spec_M, 'm', *system_map);
 
 	printf("WARNING: This version of ksymoops is obsolete.\n");
-	printf("WARNING: The current version can be obtained from ftp://ftp.ocs.com.au/pub/ksymoops\n");
+	printf("WARNING: The current version can be obtained from ftp://ftp.<country>.kernel.org/pub/linux/utils/kernel/ksymoops\n");
 	warnings += 2;
 
 	printf("Options used:");

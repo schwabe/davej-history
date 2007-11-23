@@ -2523,6 +2523,7 @@ int sx_init(void)
 			else
 				pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2,
 						      &tint);
+			board->hw_base = tint & PCI_BASE_ADDRESS_MEM_MASK;
 			board->base2 = 
 			board->base = (ulong) ioremap(board->hw_base, WINDOW_LEN (board));
 			if (!board->base) {

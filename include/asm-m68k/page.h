@@ -11,6 +11,7 @@
 #ifdef __KERNEL__
 
 #include <asm/setup.h>
+#include <asm/bootinfo.h>
 
 #define STRICT_MM_TYPECHECKS
 
@@ -124,9 +125,14 @@ extern inline void *__va(unsigned long physaddr)
 #ifdef CONFIG_AMIGA
 	if (MACH_IS_AMIGA && (physaddr < 16*1024*1024))
 		return (void *)0xffffffff;
-	else
 #endif
-		return (void *)(physaddr+PAGE_OFFSET);
+#ifdef CONFIG_MAC
+	if (MACH_IS_MAC && (physaddr >= mac_bi_data.videoaddr) &&
+	    (physaddr < mac_bi_data.videoaddr +
+	     (mac_bi_data.videorow * (mac_bi_data.dimensions>>16))))
+		return (void *)0xffffffff;
+#endif
+	return (void *)(physaddr+PAGE_OFFSET);
 }
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 

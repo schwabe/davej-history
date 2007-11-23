@@ -1005,8 +1005,10 @@ static int usbin_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
-	if (u->dma.count >= u->dma.dmasize && !u->dma.mapped)
+	if (u->dma.count >= u->dma.dmasize && !u->dma.mapped) {
+		spin_unlock_irqrestore(&as->lock, flags);
 		return 0;
+	}
 	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
 		urb = &u->durb[0].urb;
@@ -1366,8 +1368,10 @@ static int usbout_start(struct usb_audiodev *as)
 		}
 		spin_lock_irqsave(&as->lock, flags);
 	}
-	if (u->dma.count <= 0 && !u->dma.mapped)
+	if (u->dma.count <= 0 && !u->dma.mapped) {
+		spin_unlock_irqrestore(&as->lock, flags);
 		return 0;
+	}
        	u->flags |= FLG_RUNNING;
 	if (!(u->flags & FLG_URB0RUNNING)) {
 		urb = &u->durb[0].urb;

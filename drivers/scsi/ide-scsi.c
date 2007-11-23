@@ -96,6 +96,7 @@ typedef struct {
 	unsigned long flags;			/* Status/Action flags */
 	unsigned long transform;		/* SCSI cmd translation layer */
 	unsigned long log;			/* log flags */
+	int last_lun;				/* last LUN */
 } idescsi_scsi_t;
 
 /*
@@ -508,8 +509,11 @@ static void idescsi_setup (ide_drive_t *drive, idescsi_scsi_t *scsi, int id)
 	drive->ready_stat = 0;
 	memset (scsi, 0, sizeof (idescsi_scsi_t));
 	scsi->drive = drive;
-	if (drive->id && (drive->id->config & 0x0060) == 0x20)
-		set_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags);
+	if (drive->id) {
+		if ((drive->id->config & 0x0060) == 0x20)
+			set_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags);
+		scsi->last_lun = drive->id->last_lun;
+	}
 	set_bit(IDESCSI_TRANSFORM, &scsi->transform);
 	clear_bit(IDESCSI_SG_TRANSFORM, &scsi->transform);
 #if IDESCSI_DEBUG_LOG
@@ -603,11 +607,15 @@ int idescsi_init (void)
 int idescsi_detect (Scsi_Host_Template *host_template)
 {
 	struct Scsi_Host *host;
+	int last_lun = 0;
 	int id;
 
 	host_template->proc_dir = &idescsi_proc_dir;
 	host = scsi_register(host_template, 0);
-	for (id = 0; id < MAX_HWIFS * MAX_DRIVES && idescsi_drives[id]; id++);
+	for (id = 0; id < MAX_HWIFS * MAX_DRIVES && idescsi_drives[id]; id++)
+		last_lun = IDE_MAX(last_lun, idescsi_drives[id]->id->last_lun);
+
+	host->max_lun = last_lun + 1;
 	host->max_id = id;
 	host->can_queue = host->cmd_per_lun * id;
 	return 1;
@@ -736,20 +744,24 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 
 	if (!drive) {
 		printk (KERN_ERR "ide-scsi: drive id %d not present\n", cmd->target);
-		goto abort;
+		goto error;
 	}
 	scsi = drive->driver_data;
 	pc = kmalloc (sizeof (idescsi_pc_t), GFP_ATOMIC);
 	rq = kmalloc (sizeof (struct request), GFP_ATOMIC);
 	if (rq == NULL || pc == NULL) {
 		printk (KERN_ERR "ide-scsi: %s: out of memory\n", drive->name);
-		goto abort;
+		goto error;
 	}
 
 	memset (pc->c, 0, 12);
 	pc->flags = 0;
 	pc->rq = rq;
 	memcpy (pc->c, cmd->cmnd, cmd->cmd_len);
+	if ((pc->c[1] >> 5) > scsi->last_lun) {
+		cmd->result = DID_ABORT << 16;
+		goto abort;
+	}
 	if (cmd->use_sg) {
 		pc->buffer = NULL;
 		pc->sg = cmd->request_buffer;
@@ -784,10 +796,12 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 	(void) ide_do_drive_cmd (drive, rq, ide_end);
 	spin_lock_irq(&io_request_lock);
 	return 0;
+
+error:
+	cmd->result = DID_ERROR << 16;
 abort:
 	if (pc) kfree (pc);
 	if (rq) kfree (rq);
-	cmd->result = DID_ERROR << 16;
 	done(cmd);
 	return 0;
 }

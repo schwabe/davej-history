@@ -319,6 +319,7 @@ tristate 'MultiGate (COMX) synchronous serial boards support' CONFIG_COMX
    dep_tristate '  Support for Frame Relay on MultiGate boards' CONFIG_COMX_PROTO_FR $CONFIG_COMX
 fi
 
+
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Generic HDLC driver (EXPERIMENTAL)' CONFIG_HDLC
   if [ "$CONFIG_HDLC" != "n" ]; then
@@ -361,6 +362,11 @@ if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
     fi 
   fi
 fi
+
+#
+# Xpeed drivers
+#
+tristate 'Xpeed X200/X300 DSL NIC support' CONFIG_XPEED
 
 endmenu
 

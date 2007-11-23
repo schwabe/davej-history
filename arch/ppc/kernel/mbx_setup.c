@@ -31,6 +31,7 @@
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -55,8 +56,6 @@ extern int mackbd_translate(unsigned char scancode, unsigned char *keycode,
 extern char mackbd_unexpected_up(unsigned char keycode);
 extern void mackbd_leds(unsigned char leds);
 extern void mackbd_init_hw(void);
-
-extern unsigned long loops_per_sec;
 
 unsigned long empty_zero_page[1024];
 

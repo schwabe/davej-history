@@ -33,6 +33,7 @@
 #include <linux/pci.h>
 #include <linux/openpic.h>
 #include <linux/version.h>
+#include <linux/delay.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -94,7 +95,6 @@ kdev_t boot_dev;
 extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
 extern int probingmem;
-extern unsigned long loops_per_sec;
 
 unsigned long empty_zero_page[1024];
 
@@ -240,7 +240,7 @@ __initfunc(void
 	struct device_node *device;
 
 	/* init to some ~sane value until calibrate_delay() runs */
-	loops_per_sec = 50000000;
+	loops_per_jiffy = 50000000/HZ;
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* this is fine for chrp */

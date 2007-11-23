@@ -91,7 +91,7 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, struct linux_hose_info *hose,
 {
 	unsigned long addr;
 
-	if (!pci_probe_enabled)
+	if (!pci_probe_enabled || !hose->pci_config_space)
 		return -1;
 
 	DBG_CFG(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x, "

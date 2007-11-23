@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/major.h>
 
+#include <asm/bootinfo.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/setup.h>
@@ -63,6 +64,15 @@ static unsigned char bin2bcd (unsigned char b);
  * kernel/sched.c, called via bvme6000_process_int() */
 
 static void (*tick_handler)(int, void *, struct pt_regs *);
+
+
+int bvme6000_parse_bootinfo(const struct bi_record *bi)
+{
+	if (bi->tag == BI_VME_TYPE)
+		return 0;
+	else
+		return 1;
+}
 
 int bvme6000_kbdrate (struct kbd_repeat *k)
 {
@@ -164,7 +174,7 @@ void bvme6000_abort_int (int irq, void *dev_id, struct pt_regs *fp)
         unsigned long *old = (unsigned long *)0xf8000000;
 
         /* Wait for button release */
-	while (*config_reg_ptr & BVME_ABORT_STATUS)
+	while (*(volatile unsigned char *)BVME_LOCAL_IRQ_STAT & BVME_ABORT_STATUS)
 		;
 
         *(new+4) = *(old+4);            /* Illegal instruction */
@@ -405,15 +415,6 @@ int bvme6000_keyb_init (void)
 
 /*-------------------  Serial console stuff ------------------------*/
 
-static void bvme_scc_write(struct console *co, const char *str, unsigned cnt);
-
-
-void bvme6000_init_console_port (struct console *co, int cflag)
-{
-        co->write = bvme_scc_write;
-}
-
-
 static void scc_delay (void)
 {
         int n;
@@ -423,6 +424,7 @@ static void scc_delay (void)
 		trash = n;
 }
 
+
 static void scc_write (char ch)
 {
         volatile char *p = (volatile char *)BVME_SCC_A_ADDR;
@@ -431,10 +433,7 @@ static void scc_write (char ch)
                 scc_delay();
         }
         while (!(*p & 4));
-        scc_delay();
-        *p = 8;
-        scc_delay();
-        *p = ch;
+        *(p + 4) = ch;
 }
 
 
@@ -452,5 +451,24 @@ static void bvme_scc_write (struct console *co, const char *str, unsigned count)
                 scc_write (*str++);
         }
         restore_flags(flags);
+}
+
+
+static int bvme_scc_wait_key (struct console *co)
+{
+	volatile unsigned char *p = (volatile char *)BVME_SCC_A_ADDR;
+
+	/* wait for rx buf filled */
+	while ((*p & 0x01) == 0)
+		;
+
+	return  *(p + 4);
+}
+
+
+void bvme6000_init_console_port (struct console *co, int cflag)
+{
+        co->write    = bvme_scc_write;
+        co->wait_key = bvme_scc_wait_key;
 }
 

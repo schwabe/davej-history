@@ -90,8 +90,18 @@ do_trace:
 	jbsr	SYMBOL_NAME(syscall_trace)
 
 SYMBOL_NAME_LABEL(ret_from_signal)
-	RESTORE_SWITCH_STACK
+	RESTORE_SWITCH_STACK 
 	addql	#4,%sp
+/* on 68040 complete pending writebacks if any */	
+#ifdef CONFIG_M68040
+	bfextu	%sp@(PT_VECTOR){#0,#4},%d0  
+	subql	#7,%d0				| bus error frame ?
+	jbne	1f
+	movel	%sp,%sp@-
+	jbsr	SYMBOL_NAME(berr_040cleanup)
+	addql	#4,%sp
+1:	
+#endif	
 	jra	SYMBOL_NAME(ret_from_exception)
 
 ENTRY(system_call)
@@ -283,6 +293,11 @@ SYMBOL_NAME_LABEL(resume)
 	movel	%sp,%a0@(TASK_TSS+TSS_KSP)
 
 	/* save floating point context */
+#ifndef CONFIG_FPU_EMU_ONLY
+#ifdef CONFIG_FPU_EMU
+	tstl	SYMBOL_NAME(m68k_fputype)
+	jeq	3f
+#endif
 	fsave	%a0@(TASK_TSS+TSS_FPSTATE)
 
 #if defined(CONFIG_M68060)
@@ -304,6 +319,7 @@ SYMBOL_NAME_LABEL(resume)
 2:	fmovemx	%fp0-%fp7,%a0@(TASK_TSS+TSS_FPREG)
 	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(TASK_TSS+TSS_FPCNTL)
 3:
+#endif	/* CONFIG_FPU_EMU_ONLY */
 	/* Return previous task in %d1 */
 	movel	%curptr,%d1
 
@@ -374,7 +390,11 @@ SYMBOL_NAME_LABEL(resume)
 2:
 4:
 	/* restore floating point context */
-
+#ifndef CONFIG_FPU_EMU_ONLY
+#ifdef CONFIG_FPU_EMU
+	tstl	SYMBOL_NAME(m68k_fputype)
+	jeq	4f
+#endif
 #if defined(CONFIG_M68060)
 #if !defined(CPU_M68060_ONLY)
 	btst	#3,SYMBOL_NAME(m68k_cputype)+3
@@ -394,6 +414,8 @@ SYMBOL_NAME_LABEL(resume)
 2:	fmovemx	%a1@(TASK_TSS+TSS_FPREG),%fp0-%fp7
 	fmoveml	%a1@(TASK_TSS+TSS_FPCNTL),%fpcr/%fpsr/%fpiar
 3:	frestore %a1@(TASK_TSS+TSS_FPSTATE)
+4:
+#endif	/* CONFIG_FPU_EMU_ONLY */
 
 	/* restore the kernel stack pointer */
 	movel	%a1@(TASK_TSS+TSS_KSP),%sp

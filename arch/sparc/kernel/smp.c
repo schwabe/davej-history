@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/ptrace.h>
 #include <asm/atomic.h>
@@ -85,7 +86,7 @@ __initfunc(void smp_setup(char *str, int *ints))
 
 __initfunc(void smp_store_cpu_info(int id))
 {
-	cpu_data[id].udelay_val = loops_per_sec; /* this is it on sparc. */
+	cpu_data[id].udelay_val = loops_per_jiffy; /* this is it on sparc. */
 }
 
 __initfunc(void smp_commence(void))
@@ -288,8 +289,8 @@ int smp_bogo_info(char *buf)
 		if (cpu_present_map & (1 << i))
 			len += sprintf(buf + len, "Cpu%dBogo\t: %lu.%02lu\n", 
 					i,
-					cpu_data[i].udelay_val/500000,
-					(cpu_data[i].udelay_val/5000)%100);
+					cpu_data[i].udelay_val/(500000/HZ),
+					(cpu_data[i].udelay_val/(5000/HZ))%100);
 	return len;
 }
 

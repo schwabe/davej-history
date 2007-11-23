@@ -1,5 +1,5 @@
 /*
- * linux/fs/lockd/xdr.c
+ * linux/fs/lockd/xdr4.c
  *
  * XDR support for lockd and the lock client.
  *
@@ -26,6 +26,10 @@
 #define OFFSET_MAX		((off_t)LONG_MAX)
 
 #define QUADLEN(len)		(((len) + 3) >> 2)
+
+u32      nlm4_granted, nlm4_lck_denied, nlm4_lck_denied_nolocks,
+         nlm4_lck_blocked, nlm4_lck_denied_grace_period, nlm4_deadlock,
+         nlm4_rofs, nlm4_stale_fh, nlm4_fbig, nlm4_failed;
 
 
 typedef struct nlm_args	nlm_args;
@@ -172,11 +176,13 @@ nlm4_encode_lock(u32 *p, struct nlm_lock *lock)
 static u32 *
 nlm4_encode_testres(u32 *p, struct nlm_res *resp)
 {
+
+	dprintk("xdr: before encode_testres (p %p resp %p)\n", p, resp);
 	if (!(p = nlm4_encode_cookie(p, &resp->cookie)))
 		return 0;
 	*p++ = resp->status;
 
-	if (resp->status == nlm_lck_denied) {
+	if (resp->status == nlm4_lck_denied) {
 		struct file_lock	*fl = &resp->lock.fl;
 
 		*p++ = (fl->fl_type == F_RDLCK)? xdr_zero : xdr_one;
@@ -191,8 +197,12 @@ nlm4_encode_testres(u32 *p, struct nlm_res *resp)
 			p = xdr_encode_hyper(p, 0);
 		else
 			p = xdr_encode_hyper(p, fl->fl_end - fl->fl_start + 1);
+		dprintk("xdr: encode_testres (status %d pid %d type %d start %ld end %ld)\n", resp->status, fl->fl_pid, fl->fl_type, fl->fl_start,  fl->fl_end);
+
+
 	}
 
+	dprintk("xdr: after encode_testres (p %p resp %p)\n", p, resp);
 	return p;
 }
 
@@ -542,7 +552,7 @@ nlm4clt_decode_res(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
       (kxdrproc_t) nlm4clt_encode_##argtype,			\
       (kxdrproc_t) nlm4clt_decode_##restype,			\
       MAX(NLM4_##argtype##_sz, NLM4_##restype##_sz) << 2,	\
-      0								\
+      0                                                         \
     }
 
 static struct rpc_procinfo	nlm4_procedures[] = {

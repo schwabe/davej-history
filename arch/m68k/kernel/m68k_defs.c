@@ -43,8 +43,16 @@ int main(void)
 	/* offsets into the pt_regs */
 	DEFINE(PT_D0, offsetof(struct pt_regs, d0));
 	DEFINE(PT_ORIG_D0, offsetof(struct pt_regs, orig_d0));
+	DEFINE(PT_D1, offsetof(struct pt_regs, d1));
+	DEFINE(PT_D2, offsetof(struct pt_regs, d2));
+	DEFINE(PT_D3, offsetof(struct pt_regs, d3));
+	DEFINE(PT_D4, offsetof(struct pt_regs, d4));
+	DEFINE(PT_D5, offsetof(struct pt_regs, d5));
+	DEFINE(PT_A0, offsetof(struct pt_regs, a0));
+	DEFINE(PT_A1, offsetof(struct pt_regs, a1));
+	DEFINE(PT_A2, offsetof(struct pt_regs, a2));
+	DEFINE(PT_PC, offsetof(struct pt_regs, pc));
 	DEFINE(PT_SR, offsetof(struct pt_regs, sr));
-
 	/* bitfields are a bit difficult */
 	DEFINE(PT_VECTOR, offsetof(struct pt_regs, pc) + 4);
 
@@ -68,6 +76,12 @@ int main(void)
 	DEFINE(FBCON_FONT_DESC_HEIGHT, offsetof(struct fbcon_font_desc, height));
 	DEFINE(FBCON_FONT_DESC_DATA, offsetof(struct fbcon_font_desc, data));
 	DEFINE(FBCON_FONT_DESC_PREF, offsetof(struct fbcon_font_desc, pref));
+
+	/* signal defines */
+	DEFINE(SIGSEGV, SIGSEGV);
+	DEFINE(SEGV_MAPERR, SEGV_MAPERR);
+	DEFINE(SIGTRAP, SIGTRAP);
+	DEFINE(TRAP_TRACE, TRAP_TRACE);
 
 	/* offsets into the custom struct */
 	DEFINE(CUSTOMBASE, &custom);

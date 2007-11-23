@@ -478,8 +478,14 @@ repeat:
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL)
 		inode->i_flags |= MS_SYNCHRONOUS;
 	insert_inode_hash(inode);
+	/* 
+	 *   dhXXX:
+	 *  To be really picky we should set i_generation to one more than
+	 *  whatever's on the disk, to ensure a monotonic advance of 
+	 *  generation for NFS.  But the odds of duplicating the last igen 
+	 *  are only 1 in 2^32...
+	 */
 	inode->i_generation = inode_generation_count++;
-	inode->u.ext2_i.i_version = inode->i_generation;
 	mark_inode_dirty(inode);
 
 	unlock_super (sb);

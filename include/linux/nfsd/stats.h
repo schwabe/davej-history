@@ -13,12 +13,11 @@ struct nfsd_stats {
 	unsigned int	rchits;		/* repcache hits */
 	unsigned int	rcmisses;	/* repcache hits */
 	unsigned int	rcnocache;	/* uncached reqs */
-	unsigned int	fh_cached;	/* dentry cached */
-	unsigned int	fh_valid;	/* dentry validated */
-	unsigned int	fh_fixup;	/* dentry fixup validated */
 	unsigned int	fh_lookup;	/* new lookup required */
+	unsigned int	fh_anon;	
+	unsigned int	fh_nocache_nondir;	
+	unsigned int	fh_nocache_dir;	
 	unsigned int	fh_stale;	/* FH stale error */
-	unsigned int    fh_concurrent;	/* concurrent request */
 };
 
 #ifdef __KERNEL__

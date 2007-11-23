@@ -18,7 +18,6 @@
 #include <linux/fcntl.h>
 #include <linux/net.h>
 #include <linux/in.h>
-#include <linux/version.h>
 #include <linux/unistd.h>
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
@@ -363,7 +362,6 @@ cleanup_module(void)
 	do_nfsservctl = NULL;
 	nfsd_export_shutdown();
 	nfsd_cache_shutdown();
-	nfsd_fh_free();
 	remove_proc_entry("fs/nfs/time-diff-margin", NULL);
 	remove_proc_entry("fs/nfs/exports", NULL);
 	remove_proc_entry("fs/nfs", NULL);

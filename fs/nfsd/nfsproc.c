@@ -1,7 +1,10 @@
 /*
  * nfsproc2.c	Process version 2 NFS requests.
+ * linux/fs/nfsd/nfs2proc.c
+ * 
+ * Process version 2 NFS requests.
  *
- * Copyright (C) 1995 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #include <linux/linkage.h>
@@ -26,6 +29,9 @@ typedef struct svc_rqst	svc_rqst;
 typedef struct svc_buf	svc_buf;
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
+
+/* Check for dir entries '.' and '..' */
+#define isdotent(n, l)	(l < 3 && n[0] == '.' && (l == 1 || n[1] == '.'))
 
 #define RETURN(st)	return st
 
@@ -144,7 +150,7 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 				ntohl(rqstp->rq_addr.sin_addr.s_addr),
 				ntohs(rqstp->rq_addr.sin_port),
 				argp->count);
-		argp->count = avail;
+		argp->count = avail << 2;
 	}
 
 	resp->count = argp->count;
@@ -211,6 +217,12 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	} else if (nfserr)
 		goto done;
 
+	nfserr = nfserr_acces;
+	if (!argp->len)
+		goto done;
+	nfserr = nfserr_exist;
+	if (isdotent(argp->name, argp->len))
+		goto done;
 	/*
 	 * Do a lookup to verify the new file handle.
 	 */
@@ -223,7 +235,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		 * whether the file exists or not. Time to bail ...
 		 */
 		nfserr = nfserr_acces;
-		if (!newfhp->fh_dverified) {
+		if (!newfhp->fh_dentry) {
 			printk(KERN_WARNING 
 				"nfsd_proc_create: file handle not verified\n");
 			goto done;
@@ -261,7 +273,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		goto out_unlock;
 
 	attr->ia_valid |= ATTR_MODE;
-	attr->ia_mode = type | mode;
+	attr->ia_mode = mode;
 
 	/* Special treatment for non-regular files according to the
 	 * gospel of sun micro
@@ -279,22 +291,21 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 			type = S_IFIFO;
 		} else if (size != rdev) {
 			/* dev got truncated because of 16bit Linux dev_t */
-			nfserr = nfserr_io;	/* or nfserr_inval? */
+			nfserr = nfserr_inval;
 			goto out_unlock;
 		} else {
 			/* Okay, char or block special */
 			is_borc = 1;
 		}
 
+		/* we've used the SIZE information, so discard it */
+		attr->ia_valid &= ~ATTR_SIZE;
+
 		/* Make sure the type and device matches */
 		nfserr = nfserr_exist;
 		if (inode && (type != (inode->i_mode & S_IFMT) || 
 		    (is_borc && inode->i_rdev != rdev)))
 			goto out_unlock;
-
-		/* invalidate size because only (type == S_IFREG) has
-		   size. */
-		attr->ia_valid &= ~ATTR_SIZE;
 	}
 	
 	nfserr = 0;
@@ -388,11 +399,8 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 	 */
 	nfserr = nfsd_symlink(rqstp, &argp->ffh, argp->fname, argp->flen,
 						 argp->tname, argp->tlen,
-						 &newfh);
-	if (!nfserr) {
-		argp->attrs.ia_valid &= ~ATTR_SIZE;
-		nfserr = nfsd_setattr(rqstp, &newfh, &argp->attrs);
-	}
+				 		 &newfh, &argp->attrs);
+
 
 	fh_put(&argp->ffh);
 	fh_put(&newfh);
@@ -411,7 +419,7 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 
 	dprintk("nfsd: MKDIR    %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
-	if (resp->fh.fh_dverified) {
+	if (resp->fh.fh_dentry) {
 		printk(KERN_WARNING
 			"nfsd_proc_mkdir: response already verified??\n");
 	}
@@ -446,8 +454,8 @@ static int
 nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 					  struct nfsd_readdirres  *resp)
 {
-	u32 *	buffer;
-	int	nfserr, count;
+	u32 *		buffer;
+	int		nfserr, count;
 
 	dprintk("nfsd: READDIR  %d/%d %d bytes at %d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
@@ -467,7 +475,8 @@ nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 
 	/* Read directory and encode entries on the fly */
 	nfserr = nfsd_readdir(rqstp, &argp->fh, (loff_t) argp->cookie, 
-				nfssvc_encode_entry, buffer, &count);
+			      nfssvc_encode_entry,
+			      buffer, &count, NULL);
 	resp->count = count;
 
 	fh_put(&argp->fh);
@@ -547,6 +556,8 @@ nfserrno (int errno)
 		{ NFSERR_NXIO, ENXIO },
 		{ NFSERR_ACCES, EACCES },
 		{ NFSERR_EXIST, EEXIST },
+		{ NFSERR_XDEV, EXDEV },
+		{ NFSERR_MLINK, EMLINK },
 		{ NFSERR_NODEV, ENODEV },
 		{ NFSERR_NOTDIR, ENOTDIR },
 		{ NFSERR_ISDIR, EISDIR },
@@ -554,39 +565,22 @@ nfserrno (int errno)
 		{ NFSERR_FBIG, EFBIG },
 		{ NFSERR_NOSPC, ENOSPC },
 		{ NFSERR_ROFS, EROFS },
+		{ NFSERR_MLINK, EMLINK },
 		{ NFSERR_NAMETOOLONG, ENAMETOOLONG },
 		{ NFSERR_NOTEMPTY, ENOTEMPTY },
 #ifdef EDQUOT
 		{ NFSERR_DQUOT, EDQUOT },
 #endif
 		{ NFSERR_STALE, ESTALE },
-		{ NFSERR_WFLUSH, EIO },
 		{ -1, EIO }
 	};
 	int	i;
 
 	for (i = 0; nfs_errtbl[i].nfserr != -1; i++) {
 		if (nfs_errtbl[i].syserr == errno)
-			return htonl (nfs_errtbl[i].nfserr);
+			return htonl(nfs_errtbl[i].nfserr);
 	}
 	printk (KERN_INFO "nfsd: non-standard errno: %d\n", errno);
 	return nfserr_io;
 }
 
-#if 0
-static void
-nfsd_dump(char *tag, u32 *buf, int len)
-{
-	int	i;
-
-	printk(KERN_NOTICE
-		"nfsd: %s (%d words)\n", tag, len);
-
-	for (i = 0; i < len && i < 32; i += 8)
-		printk(KERN_NOTICE
-			" %08lx %08lx %08lx %08lx"
-			" %08lx %08lx %08lx %08lx\n",
-			buf[i],   buf[i+1], buf[i+2], buf[i+3],
-			buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
-}
-#endif

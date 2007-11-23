@@ -46,7 +46,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
-#include <linux/serial.h>
+#include <linux/m68kserial.h>
 #include <linux/config.h>
 #include <linux/major.h>
 #include <linux/string.h>
@@ -61,6 +61,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/macints.h>
+#include <asm/macintosh.h>
 #ifndef CONFIG_MAC
 #include <asm/prom.h>
 #endif
@@ -708,8 +709,6 @@ static void SCC_init( struct m68k_async_struct *info )
 
 static void SCC_init_port( struct m68k_async_struct *info, int type, int channel )
 {
-	static int got_autovector = 0;
-
 #ifdef SCC_DEBUG
 	printk("mac_SCC: init_port, info %x \n", info);
 #endif
@@ -728,16 +727,6 @@ static void SCC_init_port( struct m68k_async_struct *info, int type, int channel
 	 * We have to plug in a 'master' interrupt handler instead, calling 
 	 * mac_SCC_interrupt with the proper arguments ...
 	 */
-
-	if (!got_autovector) {
-		if(sys_request_irq(IRQ4, mac_SCC_handler, 0, "SCC master", info))
-			panic("macserial: can't get irq %d", IRQ4);
-#ifdef SCC_DEBUG
-		printk("mac_SCC: got SCC master interrupt %d, channel %d info %p\n",
-			IRQ4, channel, info);
-#endif
-		got_autovector = 1;
-	}
 
 	if (info->private->zs_chan_a == info->private->zs_channel) {
 		/* Channel A */
@@ -1129,7 +1118,14 @@ static void SCC_throttle(struct m68k_async_struct *info, int status)
 static void SCC_get_serial_info(struct m68k_async_struct * info,
 			   struct serial_struct * retinfo)
 {
+	retinfo->type = info->type;
+	retinfo->line = info->line;
+	retinfo->port = info->port;
+	retinfo->irq  = info->irq;
+	retinfo->flags= info->flags;
 	retinfo->baud_base = info->baud_base;
+	retinfo->close_delay=info->close_delay;
+	retinfo->closing_wait=info->closing_wait;
 	retinfo->custom_divisor = info->custom_divisor;
 }
 
@@ -1234,7 +1230,20 @@ static int SCC_ioctl(struct tty_struct *tty, struct file * file,
 			copy_to_user((struct m68k_async_struct *) arg,
 				      info, sizeof(struct m68k_async_struct));
 			return 0;
-			
+	        case TIOCGSERIAL:
+		{
+			struct serial_struct tmp;
+			error = verify_area(VERIFY_WRITE, (void *) arg,
+					    sizeof(struct serial_struct));
+			if (error)
+				return error;
+			if (!arg)
+				return -EFAULT;
+			memset(&tmp, 0, sizeof(tmp));
+			SCC_get_serial_info(info, &tmp);
+			return copy_to_user((struct serial_struct *)arg,
+					    &tmp, sizeof(tmp));
+		}
 		default:
 			return -ENOIOCTLCMD;
 		}

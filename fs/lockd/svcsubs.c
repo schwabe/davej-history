@@ -13,6 +13,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfsd/nfsfh.h>
 #include <linux/nfsd/export.h>
+#include <linux/lockd/xdr4.h>
 #include <linux/lockd/lockd.h>
 #include <linux/lockd/share.h>
 #include <linux/lockd/sm_inter.h>
@@ -69,7 +70,7 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 
 	dprintk("lockd: creating file for %s/%u\n",
 		kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino);
-	nfserr = nlm_lck_denied_nolocks;
+	nfserr = nlm4_lck_denied_nolocks;
 	file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL);
 	if (!file)
 		goto out_unlock;
@@ -104,7 +105,10 @@ out_unlock:
 
 out_free:
 	kfree(file);
-	nfserr = nlm_lck_denied;
+        if (nfserr == 1)
+                nfserr = nlm4_stale_fh;
+        else
+		nfserr = nlm4_lck_denied;
 	goto out_unlock;
 }
 

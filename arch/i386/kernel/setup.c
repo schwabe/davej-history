@@ -1142,10 +1142,10 @@ int get_cpuinfo(char * buffer)
 	char *p = buffer;
 	int sep_bug;
 	static char *x86_cap_flags[] = {
-	        "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
-	        "cx8", "9", "10", "sep", "mtrr", "pge", "14", "cmov",
-	        "16", "17", "psn", "19", "20", "21", "22", "mmx",
-	        "24", "kni", "26", "27", "28", "29", "30", "31"
+	        "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
+	        "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
+	        "16", "pse36", "psn", "19", "20", "21", "22", "mmx",
+	        "24", "xmm", "26", "27", "28", "29", "30", "31"
 	};
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;
@@ -1192,7 +1192,8 @@ int get_cpuinfo(char * buffer)
 				x86_cap_flags[10] = "sep";
 			if (c->x86 < 6)
 				x86_cap_flags[16] = "fcmov";
-			x86_cap_flags[16] = "pat";
+			else
+				x86_cap_flags[16] = "pat";
 			x86_cap_flags[22] = "mmxext";
 			x86_cap_flags[24] = "fxsr";
 			x86_cap_flags[30] = "3dnowext";
@@ -1200,17 +1201,11 @@ int get_cpuinfo(char * buffer)
 			break;
 																																										
 		    case X86_VENDOR_INTEL:
-			x86_cap_flags[6] = "pae";
-			x86_cap_flags[9] = "apic";
-			x86_cap_flags[14] = "mca";
 			x86_cap_flags[16] = "pat";
-			x86_cap_flags[17] = "pse36";
-			x86_cap_flags[18] = "psn";
 			x86_cap_flags[19] = "cflush";
 			x86_cap_flags[21] = "dtrace";
 			x86_cap_flags[22] = "acpi";
 			x86_cap_flags[24] = "fxsr";
-			x86_cap_flags[25] = "xmm";
 			x86_cap_flags[26] = "xmm2";
 			x86_cap_flags[27] = "ssnp";
 			x86_cap_flags[29] = "acc";

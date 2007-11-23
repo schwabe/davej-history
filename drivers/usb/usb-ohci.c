@@ -38,6 +38,7 @@
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 #include <linux/timer.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
@@ -2091,7 +2092,7 @@ static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data)
 
 #define PCI_CLASS_SERIAL_USB_OHCI 0x0C0310
  
-int ohci_hcd_init (void) 
+static int __init ohci_hcd_init (void) 
 {
 	int ret = -ENODEV;
 	struct pci_dev * dev = NULL;
@@ -2108,15 +2109,7 @@ int ohci_hcd_init (void)
 
 /*-------------------------------------------------------------------------*/
 
-#ifdef MODULE
-int init_module (void) 
-{
-	return ohci_hcd_init ();
-}
-
-/*-------------------------------------------------------------------------*/
-
-void cleanup_module (void) 
+static void __exit ohci_hcd_cleanup (void) 
 {	
 	ohci_t * ohci;
 	
@@ -2133,5 +2126,9 @@ void cleanup_module (void)
 		hc_release_ohci (ohci);
 	}		
 }
-#endif //MODULE
 
+module_init (ohci_hcd_init);
+module_exit (ohci_hcd_cleanup);
+
+MODULE_AUTHOR ("Roman Weissgaerber <weissg@vienna.at>, David Brownell");
+MODULE_DESCRIPTION ("USB OHCI Host Controller Driver");

@@ -23,6 +23,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/lockd.h>
+#include <linux/lockd/xdr4.h>
 #include <linux/lockd/syscall.h>
 
 /* Start/stop the daemon */
@@ -40,5 +41,18 @@ EXPORT_SYMBOL(lockdctl);
 /* Configuration at insmod time */
 EXPORT_SYMBOL(nlmsvc_grace_period);
 EXPORT_SYMBOL(nlmsvc_timeout);
+
+/* NLM4 exported symbols */ 
+EXPORT_SYMBOL(nlm4_lck_denied_grace_period);
+EXPORT_SYMBOL(nlm4_lck_denied);
+EXPORT_SYMBOL(nlm4_lck_blocked);
+EXPORT_SYMBOL(nlm4_rofs);
+EXPORT_SYMBOL(nlm4_stale_fh);
+EXPORT_SYMBOL(nlm4_granted);
+EXPORT_SYMBOL(nlm4_deadlock);
+EXPORT_SYMBOL(nlm4_failed);
+EXPORT_SYMBOL(nlm4_fbig);
+EXPORT_SYMBOL(nlm4_lck_denied_nolocks);
+
 
 #endif /* CONFIG_MODULES */

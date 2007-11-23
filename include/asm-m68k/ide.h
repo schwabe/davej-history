@@ -91,10 +91,6 @@ typedef union {
 	} b;
 	} select_t;
 
-#ifdef CONFIG_MAC	/* MSch: Hack; wrapper for ide_intr */
-void mac_ide_intr(int irq, void *dev_id, struct pt_regs *regs);
-#endif
-
 static __inline__ int ide_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 			unsigned long flags, const char *device, void *dev_id)
 {
@@ -108,11 +104,7 @@ static __inline__ int ide_request_irq(unsigned int irq, void (*handler)(int, voi
 #endif /* CONFIG_Q40*/
 #ifdef CONFIG_MAC
 	if (MACH_IS_MAC)
-#if 0	/* MSch Hack: maybe later we'll call ide_intr without a wrapper */
-	return nubus_request_irq(12, dev_id, handler);
-#else
-	return nubus_request_irq(12, dev_id, mac_ide_intr);
-#endif
+		return request_irq(irq, handler, 0, device, dev_id);
 #endif /* CONFIG_MAC */
 	return 0;
 }
@@ -129,7 +121,7 @@ static __inline__ void ide_free_irq(unsigned int irq, void *dev_id)
 #endif /* CONFIG_Q40*/
 #ifdef CONFIG_MAC
 	if (MACH_IS_MAC)
-		nubus_free_irq(12);
+		free_irq(irq, dev_id);
 #endif /* CONFIG_MAC */
 }
 

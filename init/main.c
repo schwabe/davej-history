@@ -1289,6 +1289,10 @@ static void __init parse_options(char *line)
 			console_loglevel = 10;
 			continue;
 		}
+		if (!strcmp(line,"quiet")) {
+			console_loglevel = 4;
+			continue;
+		}
 		if (!strncmp(line,"init=",5)) {
 			line += 5;
 			execute_command = line;

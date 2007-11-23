@@ -1,0 +1,194 @@
+atari_SCC.README
+================
+
+ This is the README covering the new DMA features of the Atari SCC driver.  It
+works reasonably well for me, but you may disagree. If so, please contact:
+
+TeSche (Torsten Scherer)
+itschere@techfak.uni-bielefeld.de
+
+
+0) Intro
+
+ As a funny intro let me cite the AMD Am8530H technical manual: "Use of a DMA
+controller is suggested for any system that transmits above 500 kb/s". Harhar,
+good joke...
+
+
+1) Supported Hardware / Software
+
+ That's simple to answer: Currently only the TT is supported, and since all
+other Atari machines lack DMA support for the SCC this isn't likely to
+change. There have been reports about some Falcons with Afterburner card(?)
+claiming they have DMA, but they don't, believe me. I've strengthened the
+condition to try DMA to 'DMA available and TT-MFP available', so you should be
+on the safer side. However, for the severe cases it can be completely disabled
+by a config option.
+
+ With the same hardware reason all numbers or ratings you may occasionally read
+in this file are measured on a stock TT with monochrome monitor.
+
+ The SCC_DMA driver has been tested with speeds up to 115k2 baud. It may work
+with something higher, but I'm not sure about the 230k4 and 560k8 that have
+recently been added, meaning, I haven't tested it because I can't. In theory it
+should work with 230k4 baud with the default parameters (see below), but not
+with 560k8.
+
+
+2) Basic Principle of Operation
+
+ This driver uses DMA to support receiving of data. It does not use DMA to
+transmit data. Roman Hodek once philosophized about doing a little statistic
+comparing how much data was received and how much was transmitted to decide
+whether to use DMA for the next receive or the next transmit each time it
+becomes vacant. That's a) horribly complicated and b) discards the fact that we
+all have problems with receiver overruns, and not with transmit underruns. So
+only DMA receive is supported. And, hey, I said he philosophized, I didn't say
+he was thinking about it seriously. :)
+
+ There's another problem with general purpose communication: You don't know in
+advance how many data will arrive. Ok, in case of IP you do after you've read
+the header, but that's just a special case. In general this leads to that the
+driver doesn't know how many data is to be expected and thus can't set up the
+DMA for exactly that amount of data. What it does is set up DMA on a buffer
+that it thinks it large enough and let a timer routine flush this buffer
+asyncronously.
+
+ This timer routine must stop DMA, read restbytes and restart DMA on another
+buffer very, very quickly. It doesn't even flush the buffers on its own, but
+uses a bottom half handler for this. Since this one can be delayed for many
+reasons it's not enough to have just two buffers to switch between (like TTY
+flip buffers), but instead you need more.
+
+ These buffers are directly flushed to the TTY's receive function, may that be
+a PPP line discipline or whatever. The whole concept of flip buffers is totally
+circumvented, as these buffers are very likely to run over when switching VTYs,
+in fact I'd say you can regard this as a law. :(
+
+ A nice little side effect of DMA support is that you save a lot of
+cycles. When the whole stuff of delivering data (avoiding the byte-oriented
+flip buffer interface) and waking up listening programs has only to be done
+once for every 1k of data that saves you an awful lot of computing power. You
+can easily see that if you compare DMA supported download with uploads, which
+still operate the normal way.
+
+ If you should see a message like:
+
+Sep 25 22:27:26 zaphod kernel: SCC-A: 1 overrun, 0 parity, 0 frame errors
+
+ that means there have been errors in the serial link. Since 99% of all
+possible errors (given a correct serial parameter setting) are likely to be
+overrun errors and the main task of DMA support is exactly to get rid of them I
+chosed to print these information unconditionally each time an error
+occurs. You shouldn't really see a lot of them, in theory: None. If you see
+*some* be happy that they're less than with ordinary serial ports. If you don't
+think they're less, complain.
+
+ If you should see a message like:
+
+Sep 25 22:26:08 zaphod kernel: SCC-A: fatal buffer overflow, data lost!
+
+ that means that execution of the bottom half flusher was delayed so long that
+the timer routine didn't find a free buffer. This can only be caused by
+exhaustive VTY switching I guess, all other things that could happen are
+unlikely to block your system for so long. However, if it happens there's not
+very much to do besides increasing the number of buffers (see below).
+
+ If you should see a message like:
+
+Sep 26 10:39:32 zaphod kernel: SCC-A: DMA-INT occured, data lost!
+
+ that means that the timer routine itself has been delayed so long that the DMA
+counter went to zero already. There's not very much to do about this, because
+since both the timer and the end-of-dma INT are IPL6 the latter one is probably
+also delayed and thus data is already lost. The only thing you can do is
+increase the size of the buffers.
+
+ So there are three basic parameters: The number of buffers to use, their size
+and the flushing frequency.
+
+
+3) Operating Parameters
+
+ Somewhere at the beginning of atari_SCC.c you'll find a short section that
+defines some parameters of the DMA support, namely the number and size of
+buffers. The flushing rate is encoded a bit more implicitly more downwards. My
+defaults for a TT are 8 buffers of 2k and a flushing rate of 12Hz.
+
+ 12Hz flushing rate at a receive speed of 115k2 baud leads to 960 chars per
+buffer. Choosing 1k looked to be a good idea, but extensive SCSI activity
+ruined that one. Since the buffer size must be a power of two I've chosen 2k.
+If the bottom half flusher finds a buffer which is more than 95% full it prints
+a warning. If you should see lots of these messages it can only mean you're
+running something very much higher than 115k2 baud, in which case you should
+increase the buffer size yet more (to 4k). If you're not running at higher
+rates you've got the problem that the flusher gets extremely delayed. You can
+still increase the buffer size, but you should better find out what's delaying
+the flusher and fix that.
+
+ The number of buffers is also experimental: I've seen that on a TT with
+monochrome screen a VTY switching can 'use' 3 or 4 buffers, sometimes 5. So
+with 8 buffers you should be on the safer side. You can activate the diagnostic
+printk in SCC_flush() if you want to check that out. You may choose any number
+of buffers, no restriction on this one.
+
+ I might add code to dynamically select these parameters depending upon the
+current speed later, but for the moment this should work nicely.
+
+
+4) Debugging
+
+ It is possible to define DEBUG_DMA at the beginning of atari_SCC.c. In that
+case the driver will print lots of information about what it is doing with or
+getting from the DMA. It then uses a flushing frequency of 0.48Hz to allow you
+to follow the output with your eyes, but this also means that with a buffer
+size of 1k you shouldn't use more than 19k2 baud or else you'll get problems.
+
+
+5) Performance
+
+ I've written a small program which opens a tty in raw mode and dumps all data
+that arrives into a file while printing how fast data arrived. Using this
+program I can receive data at 115k2 baud without a single error, even while
+switching VTYs or SCSI disc accesses. This costs me almost no cycle. :)
+
+ When being logged in via the SCC and downloading data at 115k2 baud with rz I
+get an average transfer rate of 9800 cps over 10 megs, including 12 errors
+(whilst heaviest disc activity). No disc activity yields 10600 cps and 0
+errors. This costs me nearly 40% of my cycles, probably because that version of
+rz isn't very clever.
+
+ On a 115k2 baud PPP link I get an average paket loss of less than 2%, yielding
+at worst 7k/s.  When dialing into our university network with a 28.8 modem
+running 115k2 baud I get less than 1% paket loss, yielding at worst 2.5k/s
+(best case so far: 3.2k/s). In either case you can verify that ftp download
+only costs you some 5% of your cycles, whereas an upload costs you almost any
+cycle you've got.
+
+
+6) Problems
+
+ There're a couple of words to say about why I still get paket loss:
+
+ The paket loss is caused by 'bad fcs' fields, as you can see when you enable
+'kdebug' in pppd. I've tried dumping the bad pakets in the PPP layer, and it
+showed me that the normal data stream was interrupted by some trash data being
+inserted. I've also tried dumping the data at SCC level, and the trash was
+present there too.
+
+ Numerous experiments have shown that these errors occur when the SCC *sends*
+data while receiving, which is perfectly consistent with the fact that I don't
+get a single error with my own just-dump-it program. Anything you do which
+forces data to be send increases probability of these errors. In case of a PPP
+link running ftp chose a big MTU/MRU rate, as this reduces the amount of
+acknowledge packets to be send back and you can see that the error rate drops.
+
+ Since I couldn't find anything in the tx_int function which might cause this I
+think it's a hardware bug. It wouldn't be the first one my TT has got... :(
+
+ BUT: Whereever these problems may come from, they're *far* less disturbing
+than the SCC driver without DMA support, so I think this state is legal for the
+moment. :)
+
+04.Dec.1966,
+TeSche

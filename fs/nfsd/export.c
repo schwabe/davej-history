@@ -105,20 +105,6 @@ out:
 	return exp;
 }
 
-/*
- * Check whether there are any exports for a device.
- */
-static int
-exp_device_in_use(kdev_t dev)
-{
-	struct svc_client *clp;
-
-	for (clp = clients; clp; clp = clp->cl_next) {
-		if (exp_find(clp, dev))
-			return 1;
-	}
-	return 0;
-}
 
 /*
  * Look up the device of the parent fs.
@@ -168,9 +154,8 @@ else
 					}
 				} while (NULL != (exp = exp->ex_next));
 		} while (nfsd_parentdev(&xdev));
-		if (xdentry == xdentry->d_parent) {
+		if (IS_ROOT(xdentry))
 			break;
-		}
 	} while ((xdentry = xdentry->d_parent));
 	exp = NULL;
 out:
@@ -204,7 +189,7 @@ dprintk("nfsd: exp_child mount under submount.\n");
 #endif
 						goto out;
 					}
-					if (ndentry == ndentry->d_parent)
+					if (IS_ROOT(ndentry))
 						break;
 				}
 		} while (NULL != (exp = exp->ex_next));
@@ -287,6 +272,12 @@ exp_export(struct nfsctl_export *nxp)
 		goto finish;
 
 	err = -EINVAL;
+	if (!(inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV) ||
+	    inode->i_sb->s_op->read_inode == NULL) {
+		dprintk("exp_export: export of invalid fs type.\n");
+		goto finish;
+	}
+
 	if ((parent = exp_child(clp, dev, dentry)) != NULL) {
 		dprintk("exp_export: export not valid (Rule 3).\n");
 		goto finish;
@@ -364,16 +355,6 @@ exp_do_unexport(svc_export *unexp)
 		for (exp = clp->cl_export[i]; exp; exp = exp->ex_next)
 			if (exp->ex_parent == unexp)
 				exp->ex_parent = unexp->ex_parent;
-	}
-
-	/*
-	 * Check whether this is the last export for this device,
-	 * and if so flush any cached dentries.
-	 */
-	if (!exp_device_in_use(unexp->ex_dev)) {
-printk("exp_do_unexport: %s last use, flushing cache\n",
-	kdevname(unexp->ex_dev));
-		nfsd_fh_flush(unexp->ex_dev);
 	}
 
 	dentry = unexp->ex_dentry;
@@ -628,7 +609,9 @@ struct flags {
 	{ NFSEXP_UIDMAP, {"uidmap", ""}},
 	{ NFSEXP_KERBEROS, { "kerberos", ""}},
 	{ NFSEXP_SUNSECURE, { "sunsecure", ""}},
-	{ NFSEXP_CROSSMNT, {"crossmnt", ""}},
+	{ NFSEXP_CROSSMNT, {"nohide", ""}},
+	{ NFSEXP_NOSUBTREECHECK, {"no_subtree_check", ""}},
+	{ NFSEXP_NOAUTHNLM, {"no_auth_nlm", ""}},
 	{ 0, {"", ""}}
 };
 

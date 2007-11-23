@@ -41,6 +41,9 @@ extern int nr_queued_signals, max_queued_signals;
 
 #ifdef CONFIG_KMOD
 extern char modprobe_path[];
+#ifdef CONFIG_HOTPLUG
+extern char hotplug_path[];
+#endif
 #endif
 #ifdef CONFIG_CHR_DEV_SG
 extern int sg_big_buff;
@@ -207,6 +210,10 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_KMOD
 	{KERN_MODPROBE, "modprobe", &modprobe_path, 256,
 	 0644, NULL, &proc_dostring, &sysctl_string },
+#ifdef CONFIG_HOTPLUG
+	{KERN_HOTPLUG, "hotplug", &hotplug_path, 256,
+	 0644, NULL, &proc_dostring, &sysctl_string },
+#endif
 #endif
 #ifdef CONFIG_CHR_DEV_SG
 	{KERN_SG_BIG_BUFF, "sg-big-buff", &sg_big_buff, sizeof (int),

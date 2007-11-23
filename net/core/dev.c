@@ -1914,6 +1914,7 @@ extern void sdla_c_setup(void);
 extern void dlci_setup(void);
 extern int dmascc_init(void);
 extern int sm_init(void);
+extern void xpdsl_init(void);
 
 extern int baycom_ser_fdx_init(void);
 extern int baycom_ser_hdx_init(void);
@@ -2097,6 +2098,9 @@ __initfunc(int net_dev_init(void))
 #endif
 #ifdef CONFIG_WANXL
 	wanxl_init();
+#endif
+#ifdef CONFIG_XPEED
+	xpdsl_init();
 #endif
 #ifdef CONFIG_PC300
 	cpc_init();

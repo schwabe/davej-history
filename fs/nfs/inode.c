@@ -177,10 +177,9 @@ nfs_put_super(struct super_block *sb)
 
 	nfs_reqlist_free(server);
 
-#if 0
 	if (!(server->flags & NFS_MOUNT_NONLM))
 		lockd_down();	/* release rpc.lockd */
-#endif
+
 	rpciod_down();		/* release rpciod */
 
 	kfree(server->hostname);
@@ -507,11 +506,10 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	/* We're airborne */
 	unlock_super(sb);
 
-#if 0
 	/* Check whether to start the lockd process */
 	if (!(server->flags & NFS_MOUNT_NONLM))
 		lockd_up();
-#endif
+
 	return sb;
 
 	/* Yargs. It didn't work out. */

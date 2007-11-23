@@ -32,6 +32,9 @@ svc_create(struct svc_program *prog, unsigned int bufsize, unsigned int xdrsize)
 	struct svc_serv	*serv;
 
 	xdr_init();
+#ifdef RPC_DEBUG
+	rpc_register_sysctl();
+#endif
 
 	if (!(serv = (struct svc_serv *) kmalloc(sizeof(*serv), GFP_KERNEL)))
 		return NULL;
@@ -267,8 +270,8 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	if (prog != progp->pg_prog)
 		goto err_bad_prog;
 
-	versp = progp->pg_vers[vers];
-	if (!versp || vers >= progp->pg_nvers)
+	if (vers >= progp->pg_nvers ||
+	  !(versp = progp->pg_vers[vers]))
 		goto err_bad_vers;
 
 	procp = versp->vs_proc + proc;

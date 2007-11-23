@@ -74,6 +74,9 @@ __attribute__((section("__ksymtab"))) = {
 #ifdef CONFIG_KMOD
 EXPORT_SYMBOL(request_module);
 EXPORT_SYMBOL(exec_usermodehelper);
+#ifdef CONFIG_HOTPLUG
+EXPORT_SYMBOL(hotplug_path);
+#endif
 #endif
 
 #ifdef CONFIG_MODULES

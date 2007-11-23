@@ -4,6 +4,7 @@
 #include <linux/config.h> /* get configuration macros */
 #include <linux/linkage.h>
 #include <asm/segment.h>
+#include <asm/hardirq.h>
 
 extern inline unsigned long rdusp(void) {
   	unsigned long usp;
@@ -60,11 +61,17 @@ struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) ((volatile struct __xchg_dummy *)(x))
 
 #if defined(MACH_ATARI_ONLY) && !defined(CONFIG_HADES)
-/* block out HSYNC on the atari */
-#define __sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
+#define __sti() ({ \
+	if (!local_irq_count[smp_processor_id()]) \
+		/* block out HSYNC on the atari */ \
+		__asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory"); \
+})
 #else /* portable version */
-#define __sti() __asm__ __volatile__ ("andiw #0xf8ff,%/sr": : : "memory")
-#endif /* machine compilation types */ 
+#define __sti() ({ \
+	if (!local_irq_count[smp_processor_id()]) \
+		__asm__ __volatile__ ("andiw #0xf8ff,%/sr": : : "memory"); \
+})
+#endif /* machine compilation types */
 #define __cli() __asm__ __volatile__ ("oriw  #0x0700,%/sr": : : "memory")
 #define nop() __asm__ __volatile__ ("nop"::)
 #define mb()  __asm__ __volatile__ (""   : : :"memory")

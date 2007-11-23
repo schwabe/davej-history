@@ -58,7 +58,7 @@ struct adb_request {
     int reply_len;
     unsigned char reply_expected;
     unsigned char sent;
-    unsigned char got_reply;
+    unsigned char complete;
     void (*done)(struct adb_request *);
     void *arg;
     struct adb_request *next;

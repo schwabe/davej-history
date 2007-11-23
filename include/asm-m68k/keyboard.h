@@ -19,6 +19,10 @@
 #ifdef CONFIG_Q40
 #include <asm/q40_keyboard.h>
 #endif
+#ifdef CONFIG_MAC
+extern int mackbd_translate(unsigned char, unsigned char *, char);
+extern int mackbd_unexpected_up(unsigned char);
+#endif
 
 static __inline__ int kbd_setkeycode(unsigned int scancode,
 				     unsigned int keycode)
@@ -39,12 +43,25 @@ static __inline__ int kbd_getkeycode(unsigned int scancode)
     return scancode > 127 ? -EINVAL : scancode;
 }
 
+static __inline__ int kbd_pretranslate(unsigned char scancode, char raw_mode)
+{
+#ifdef CONFIG_Q40
+    if (MACH_IS_Q40)
+        return q40kbd_pretranslate(scancode,raw_mode);
+#endif
+    return 1;
+}
+
 static __inline__ int kbd_translate(unsigned char scancode,
 				    unsigned char *keycode, char raw_mode)
 {
 #ifdef CONFIG_Q40
     if (MACH_IS_Q40)
         return q40kbd_translate(scancode,keycode,raw_mode);
+#endif
+#ifdef CONFIG_MAC
+    if (MACH_IS_MAC)
+        return mackbd_translate(scancode, keycode, raw_mode);
 #endif
     *keycode = scancode;
     return 1;
@@ -55,6 +72,10 @@ static __inline__ char kbd_unexpected_up(unsigned char keycode)
 #ifdef CONFIG_Q40
     if (MACH_IS_Q40)
         return q40kbd_unexpected_up(keycode);
+#endif
+#ifdef CONFIG_MAC
+    if (MACH_IS_MAC)
+        return mackbd_unexpected_up(keycode);
 #endif
     return 0200;
 }

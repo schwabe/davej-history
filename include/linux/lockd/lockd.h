@@ -17,6 +17,7 @@
 #include <linux/nfsd/nfsfh.h>
 #include <linux/lockd/bind.h>
 #include <linux/lockd/xdr.h>
+#include <linux/lockd/xdr4.h>
 #include <linux/lockd/debug.h>
 
 /*
@@ -112,6 +113,7 @@ struct nlm_block {
  */
 extern struct rpc_program	nlm_program;
 extern struct svc_procedure	nlmsvc_procedures[];
+extern struct svc_procedure     nlmsvc_procedures4[];
 extern unsigned long		nlmsvc_grace_period;
 extern unsigned long		nlmsvc_timeout;
 

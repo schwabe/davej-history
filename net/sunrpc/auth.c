@@ -147,7 +147,7 @@ rpcauth_insert_credcache(struct rpc_auth *auth, struct rpc_cred *cred)
 {
 	int		nr;
 
-	nr = (cred->cr_uid % RPC_CREDCACHE_NR);
+	nr = (cred->cr_uid & RPC_CREDCACHE_MASK);
 	cred->cr_next = auth->au_credcache[nr];
 	auth->au_credcache[nr] = cred;
 	cred->cr_count++;
@@ -164,7 +164,7 @@ rpcauth_lookup_credcache(struct rpc_auth *auth, int taskflags)
 	int		nr = 0;
 
 	if (!(taskflags & RPC_TASK_ROOTCREDS))
-		nr = current->uid % RPC_CREDCACHE_NR;
+		nr = current->uid & RPC_CREDCACHE_MASK;
 
 	if (time_before(auth->au_nextgc, jiffies))
 		rpcauth_gc_credcache(auth);
@@ -197,7 +197,7 @@ rpcauth_remove_credcache(struct rpc_auth *auth, struct rpc_cred *cred)
 	struct rpc_cred	**q, *cr;
 	int		nr;
 
-	nr = (cred->cr_uid % RPC_CREDCACHE_NR);
+	nr = (cred->cr_uid & RPC_CREDCACHE_MASK);
 	q = &auth->au_credcache[nr];
 	while ((cr = *q) != NULL) {
 		if (cred == cr) {
