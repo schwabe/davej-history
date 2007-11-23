@@ -31,6 +31,9 @@
  *		Alan Cox	:	Shutdown() bug
  *	Michael Deutschmann	:	release was writing to the socket
  *					structure after freeing it.
+ *		Jon Nelson,
+ *		Alan Cox,
+ *		David Weinehall	:	Fix possible memory-leaks
  *
  * Known differences from reference BSD that was tested:
  *
@@ -973,7 +976,11 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		{
 			int err=unix_attach_fds(fpnum,fp,skb);
 			if(err)
+			{
+				unix_fd_free(sk, fp, fpnum);
+				kfree(skb);
 				return err;
+			}
 			fpnum=0;
 		}
 		else
