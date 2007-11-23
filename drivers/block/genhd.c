@@ -1477,7 +1477,7 @@ __initfunc(void device_setup(void))
 #ifdef CONFIG_BLK_CPQ_DA
 	cpqarray_init();
 #endif
-#ifdef CONFIG_INET
+#ifdef CONFIG_NET
 	net_dev_init();
 #endif
 #ifdef CONFIG_VT

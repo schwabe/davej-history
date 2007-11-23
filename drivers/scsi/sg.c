@@ -16,7 +16,7 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.36 (991008)";
+ static char * sg_version_str = "Version: 2.1.36 (991119)";
  static int sg_version_num = 20136; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
@@ -1606,6 +1606,7 @@ static int sg_res_in_use(const Sg_fd * sfp)
    GFP_KERNEL to be used instead of GFP_ATOMIC */
 static char * sg_low_malloc(int rqSz, int lowDma, int mem_src, int * retSzp)
 {
+    unsigned long flags;
     char * resp = NULL;
     int page_mask = lowDma ? (GFP_KERNEL | GFP_DMA) : GFP_KERNEL;
 
@@ -1633,7 +1634,9 @@ static char * sg_low_malloc(int rqSz, int lowDma, int mem_src, int * retSzp)
         while (num_sect > 0) {
             if ((num_sect <= sg_pool_secs_avail) &&
                 (scsi_dma_free_sectors > (SG_LOW_POOL_THRESHHOLD + num_sect))) {
+                spin_lock_irqsave(&io_request_lock, flags);
                 resp = scsi_malloc(rqSz);
+                spin_unlock_irqrestore(&io_request_lock, flags);
                 if (resp) {
                     if (retSzp) *retSzp = rqSz;
                     sg_pool_secs_avail -= num_sect;

@@ -8,6 +8,7 @@
 #define IN_ISR                  0x80000000L
 #define IN_ABORT                0x40000000L
 #define IN_RESET                0x20000000L
+#define IN_QUEUE                0x10000000L
 #define BOARD_QUARTZ            0x08000000L
 #define BOARD_40LD              0x04000000L
 
@@ -23,9 +24,15 @@
 
 #define MEGA_CMD_TIMEOUT        10
 
-#define MAX_SGLIST              17
-#define MAX_COMMANDS            250
+/* Feel free to fiddle with these.. max values are:
+   SGLIST     0..26
+   COMMANDS   0..253
+   CMDPERLUN  0..63
+*/
+#define MAX_SGLIST              0x1A
+#define MAX_COMMANDS            127
 #define MAX_CMD_PER_LUN         63
+#define MAX_FIRMWARE_STATUS     46
 
 #define MAX_LOGICAL_DRIVES      8
 #define MAX_CHANNEL             5
@@ -507,7 +514,7 @@ typedef struct mega_passthru {
     u32 dataxferlen;
 } mega_passthru;
 
-typedef struct _mega_mailbox {
+struct _mega_mailbox {
     /* 0x0 */ u8 cmd;
     /* 0x1 */ u8 cmdid;
     /* 0x2 */ u16 numsectors;
@@ -522,8 +529,9 @@ typedef struct _mega_mailbox {
     /* 0x12 */ u8 completed[46];
     u8 mraid_poll;
     u8 mraid_ack;
-    u8 pad[16];
-} mega_mailbox;
+    u8 pad[16]; /* for alignment purposes */
+}__attribute__((packed));
+typedef struct _mega_mailbox mega_mailbox;
 
 typedef struct {
     u32 xferSegment;      /* for 64-bit controllers */
@@ -577,8 +585,16 @@ typedef struct _mega_host_config {
     u32 flag;
     u32 base;
  
-    mega_scb *qFree;
-    mega_scb *qPending;
+    mega_scb *qFreeH;
+    mega_scb *qFreeT;
+    mega_scb *qPendingH;
+    mega_scb *qPendingT;
+    
+    Scsi_Cmnd *qCompletedH;
+    Scsi_Cmnd *qCompletedT;
+    u32 qFcnt;
+    u32 qPcnt;
+    u32 qCcnt;
 
     u32 nReads[FC_MAX_LOGICAL_DRIVES];
     u32 nWrites[FC_MAX_LOGICAL_DRIVES];

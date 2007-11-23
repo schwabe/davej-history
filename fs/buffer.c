@@ -1532,8 +1532,8 @@ void __init buffer_init(unsigned long memory_size)
 		hash_table = (struct buffer_head **)
 		    __get_free_pages(GFP_ATOMIC, order);
 	} while (hash_table == NULL && --order >= 0);
-	printk("Buffer-cache hash table entries: %d (order: %d, %ld bytes)\n",
-	       nr_hash, order, (1UL<<order) * PAGE_SIZE);
+	printk("Buffer cache hash table entries: %d (order %d, %ldk)\n",
+	       nr_hash, order, (1UL<<order) * PAGE_SIZE / 1024);
 	
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");

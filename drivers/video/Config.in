@@ -57,7 +57,6 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool 'Apple "control" display support' CONFIG_FB_CONTROL
       bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
       bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
-      bool 'ATI Mach64 display support' CONFIG_FB_ATY
       bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
       bool 'Chips 65550 display support' CONFIG_FB_CT65550
       bool 'S3 Trio display support' CONFIG_FB_S3TRIO

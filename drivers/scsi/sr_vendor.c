@@ -111,13 +111,16 @@ sr_set_blocklength(int minor, int blocklength)
 	unsigned char		cmd[12];    /* the scsi-command */
 	struct ccs_modesel_head	*modesel;
 	int			rc,density = 0;
+	unsigned long		flags;
 
 #ifdef CONFIG_BLK_DEV_SR_VENDOR
 	if (VENDOR_ID == VENDOR_TOSHIBA)
 		density = (blocklength > 2048) ? 0x81 : 0x83;
 #endif
 
+	spin_lock_irqsave(&io_request_lock, flags);
 	buffer = (unsigned char *) scsi_malloc(512);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	if (!buffer) return -ENOMEM;
 
 #ifdef DEBUG
@@ -151,7 +154,7 @@ sr_set_blocklength(int minor, int blocklength)
 
 int sr_cd_check(struct cdrom_device_info *cdi)
 {
-	unsigned long   sector;
+	unsigned long   sector, flags;
 	unsigned char   *buffer;     /* the buffer for the ioctl */
 	unsigned char   cmd[12];     /* the scsi-command */
 	int             rc,no_multi,minor;
@@ -160,7 +163,9 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 	if (scsi_CDs[minor].cdi.mask & CDC_MULTI_SESSION)
 		return 0;
 	
+	spin_lock_irqsave(&io_request_lock, flags);
 	buffer = (unsigned char *) scsi_malloc(512);
+	spin_unlock_irqrestore(&io_request_lock, flags);
 	if(!buffer) return -ENOMEM;
 	
 	sector   = 0;         /* the multisession sector offset goes here  */

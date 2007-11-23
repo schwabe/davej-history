@@ -433,7 +433,7 @@ static unsigned char handle_kbd_event(void)
 				handle_scancode(scancode, !(scancode & 0x80));
 			mark_bh(KEYBOARD_BH);
 		}
-		mdelay(1);
+
 		status = kbd_read_status();
 		
 		if(!work--)

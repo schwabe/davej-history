@@ -175,6 +175,11 @@ out:
 int d_invalidate(struct dentry * dentry)
 {
 	/*
+	 * If it's already been dropped, return OK.
+	 */
+	if (list_empty(&dentry->d_hash))
+		return 0;
+	/*
 	 * Check whether to do a partial shrink_dcache
 	 * to get rid of unused child entries.
 	 */
@@ -903,8 +908,8 @@ void __init dcache_init(void)
 		dentry_hashtable = (struct list_head *)
 			__get_free_pages(GFP_ATOMIC, order);
 	} while(dentry_hashtable == NULL && --order >= 0);
-	printk("DENTRY hash table entries: %d (order: %d, %ld bytes)\n",
-	       nr_hash, order, (1UL<<order) * PAGE_SIZE);
+	printk("Dentry hash table entries: %d (order %d, %ldk)\n",
+	       nr_hash, order, (1UL<<order) * PAGE_SIZE / 1024);
 
 	if (!dentry_hashtable)
 		panic("Failed to allocate dcache hash table\n");

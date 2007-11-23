@@ -842,12 +842,13 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROM_LOCKDOOR: {
 		cdinfo(CD_DO_IOCTL, "%socking door.\n",arg?"L":"Unl");
-		if (!CDROM_CAN(CDC_LOCK)) {
+		if (!CDROM_CAN(CDC_LOCK))
 			return -EDRIVE_CANT_DO_THIS;
-		} else {
-			keeplocked = arg ? 1 : 0;
-			return cdo->lock_door(cdi, arg);
-		}
+		keeplocked = arg ? 1 : 0;
+		/* don't unlock the door on multiple opens */
+		if ((cdi->use_count != 1) && !arg)
+			return -EBUSY;
+		return cdo->lock_door(cdi, arg);
 		}
 
 	case CDROM_DEBUG: {

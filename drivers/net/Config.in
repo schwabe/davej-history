@@ -94,7 +94,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
-      tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
   if [ "$CONFIG_NET_ISA" = "y" ]; then
@@ -125,15 +124,14 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   if [ "$CONFIG_NET_EISA" = "y" ]; then
     tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
-
     tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT
     tristate 'CS89x0 support' CONFIG_CS89x0
     tristate 'DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
+    tristate 'Old DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP_OLD
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
     tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -158,6 +156,20 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
 fi
 
+endmenu
+
+#
+#	Gigabit Ethernet
+#
+
+mainmenu_option next_comment
+comment 'Ethernet (1000 Mbit)'
+
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
+      tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
+    fi
+    tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN
 endmenu
 
 bool 'FDDI driver support' CONFIG_FDDI

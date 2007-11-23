@@ -125,6 +125,8 @@ extern int dmfe_reg_board(struct device *);
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
 extern int acenic_probe(struct device *dev);
+extern int skge_probe(struct device *dev);
+
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -227,6 +229,9 @@ struct devprobe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_ACENIC
 	{acenic_probe, 0},
+#endif
+#ifdef CONFIG_SK98LIN
+	{skge_probe, 0},
 #endif
 #ifdef CONFIG_VIA_RHINE
 	{via_rhine_probe, 0},
@@ -619,8 +624,8 @@ static int fcif_probe(struct device *dev)
 #endif
 
 #ifdef CONFIG_SDLA
-    extern int sdla_init(struct device *);
-    static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
+    extern int sdla_c_init(struct device *);
+    static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_c_init, };
 
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&sdla0_dev)

@@ -1,4 +1,4 @@
-/* $Id: math.c,v 1.7.2.1 1999/09/20 12:05:52 jj Exp $
+/* $Id: math.c,v 1.7.2.2 1999/11/19 08:24:37 jj Exp $
  * arch/sparc64/math-emu/math.c
  *
  * Copyright (C) 1997,1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -222,8 +222,8 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 		else if ((insn & 0xc1f80000) == 0x81a80000) /* FPOP2 */ {
 			IR = 2;
 			switch ((insn >> 5) & 0x1ff) {
-			case FCMPQ: TYPE(3,0,0,3,1,3,1); break;
-			case FCMPEQ: TYPE(3,0,0,3,1,3,1); break;
+			case FCMPQ: TYPE(3,0,0,3,0,3,0); break;
+			case FCMPEQ: TYPE(3,0,0,3,0,3,0); break;
 			/* Now the conditional fmovq support */
 			case FMOVQ0:
 			case FMOVQ1:
@@ -430,6 +430,8 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 		/* comparison */
 		case FCMPQ:
 		case FCMPEQ:
+			FP_UNPACK_RAW_QP (QA, rs1);
+			FP_UNPACK_RAW_QP (QB, rs2);
 			FP_CMP_Q(XR, QB, QA, 3);
 			if (XR == 3 &&
 			    (((insn >> 5) & 0x1ff) == FCMPEQ ||

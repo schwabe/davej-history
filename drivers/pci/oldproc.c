@@ -396,6 +396,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
 	DEVICE( ALLIANCE,	ALLIANCE_AT24,	"AT24"),
 	DEVICE( ALLIANCE,	ALLIANCE_AT3D,	"AT3D"),
+	DEVICE( SYSKONNECT,	SYSKONNECT_FP,	"SK-FDDI-PCI"),
+	DEVICE( SYSKONNECT,	SYSKONNECT_TR,	"SK-TR-PCI"),
+	DEVICE( SYSKONNECT,	SYSKONNECT_GE,	"SK-98xx"),
 	DEVICE( VMIC,		VMIC_VME,	"VMIVME-7587"),
 	DEVICE( DIGI,		DIGI_EPC,	"AccelPort EPC"),
  	DEVICE( DIGI,		DIGI_RIGHTSWITCH, "RightSwitch SE-6"),
@@ -851,6 +854,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
 	      case PCI_VENDOR_ID_TIGERJET:	return "TigerJet";
 	      case PCI_VENDOR_ID_ARK:		return "ARK Logic";
+	      case PCI_VENDOR_ID_SYSKONNECT:	return "SysKonnect";
 	      default:				return "Unknown vendor";
 	}
 }

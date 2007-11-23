@@ -258,12 +258,12 @@ __initfunc(static int sktr_pci_chk_card(struct device *dev))
 		/* Remove I/O space marker in bit 0. */
 		pci_ioaddr &= ~3;
 
-		if((vendor != PCI_VENDOR_ID_SK) &&
+		if((vendor != PCI_VENDOR_ID_SYSKONNECT) &&
 		   (vendor != PCI_VENDOR_ID_COMPAQ))
 			continue;
 
-		if((vendor == PCI_VENDOR_ID_SK) && 
-		   (device != PCI_DEVICE_ID_SK_TR))
+		if((vendor == PCI_VENDOR_ID_SYSKONNECT) && 
+		   (device != PCI_DEVICE_ID_SYSKONNECT_TR))
 			continue;
 		else if((vendor == PCI_VENDOR_ID_COMPAQ) && 
 			(device != PCI_DEVICE_ID_COMPAQ_TOKENRING))

@@ -1788,8 +1788,8 @@ void __init page_cache_init(unsigned long memory_size)
 			__get_free_pages(GFP_ATOMIC, order);
 	} while(page_hash_table == NULL && --order >= 0L);
 
-	printk("Page-cache hash table entries: %d (order: %ld, %ld bytes)\n",
-	       (1 << page_hash_bits), order, (PAGE_SIZE << order));
+	printk("Page cache hash table entries: %d (order %ld, %ldk)\n",
+	       (1 << page_hash_bits), order, (1UL << order) * PAGE_SIZE / 1024);
 	if (!page_hash_table)
 		panic("Failed to allocate page hash table\n");
 	memset(page_hash_table, 0,

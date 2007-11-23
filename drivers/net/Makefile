@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc sk98lin
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
@@ -599,6 +599,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SK98LIN),y)
+  SUB_DIRS += sk98lin
+  MOD_IN_SUB_DIRS += sk98lin
+  L_OBJS += sk98lin/sk98lin.o
+else
+  ifeq ($(CONFIG_SK98LIN),m)
+    MOD_IN_SUB_DIRS += sk98lin
+  endif
+endif
+
 ifeq ($(CONFIG_WAVELAN),y)
 L_OBJS += wavelan.o
 else
@@ -734,6 +744,14 @@ L_OBJS += tulip.o
 else
   ifeq ($(CONFIG_DEC_ELCP),m)
   M_OBJS += tulip.o
+  endif
+endif
+
+ifeq ($(CONFIG_DEC_ELCP_OLD),y)
+L_OBJS += old_tulip.o
+else
+  ifeq ($(CONFIG_DEC_ELCP_OLD),m)
+  M_OBJS += old_tulip.o
   endif
 endif
 

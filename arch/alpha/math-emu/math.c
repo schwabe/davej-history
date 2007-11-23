@@ -5,9 +5,10 @@
 
 #include <asm/uaccess.h>
 
+#include "sfp-util.h"
 #include "soft-fp.h"
-#include "double.h"
 #include "single.h"
+#include "double.h"
 
 #define	OPC_PAL		0x00
 #define OPC_INTA	0x10
@@ -154,12 +155,13 @@ out:
 long
 alpha_fp_emul (unsigned long pc)
 {
+	FP_DECL_EX;
 	FP_DECL_S(SA); FP_DECL_S(SB); FP_DECL_S(SR);
 	FP_DECL_D(DA); FP_DECL_D(DB); FP_DECL_D(DR);
 
 	unsigned long fa, fb, fc, func, mode, src;
 	unsigned long fpcw = current->tss.flags;
-	unsigned long res, cmptype, va, vb, vc, fpcr;
+	unsigned long res, va, vb, vc, fpcr;
 	__u32 insn;
 
 	MOD_INC_USE_COUNT;
@@ -179,21 +181,19 @@ alpha_fp_emul (unsigned long pc)
 	    mode = (fpcr >> FPCR_DYN_SHIFT) & 3;
 	}
 
-	res = 0;
-
 	switch (src) {
 	case FOP_SRC_S:
 		va = alpha_read_fp_reg_s(fa);
 		vb = alpha_read_fp_reg_s(fb);
 		
-		__FP_UNPACK_S(SA, &va);
-		__FP_UNPACK_S(SB, &vb);
+		FP_UNPACK_SP(SA, &va);
+		FP_UNPACK_SP(SB, &vb);
 
 		switch (func) {
 		case FOP_FNC_SUBx:
-			if (SB_c != FP_CLS_NAN)
-				SB_s ^= 1;
-			/* FALLTHRU */
+			FP_SUB_S(SR, SA, SB);
+			goto pack_s;
+
 		case FOP_FNC_ADDx:
 			FP_ADD_S(SR, SA, SB);
 			goto pack_s;
@@ -203,16 +203,11 @@ alpha_fp_emul (unsigned long pc)
 			goto pack_s;
 
 		case FOP_FNC_DIVx:
-			if (SB_c == FP_CLS_ZERO && SA_c != FP_CLS_ZERO) {
-				res |= EFLAG_DIVZERO;
-				if (__FPU_TRAP_P(EFLAG_DIVZERO))
-					goto done;
-			}
 			FP_DIV_S(SR, SA, SB);
 			goto pack_s;
 
 		case FOP_FNC_SQRTx:
-			FP_SQRT_S(SR, SA);
+			FP_SQRT_S(SR, SB);
 			goto pack_s;
 		}
 		goto bad_insn;
@@ -220,15 +215,42 @@ alpha_fp_emul (unsigned long pc)
 	case FOP_SRC_T:
 		va = alpha_read_fp_reg(fa);
 		vb = alpha_read_fp_reg(fb);
-		
-		__FP_UNPACK_D(DA, &va);
-		__FP_UNPACK_D(DB, &vb);
+
+		if ((func & ~3) == FOP_FNC_CMPxUN) {
+			FP_UNPACK_RAW_DP(DA, &va);
+			FP_UNPACK_RAW_DP(DB, &vb);
+			if (!DA_e && !_FP_FRAC_ZEROP_1(DA)) {
+				FP_SET_EXCEPTION(FP_EX_DENORM);
+				if (FP_DENORM_ZERO)
+					_FP_FRAC_SET_1(DA, _FP_ZEROFRAC_1);
+			}
+			if (!DB_e && !_FP_FRAC_ZEROP_1(DB)) {
+				FP_SET_EXCEPTION(FP_EX_DENORM);
+				if (FP_DENORM_ZERO)
+					_FP_FRAC_SET_1(DB, _FP_ZEROFRAC_1);
+			}
+			FP_CMP_D(res, DA, DB, 3);
+			vc = 0x4000000000000000;
+			/* CMPTEQ, CMPTUN don't trap on QNaN, while CMPTLT and CMPTLE do */
+			if (res == 3 && ((func & 3) >= 2 || FP_ISSIGNAN_D(DA) || FP_ISSIGNAN_D(DB)))
+				FP_SET_EXCEPTION(FP_EX_INVALID);
+			switch (func) {
+			case FOP_FNC_CMPxUN: if (res != 3) vc = 0; break;
+			case FOP_FNC_CMPxEQ: if (res) vc = 0; break;
+			case FOP_FNC_CMPxLT: if (res != -1) vc = 0; break;
+			case FOP_FNC_CMPxLE: if ((long)res > 0) vc = 0; break;
+			}
+			goto done_d;
+		}
+
+		FP_UNPACK_DP(DA, &va);
+		FP_UNPACK_DP(DB, &vb);
 
 		switch (func) {
 		case FOP_FNC_SUBx:
-			if (DB_c != FP_CLS_NAN)
-				DB_s ^= 1;
-			/* FALLTHRU */
+			FP_SUB_D(DR, DA, DB);
+			goto pack_d;
+
 		case FOP_FNC_ADDx:
 			FP_ADD_D(DR, DA, DB);
 			goto pack_d;
@@ -238,38 +260,11 @@ alpha_fp_emul (unsigned long pc)
 			goto pack_d;
 
 		case FOP_FNC_DIVx:
-			if (DB_c == FP_CLS_ZERO && DA_c != FP_CLS_ZERO) {
-				res |= EFLAG_DIVZERO;
-				if (__FPU_TRAP_P(EFLAG_DIVZERO))
-					goto done;
-			}
 			FP_DIV_D(DR, DA, DB);
 			goto pack_d;
 
-		case FOP_FNC_CMPxUN:
-			cmptype = CMPTXX_UN;
-			goto compare;
-		case FOP_FNC_CMPxEQ:
-			cmptype = CMPTXX_EQ;
-			goto compare;
-		case FOP_FNC_CMPxLT:
-			cmptype = CMPTXX_LT;
-			goto compare;
-		case FOP_FNC_CMPxLE:
-			cmptype = CMPTXX_LE;
-			goto compare;
-		compare:
-			FP_CMP_D(res, DA, DB, 3);
-			vc = 0;
-        		if (res == cmptype
-			    || (cmptype == CMPTXX_LE
-				&& (res == CMPTXX_LT || res == CMPTXX_EQ))) {
-				vc = 0x4000000000000000;  
-			}
-			goto done_d;
-
 		case FOP_FNC_SQRTx:
-			FP_SQRT_D(DR, DA);
+			FP_SQRT_D(DR, DB);
 			goto pack_d;
 
 		case FOP_FNC_CVTxS:
@@ -277,22 +272,23 @@ alpha_fp_emul (unsigned long pc)
 			   SRC == T_floating.  It is also interesting that
 			   the bit used to tell the two apart is /U... */
 			if (insn & 0x2000) {
-				FP_CONV(S,D,1,1,SR,DA);
+				FP_CONV(S,D,1,1,SR,DB);
 				goto pack_s;
 			} else {
 				/* CVTST need do nothing else but copy the
 				   bits and repack.  */
-				DR_c = DA_c;
-				DR_s = DA_s;
-				DR_e = DA_e;
-				DR_r = DA_r;
-				DR_f = DA_f;
+				DR_c = DB_c;
+				DR_s = DB_s;
+				DR_e = DB_e;
+				DR_f = DB_f;
 				goto pack_d;
 			}
 
 		case FOP_FNC_CVTxQ:
-			FP_TO_INT_D(vc, DA, 64, 1);
-			res = _FTOI_RESULT(DA);
+			if (DB_c == FP_CLS_NAN && (_FP_FRAC_HIGH_RAW_D(DB) & _FP_QNANBIT_D))
+				vc = 0; /* AAHB Table B-2 sais QNaN should not trigger INV */
+			else
+				FP_TO_INT_ROUND_D(vc, DB, 64, 2);
 			goto done_d;
 		}
 		goto bad_insn;
@@ -308,7 +304,7 @@ alpha_fp_emul (unsigned long pc)
 			   computed.  */
 			vc = ((vb & 0xc0000000) << 32 |	/* sign and msb */
 			      (vb & 0x3fffffff) << 29);	/* rest of the int */
-			res = EFLAG_INVALID;
+			FP_SET_EXCEPTION (FP_EX_INVALID);
 			goto done_d;
 
 		case FOP_FNC_CVTxS:
@@ -324,12 +320,12 @@ alpha_fp_emul (unsigned long pc)
 	goto bad_insn;
 
 pack_s:
-	res |= __FP_PACK_S(&vc, SR);
+	FP_PACK_SP(&vc, SR);
 	alpha_write_fp_reg_s(fc, vc);
 	goto done;
 
 pack_d:
-	res |= __FP_PACK_D(&vc, DR);
+	FP_PACK_DP(&vc, DR);
 done_d:
 	alpha_write_fp_reg(fc, vc);
 	goto done;
@@ -347,10 +343,10 @@ done_d:
 	 * as described in the Alpha Architectre Handbook section 4.7.7.3.
 	 */
 done:
-	if (res) {
+	if (_fex) {
 		/* Record exceptions in software control word.  */
 		current->tss.flags
-		  = fpcw |= (res << IEEE_STATUS_TO_EXCSUM_SHIFT);
+		  = fpcw |= (_fex << IEEE_STATUS_TO_EXCSUM_SHIFT);
 
 		/* Update hardware control register */
 		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
@@ -358,7 +354,7 @@ done:
 		wrfpcr(fpcr);
 
 		/* Do we generate a signal?  */
-		if (res & fpcw & IEEE_TRAP_ENABLE_MASK) {
+		if (_fex & fpcw & IEEE_TRAP_ENABLE_MASK) {
 			MOD_DEC_USE_COUNT;
 			return 0;
 		}

@@ -880,7 +880,9 @@ void get_sectorsize(int i){
     Scsi_Cmnd * SCpnt;
     unsigned long flags;
 
+    spin_lock_irqsave(&io_request_lock, flags);
     buffer = (unsigned char *) scsi_malloc(512);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     SCpnt = scsi_allocate_device(NULL, scsi_CDs[i].device, 1);
 
     retries = 3;
@@ -963,6 +965,7 @@ void get_capabilities(int i){
     unsigned char cmd[6];
     unsigned char *buffer;
     int           rc,n;
+    unsigned long flags;
 
     static char *loadmech[] = {
         "caddy",
@@ -975,7 +978,9 @@ void get_capabilities(int i){
         ""
     };          
 
+    spin_lock_irqsave(&io_request_lock, flags);
     buffer = (unsigned char *) scsi_malloc(512);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     cmd[0] = MODE_SENSE;
     cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
     cmd[2] = 0x2a;

@@ -83,6 +83,11 @@
 #define FP_HANDLE_EXCEPTIONS do {} while (0)
 #endif
 
+/* By default we never flush denormal input operands to signed zero. */
+#ifndef FP_DENORM_ZERO
+#define FP_DENORM_ZERO 0
+#endif
+
 #ifndef FP_INHIBIT_RESULTS
 /* By default we write the results always.
  * sfp-machine may override this and e.g.

@@ -40,6 +40,7 @@
 #include <asm/processor.h>
 #include <asm/mmu.h>
 #include <asm/prom.h>
+#include <asm/mmu_context.h>
 
 int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs);
 extern unsigned long _get_SP(void);

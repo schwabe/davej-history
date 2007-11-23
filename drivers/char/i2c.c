@@ -56,6 +56,8 @@ int i2c_init(void)
 	/* anything to do here ? */
 #ifdef CONFIG_VIDEO_BT848
 	i2c_tuner_init();
+#endif	
+#ifdef CONFIG_VIDEO_MSP3400
 	msp3400c_init();
 #endif	
 #ifdef CONFIG_VIDEO_BUZ

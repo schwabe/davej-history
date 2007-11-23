@@ -791,7 +791,8 @@ __initfunc(static void smp_tune_scheduling (void))
 	       (int) cacheflush_time);
 }
 
-int __init setup_profiling_timer(unsigned int multiplier)
+/* /proc/profile writes can call this, don't __init it please. */
+int setup_profiling_timer(unsigned int multiplier)
 {
 	unsigned long flags;
 	int i;

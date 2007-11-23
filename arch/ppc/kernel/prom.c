@@ -1434,6 +1434,21 @@ flushscreen(void)
 	}
 }
 
+/* Indicates whether the root node has a given value in its
+ * compatible property.
+ */
+__openfirmware
+int
+machine_is_compatible(const char *compat)
+{
+	struct device_node *root;
+	
+	root = find_path_device("/");
+	if (root == 0)
+		return 0;
+	return device_is_compatible(root, compat);
+}
+
 #ifdef CONFIG_BOOTX_TEXT
 
 __pmac
@@ -1992,20 +2007,5 @@ static unsigned char vga_font[cmapsz] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 0x00, 0x00, 0x00, 0x00, 
 };
-
-/* Indicates whether the root node has a given value in its
- * compatible property.
- */
-__openfirmware
-int
-machine_is_compatible(const char *compat)
-{
-	struct device_node *root;
-	
-	root = find_path_device("/");
-	if (root == 0)
-		return 0;
-	return device_is_compatible(root, compat);
-}
 
 #endif /* CONFIG_BOOTX_TEXT */

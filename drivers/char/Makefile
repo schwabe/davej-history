@@ -351,11 +351,21 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_BT848),y)
-L_OBJS += bttv.o msp3400.o tuner.o
+L_OBJS += bttv.o tuner.o
 L_I2C=y
 else
   ifeq ($(CONFIG_VIDEO_BT848),m)
-    M_OBJS += bttv.o msp3400.o tuner.o
+    M_OBJS += bttv.o tuner.o
+    M_I2C=y
+  endif
+endif
+
+ifeq ($(CONFIG_VIDEO_MSP3400),y)
+L_OBJS += msp3400.o 
+L_I2C=y
+else
+  ifeq ($(CONFIG_VIDEO_MSP3400),m)
+    M_OBJS += msp3400.o
     M_I2C=y
   endif
 endif

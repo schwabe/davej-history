@@ -23,22 +23,24 @@
 char modprobe_path[256] = "/sbin/modprobe";
 
 static inline void
-use_init_file_context(void)
+use_init_fs_context(void)
 {
 	struct fs_struct * fs;
 
-	lock_kernel();
-
 	/*
-	 * Don't use the user's root, use init's root instead.
+	 * Don't use the user's fs context, use init's instead.
 	 * Note that we can use "init_task" (which is not actually
 	 * the same as the user-level "init" process) because we
 	 * started "init" with a CLONE_FS
 	 */
-	exit_fs(current);	/* current->fs->count--; */
-	fs = init_task.fs;
-	current->fs = fs;
-	atomic_inc(&fs->count);
+
+	lock_kernel();
+
+	fs = current->fs;
+	dput(fs->root);
+	dput(fs->pwd);
+	fs->root = dget(init_task.fs->root);
+	fs->pwd = dget(init_task.fs->pwd);
 
 	unlock_kernel();
 }
@@ -48,8 +50,6 @@ static int exec_modprobe(void * module_name)
 	static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
 	char *argv[] = { modprobe_path, "-s", "-k", (char*)module_name, NULL };
 	int i;
-
-	use_init_file_context();
 
 	/* Prevent parent user process from sending signals to child.
 	   Otherwise, if the modprobe program does not exist, it might
@@ -62,6 +62,10 @@ static int exec_modprobe(void * module_name)
 	flush_signal_handlers(current);
 	spin_unlock_irq(&current->sigmask_lock);
 
+	/* Copy root dir and cwd from init */
+	use_init_fs_context();
+
+	/* Close our copies of user's open files */
 	for (i = 0; i < current->files->max_fds; i++ ) {
 		if (current->files->fd[i]) close(i);
 	}
@@ -104,7 +108,7 @@ int request_module(const char * module_name)
 		return -EPERM;
 	}
 
-	pid = kernel_thread(exec_modprobe, (void*) module_name, CLONE_FS);
+	pid = kernel_thread(exec_modprobe, (void*) module_name, 0);
 	if (pid < 0) {
 		printk(KERN_ERR "request_module[%s]: fork failed, errno %d\n", module_name, -pid);
 		return pid;

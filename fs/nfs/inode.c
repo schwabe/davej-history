@@ -498,6 +498,48 @@ nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 }
 
 /*
+ * The following may seem pretty minimal, but the stateless nature
+ * of NFS means that we can't do too much more. Previous attempts to use
+ * fattr->nlink to determine how well the cached state matches the
+ * server suffer from races with stale dentries. You also risk killing
+ * off processes by just doing 'mv file newdir' on the server.
+ *
+ * FIXME: Of course, if 2 exported files have the same fileid (but
+ * different fsid which makes it legal) you're still buggered...
+ *                                      Trond, August 1999.
+ */
+static int
+nfs_inode_is_stale(struct inode *inode, struct nfs_fattr *fattr)
+{
+	int unhashed;
+	int is_stale = 0;
+
+	if (inode->i_mode &&
+	    (fattr->mode & S_IFMT) != (inode->i_mode & S_IFMT))
+		is_stale = 1;
+
+	if (is_bad_inode(inode))
+		is_stale = 1;
+
+	/*
+	 * Free up unused cached dentries to see if it's wise to unhash
+	 * the inode (which we can do if all the dentries have been unhashed).
+	 */
+	unhashed = nfs_free_dentries(inode);
+
+	/* Assume we're holding 1 lock on the inode from 'iget'
+	 *
+	 * NB: sockets sometimes have volatile file handles
+	 *     don't invalidate their inodes even if all dentries are
+	 *     unhashed. */
+	if (unhashed && inode->i_count == unhashed + 1
+	    && !S_ISSOCK(inode->i_mode) && !S_ISFIFO(inode->i_mode))
+		is_stale = 1;
+
+	return is_stale;
+}
+
+/*
  * This is our own version of iget that looks up inodes by file handle
  * instead of inode number.  We use this technique instead of using
  * the vfs read_inode function because there is no way to pass the
@@ -556,53 +598,26 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 static struct inode *
 __nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
 {
-	struct inode *inode;
-	int max_count, stale_inode, unhashed = 0;
+	struct inode *inode = NULL;
 
-retry:
-	inode = iget(sb, fattr->fileid);
-	if (!inode)
+	if (!fattr)
 		goto out_no_inode;
-	/* N.B. This should be impossible ... */
-	if (inode->i_ino != fattr->fileid)
-		goto out_bad_id;
 
-	/*
-	 * Check for busy inodes, and attempt to get rid of any
-	 * unused local references. If successful, we release the
-	 * inode and try again.
-	 *
-	 * Note that the busy test uses the values in the fattr,
-	 * as the inode may have become a different object.
-	 * (We can probably handle modes changes here, too.)
-	 */
-	stale_inode = inode->i_mode &&
-		      ((fattr->mode ^ inode->i_mode) & S_IFMT);
-	stale_inode |= inode->i_count && inode->i_count == unhashed;
-	max_count = S_ISDIR(fattr->mode) ? 1 : fattr->nlink;
-	if (stale_inode || inode->i_count > max_count + unhashed) {
-		dprintk("__nfs_fhget: inode %ld busy, i_count=%d, i_nlink=%d\n",
-			inode->i_ino, inode->i_count, inode->i_nlink);
-		unhashed = nfs_free_dentries(inode);
-		if (stale_inode || inode->i_count > max_count + unhashed) {
-			printk("__nfs_fhget: inode %ld still busy, i_count=%d\n",
-				inode->i_ino, inode->i_count);
-			if (!list_empty(&inode->i_dentry)) {
-				struct dentry *dentry;
-				dentry = list_entry(inode->i_dentry.next,
-						 struct dentry, d_alias);
-				printk("__nfs_fhget: killing %s/%s filehandle\n",
-					dentry->d_parent->d_name.name,
-					dentry->d_name.name);
-				memset(dentry->d_fsdata, 0,
-					sizeof(struct nfs_fh));
-			}
-			remove_inode_hash(inode);
-			nfs_invalidate_inode(inode);
-			unhashed = 0;
-		}
+	while (!inode) {
+		inode = iget(sb, fattr->fileid);
+		if (!inode)
+			goto out_no_inode;
+		/* N.B. This should be impossible ... */
+		if (inode->i_ino != fattr->fileid)
+			goto out_bad_id;
+
+		if (!nfs_inode_is_stale(inode,fattr))
+			break;
+
+		remove_inode_hash(inode);
+		nfs_invalidate_inode(inode);
 		iput(inode);
-		goto retry;
+		inode = NULL;
 	}
 	nfs_fill_inode(inode, fattr);
 	dprintk("NFS: __nfs_fhget(%x/%ld ct=%d)\n",
@@ -757,6 +772,8 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		fh = (u32 *) &fhandle;
 		dfprintk(PAGECACHE, "            %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
+		if (!IS_ROOT(dentry))
+			d_drop(dentry);
 		goto out;
 	}
 

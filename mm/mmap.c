@@ -186,7 +186,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		return -EINVAL;
 
 	/* offset overflow? */
-	if (off + len < off)
+	if (off + len - 1 < off)
 		return -EINVAL;
 
 	/* Too many mappings? */

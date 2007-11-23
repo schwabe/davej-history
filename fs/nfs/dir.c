@@ -395,13 +395,14 @@ static inline int nfs_dentry_force_reval(struct dentry *dentry, int flags)
  * If mtime is close to present time, we revalidate
  * more often.
  */
+#define NFS_REVALIDATE_NEGATIVE (1 * HZ)
 static inline int nfs_neg_need_reval(struct dentry *dentry)
 {
-	unsigned long timeout = 30 * HZ;
+	unsigned long timeout = NFS_ATTRTIMEO(dentry->d_parent->d_inode);
 	long diff = CURRENT_TIME - dentry->d_parent->d_inode->i_mtime;
 
-	if (diff < 5*60)
-		timeout = 1 * HZ;
+	if (diff < 5*60 && timeout > NFS_REVALIDATE_NEGATIVE)
+		timeout = NFS_REVALIDATE_NEGATIVE;
 
 	return time_after(jiffies, dentry->d_time + timeout);
 }
@@ -462,12 +463,8 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 		goto out_bad;
 
 	/* Filehandle matches? */
-	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh))) {
-		if (!list_empty(&dentry->d_subdirs))
-			shrink_dcache_parent(dentry);
-		if (dentry->d_count < 2)
-			goto out_bad;
-	}
+	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh)))
+		goto out_bad;
 
 	/* Ok, remeber that we successfully checked it.. */
 	nfs_renew_times(dentry);
@@ -476,6 +473,9 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 out_valid:
 	return 1;
 out_bad:
+	d_drop(dentry);
+	if (!list_empty(&dentry->d_subdirs))
+		shrink_dcache_parent(dentry);
 	if (dentry->d_parent->d_inode)
 		nfs_invalidate_dircache(dentry->d_parent->d_inode);
 	if (inode && S_ISDIR(inode->i_mode))

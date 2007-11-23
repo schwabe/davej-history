@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.127.2.4 1999/10/24 17:29:30 davem Exp $
+/*  $Id: init.c,v 1.127.2.5 1999/11/19 07:30:48 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -1482,6 +1482,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	max_mapnr = MAP_NR(end_mem);
 	high_memory = (void *) end_mem;
 	
+	start_mem = ((start_mem + 7UL) & ~7UL);
 	sparc64_valid_addr_bitmap = (unsigned long *)start_mem;
 	i = max_mapnr >> ((22 - PAGE_SHIFT) + 6);
 	i += 1;
