@@ -806,7 +806,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 #endif
 
 	start_thread(regs, elf_entry, bprm->p);
-	if (current->flags & PF_PTRACED)
+	if (current->ptrace & PT_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;
 

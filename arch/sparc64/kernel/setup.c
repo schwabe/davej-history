@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.43.2.6 2001/04/24 21:58:20 davem Exp $
+/*  $Id: setup.c,v 1.43.2.7 2001/06/03 13:41:48 ecd Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -65,6 +65,7 @@ struct screen_info screen_info = {
 #if CONFIG_SUN_CONSOLE
 void (*prom_palette)(int);
 #endif
+void (*prom_keyboard)(void);
 asmlinkage void sys_sync(void);	/* it's really int */
 
 static void

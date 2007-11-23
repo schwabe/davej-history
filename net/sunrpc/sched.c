@@ -77,7 +77,7 @@ spinlock_t rpc_queue_lock = SPIN_LOCK_UNLOCKED;
  * This is the last-ditch buffer for NFS swap requests
  */
 static u32			swap_buffer[PAGE_SIZE >> 2];
-static int			swap_buffer_used = 0;
+static long			swap_buffer_used = 0;
 
 /*
  * Make allocation of the swap_buffer SMP-safe

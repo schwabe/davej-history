@@ -43,6 +43,13 @@
 #include "dabusb.h"
 #include "dabfirmware.h"
 
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.54"
+#define DRIVER_AUTHOR "Deti Fliegl, deti@fliegl.de"
+#define DRIVER_DESC "DAB-USB Interface Driver for Linux (c)1999"
+
 /* --------------------------------------------------------------------- */
 
 #define NRDABUSB 4
@@ -173,8 +180,8 @@ static void dabusb_iso_complete (purb_t purb)
 
 	// process if URB was not killed
 	if (purb->status != -ENOENT) {
-		unsigned int pipe = usb_rcvisocpipe (s->usbdev, _DABUSB_ISOPIPE);
-		int pipesize = usb_maxpacket (s->usbdev, pipe, usb_pipeout (pipe));
+		unsigned int pipe = usb_rcvisocpipe (purb->dev, _DABUSB_ISOPIPE);
+		int pipesize = usb_maxpacket (purb->dev, pipe, usb_pipeout (pipe));
 		for (i = 0; i < purb->number_of_packets; i++)
 			if (!purb->iso_frame_desc[i].status) {
 				len = purb->iso_frame_desc[i].actual_length;
@@ -455,8 +462,6 @@ static int dabusb_startrek (pdabusb_t s)
 			dbg("submitting: end:%p s->rec_buff_list:%p", s->rec_buff_list.prev, &s->rec_buff_list);
 
 			end = list_entry (s->rec_buff_list.prev, buff_t, buff_list);
-
-			end->purb->dev=s->usbdev;
 
 			ret = usb_submit_urb (end->purb);
 			if (ret) {
@@ -793,11 +798,11 @@ static void dabusb_disconnect (struct usb_device *usbdev, void *ptr)
 
 static struct usb_driver dabusb_driver =
 {
-	"dabusb",
-	dabusb_probe,
-	dabusb_disconnect,
-	{NULL, NULL},
-	&dabusb_fops,
+	name:		"dabusb",
+	probe:		dabusb_probe,
+	disconnect:	dabusb_disconnect,
+	fops:		&dabusb_fops,
+	minor:		DABUSB_MINOR,
 	DABUSB_MINOR
 };
 
@@ -826,6 +831,10 @@ static int __init dabusb_init (void)
 		return -1;
 
 	dbg("dabusb_init: driver registered");
+
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
+
 	return 0;
 }
 
@@ -838,8 +847,9 @@ static void __exit dabusb_cleanup (void)
 
 /* --------------------------------------------------------------------- */
 
-MODULE_AUTHOR ("Deti Fliegl, deti@fliegl.de");
-MODULE_DESCRIPTION ("DAB-USB Interface Driver for Linux (c)1999");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
 MODULE_PARM (buffers, "i");
 MODULE_PARM_DESC (buffers, "Number of buffers (default=256)");
 

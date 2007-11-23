@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.76.2.3 2000/03/02 02:03:27 davem Exp $
+/* $Id: irq.c,v 1.76.2.4 2001/06/04 06:51:17 ecd Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -1048,6 +1048,8 @@ void handler_irq(int irq, struct pt_regs *regs)
 		unsigned char flags = bp->flags;
 
 		nbp = __bucket(bp->irq_chain);
+		bp->irq_chain = 0;
+
 		if((flags & IBF_ACTIVE) != 0) {
 			if((flags & IBF_MULTI) == 0) {
 				struct irqaction *ap = bp->irq_info;

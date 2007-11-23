@@ -764,13 +764,13 @@ PARALLEL PORT SUPPORT
 P:	Phil Blundell
 M:	Philip.Blundell@pobox.com
 P:	Tim Waugh
-M:	tim@cyberelk.demon.co.uk
+M:	tim@cyberelk.net
 P:	David Campbell
 M:	campbell@torque.net
 P:	Andrea Arcangeli
 M:	andrea@e-mind.com
 L:	linux-parport@torque.net
-W:	http://www.cyberelk.demon.co.uk/parport.html
+W:	http://people.redhat.com/twaugh/parport/
 S:	Maintained
 
 PARIDE DRIVERS FOR PARALLEL PORT IDE DEVICES

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.18 2001/01/26 22:26:07 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.20 2001/05/16 07:28:40 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -43,6 +43,7 @@
 #include <linux/blkdev.h>
 #include <linux/in6.h>
 #include <linux/ipv6_route.h>
+#include <linux/pci.h>
 #include <net/sock.h>
 
 #include <scsi/scsi.h>
@@ -492,10 +493,19 @@ static inline int dev_ifconf(unsigned int fd, unsigned long arg)
 			}
 		}
 		if (!err) {
-			if (i <= ifc32.ifc_len)
+			if (ifc32.ifcbuf == 0) {
+				/* Translate from 64-bit structure multiple to
+				 * a 32-bit one.
+				 */
+				i = ifc.ifc_len;
+				i = ((i / sizeof(struct ifreq)) * sizeof(struct ifreq32));
 				ifc32.ifc_len = i;
-			else
-				ifc32.ifc_len = i - sizeof (struct ifreq32);
+			} else {
+				if (i <= ifc32.ifc_len)
+					ifc32.ifc_len = i;
+				else
+					ifc32.ifc_len = i - sizeof (struct ifreq32);
+			}
 			if (copy_to_user((struct ifconf32 *)arg, &ifc32, sizeof(struct ifconf32)))
 				err = -EFAULT;
 		}
@@ -3136,6 +3146,13 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case DRM_IOCTL_FINISH:
 #endif /* DRM */
 
+	/* Misc. */
+	case 0x41545900:		/* ATYIO_CLKR */
+	case 0x41545901:		/* ATYIO_CLKW */
+	case PCIIOC_CONTROLLER:
+	case PCIIOC_MMAP_IS_IO:
+	case PCIIOC_MMAP_IS_MEM:
+	case PCIIOC_WRITE_COMBINE:
 
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;

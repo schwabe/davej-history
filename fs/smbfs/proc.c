@@ -890,8 +890,6 @@ retry:
 	/* smb_vwv2 has mtime */
 	/* smb_vwv4 has size  */
 	ino->u.smbfs_i.access = (WVAL(server->packet, smb_vwv6) & SMB_ACCMASK);
-	if (!(wish & (O_WRONLY | O_RDWR)))
-		ino->u.smbfs_i.access = SMB_O_RDONLY;
 	ino->u.smbfs_i.open = server->generation;
 
 out:

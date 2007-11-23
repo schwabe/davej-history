@@ -125,7 +125,7 @@ typedef struct idefloppy_packet_command_s {
 	byte *current_position;			/* Pointer into the above buffer */
 	void (*callback) (ide_drive_t *);	/* Called when this packet command is completed */
 	byte pc_buffer[IDEFLOPPY_PC_BUFFER_SIZE];	/* Temporary buffer */
-	unsigned int flags;			/* Status/Action bit flags */
+	unsigned long flags;			/* Status/Action bit flags */
 } idefloppy_pc_t;
 
 /*
@@ -259,7 +259,7 @@ typedef struct {
 	idefloppy_flexible_disk_page_t flexible_disk_page;	/* Copy of the flexible disk page */
 	int wp;							/* Write protect */
 
-	unsigned int flags;			/* Status/Action flags */
+	unsigned long flags;			/* Status/Action flags */
 } idefloppy_floppy_t;
 
 /*

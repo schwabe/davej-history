@@ -500,6 +500,8 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		(*info->blank)(arg, info);
 		return 0;
 	default:
+		if (fb->fb_ioctl == NULL)
+			return -EINVAL;
 		return fb->fb_ioctl(inode, file, cmd, arg, PROC_CONSOLE(info),
 				    info);
 	}

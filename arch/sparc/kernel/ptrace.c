@@ -535,12 +535,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 #endif
 	if(request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED) {
+		if (current->ptrace & PT_PTRACED) {
 			pt_error_return(regs, EPERM);
 			goto out;
 		}
 		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		pt_succ_return(regs, 0);
 		goto out;
 	}
@@ -578,11 +578,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			goto out;
 		}
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED) {
+		if (child->ptrace & PT_PTRACED) {
 			pt_error_return(regs, EPERM);
 			goto out;
 		}
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 		write_lock_irqsave(&tasklist_lock, flags);
 		if(child->p_pptr != current) {
 			REMOVE_LINKS(child);
@@ -594,7 +594,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		pt_succ_return(regs, 0);
 		goto out;
 	}
-	if (!(child->flags & PF_PTRACED)
+	if (!(child->ptrace & PT_PTRACED)
 	    && ((current->personality & PER_BSD) && (request != PTRACE_SUNATTACH))
 	    && (!(current->personality & PER_BSD) && (request != PTRACE_ATTACH))) {
 		pt_error_return(regs, ESRCH);
@@ -861,9 +861,9 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		}
 
 		if (request == PTRACE_SYSCALL)
-			child->flags |= PF_TRACESYS;
+			child->ptrace |= PT_TRACESYS;
 		else
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 
 		child->exit_code = data;
 #ifdef DEBUG_PTRACE
@@ -900,7 +900,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, EIO);
 			goto out;
 		}
-		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 		wake_up_process(child);
 		child->exit_code = data;
 		write_lock_irqsave(&tasklist_lock, flags);
@@ -927,8 +927,8 @@ asmlinkage void syscall_trace(void)
 #ifdef DEBUG_PTRACE
 	printk("%s [%d]: syscall_trace\n", current->comm, current->pid);
 #endif
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-			!= (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS))
+			!= (PT_PTRACED|PT_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

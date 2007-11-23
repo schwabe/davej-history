@@ -40,6 +40,13 @@
 
 #include "rio500_usb.h"
 
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "Cesar Miquel <miquel@df.uba.ar>"
+#define DRIVER_DESC "USB Rio 500 driver"
+
 #define RIO_MINOR   64
 
 /* stall/wait timeout for rio */
@@ -121,16 +128,21 @@ ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
 		data = (void *) arg;
 		if (data == NULL)
 			break;
-		if (copy_from_user(&rio_cmd, data, sizeof(struct RioCommand)))
-			return -EFAULT;
-		if (rio_cmd.length > PAGE_SIZE)
-			return -EINVAL;
+		if (copy_from_user(&rio_cmd, data, sizeof(struct RioCommand))) {
+			retval = -EFAULT;
+			goto err_out;
+		}
+		if (rio_cmd.length > PAGE_SIZE) {
+			retval = -EINVAL;
+			goto err_out;
+		}
 		buffer = (unsigned char *) __get_free_page(GFP_KERNEL);
 		if (buffer == NULL)
 			return -ENOMEM;
 		if (copy_from_user(buffer, rio_cmd.buffer, rio_cmd.length)) {
+			retval = -EFAULT;
 			free_page((unsigned long) buffer);
-			return -EFAULT;
+			goto err_out;
 		}
 
 		requesttype = rio_cmd.requesttype | USB_DIR_IN |
@@ -466,8 +478,7 @@ file_operations usb_rio_fops = {
 	release:	close_rio,
 };
 
-static struct
-usb_driver rio_driver = {
+static struct usb_driver rio_driver = {
 	name:		"rio500",
 	probe:		probe_rio,
 	disconnect:	disconnect_rio,
@@ -481,6 +492,9 @@ int usb_rio_init(void)
 		return -1;
 
 	info("USB Rio support registered.");
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
+
 	return 0;
 }
 
@@ -498,5 +512,6 @@ void usb_rio_cleanup(void)
 module_init(usb_rio_init);
 module_exit(usb_rio_cleanup);
 
-MODULE_AUTHOR("Cesar Miquel <miquel@df.uba.ar>");
-MODULE_DESCRIPTION("USB Rio 500 driver");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+

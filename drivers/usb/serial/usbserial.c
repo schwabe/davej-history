@@ -14,6 +14,9 @@
  * based on a driver by Brad Keryan)
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
+ * 
+ * (04/08/2001) gb
+ *	Identify version on module load.
  *
  * 2001_02_05 gkh
  *	Fixed buffer overflows bug with the generic serial driver.  Thanks to
@@ -264,19 +267,22 @@
 #include <linux/list.h>
 #include <linux/smp_lock.h>
 #include <linux/devfs_fs_kernel.h>
-
-#ifdef CONFIG_USB_SERIAL_DEBUG
-	#define DEBUG
-#else
-	#undef DEBUG
-#endif
 #include <linux/usb.h>
 
-/* Module information */
-MODULE_AUTHOR("Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/");
-MODULE_DESCRIPTION("USB Serial Driver");
+#ifdef CONFIG_USB_SERIAL_DEBUG
+	static int debug = 1;
+#else
+	static int debug;
+#endif
 
 #include "usb-serial.h"
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/"
+#define DRIVER_DESC "USB Serial Driver core"
 
 #define MAX(a,b)	(((a)>(b))?(a):(b))
 
@@ -296,11 +302,6 @@ static void generic_shutdown		(struct usb_serial *serial);
 #ifdef CONFIG_USB_SERIAL_GENERIC
 static __u16	vendor	= 0x05f9;
 static __u16	product	= 0xffff;
-MODULE_PARM(vendor, "i");
-MODULE_PARM_DESC(vendor, "User specified USB idVendor");
-
-MODULE_PARM(product, "i");
-MODULE_PARM_DESC(product, "User specified USB idProduct");
 
 /* All of the device info needed for the Generic Serial Converter */
 static struct usb_serial_device_type generic_device = {
@@ -345,6 +346,7 @@ static struct tty_struct *	serial_tty[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
 static struct usb_serial	*serial_table[SERIAL_TTY_MINORS];	/* initially all NULL */
+
 
 LIST_HEAD(usb_serial_driver_list);
 
@@ -808,14 +810,14 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 		spin_lock_irqsave (&port->port_lock, flags);
 		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
 
-		usb_serial_debug_data (__FILE__, __FUNCTION__, count, buf);
-
 		if (from_user) {
 			copy_from_user(port->write_urb->transfer_buffer, buf, count);
 		}
 		else {
 			memcpy (port->write_urb->transfer_buffer, buf, count);
 		}  
+
+		usb_serial_debug_data (__FILE__, __FUNCTION__, count, port->write_urb->transfer_buffer);
 
 		/* set up our urb */
 		FILL_BULK_URB(port->write_urb, serial->dev, 
@@ -1194,6 +1196,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	/* we don't use num_ports here cauz some devices have more endpoint pairs than ports */
 	max_endpoints = MAX(num_bulk_in, num_bulk_out);
 	max_endpoints = MAX(max_endpoints, num_interrupt_in);
+	max_endpoints = MAX(max_endpoints, serial->num_ports);
 	dbg (__FUNCTION__ " - setting up %d port structures for this device", max_endpoints);
 	for (i = 0; i < max_endpoints; ++i) {
 		port = &serial->port[i];
@@ -1371,8 +1374,10 @@ int usb_serial_init(void)
 		err("usb_register failed for the usb-serial driver. Error number %d", result);
 		return -1;
 	}
-	
-	
+
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
+
 	return 0;
 }
 
@@ -1436,4 +1441,18 @@ EXPORT_SYMBOL(usb_serial_deregister);
 	EXPORT_SYMBOL(ezusb_writememory);
 	EXPORT_SYMBOL(ezusb_set_reset);
 #endif
+
+
+/* Module information */
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
+MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug enabled or not");
+
+MODULE_PARM(vendor, "i");
+MODULE_PARM_DESC(vendor, "User specified USB idVendor");
+
+MODULE_PARM(product, "i");
+MODULE_PARM_DESC(product, "User specified USB idProduct");
 

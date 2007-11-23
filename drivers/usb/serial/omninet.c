@@ -9,7 +9,14 @@
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
  * Please report both successes and troubles to the author at omninet@kroah.com
+ * 
+ * (04/08/2001) gb
+ *	Identify version on module load.
  *
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (08/28/2000) gkh
  *	Added locks for SMP safeness.
  *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
@@ -31,24 +38,28 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
-
+#include <linux/usb.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
-	#define isalpha(x) ( ( x > 96 && x < 123) || ( x > 64 && x < 91) || (x > 47 && x < 58) )
-	#define DEBUG
+	static int debug = 1;
 #else
-	#undef DEBUG
+	static int debug;
 #endif
-
-#include <linux/usb.h>
 
 #include "usb-serial.h"
 
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "Anonymous"
+#define DRIVER_DESC "USB ZyXEL omni.net LCD PLUS Driver"
 
 #define ZYXEL_VENDOR_ID		0x0586
 #define ZYXEL_OMNINET_ID	0x1000
@@ -129,6 +140,7 @@ static int omninet_open (struct usb_serial_port *port, struct file *filp)
 	struct usb_serial_port	*wport;
 	struct omninet_data	*od;
 	unsigned long		flags;
+	int			result;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
@@ -149,7 +161,7 @@ static int omninet_open (struct usb_serial_port *port, struct file *filp)
 
 		od = kmalloc( sizeof(struct omninet_data), GFP_KERNEL );
 		if( !od ) {
-			err(__FUNCTION__"- kmalloc(%d) failed.", sizeof(struct omninet_data));
+			err(__FUNCTION__"- kmalloc(%Zd) failed.", sizeof(struct omninet_data));
 			--port->open_count;
 			port->active = 0;
 			spin_unlock_irqrestore (&port->port_lock, flags);
@@ -162,8 +174,13 @@ static int omninet_open (struct usb_serial_port *port, struct file *filp)
 		wport->tty = port->tty;
 
 		/* Start reading from the device */
-		if (usb_submit_urb(port->read_urb))
-			dbg(__FUNCTION__" - read bulk (%p) failed", port->read_urb);
+		FILL_BULK_URB(port->read_urb, serial->dev, 
+			      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+			      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+			      omninet_read_bulk_callback, port);
+		result = usb_submit_urb(port->read_urb);
+		if (result)
+			err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 	}
 
 	spin_unlock_irqrestore (&port->port_lock, flags);
@@ -222,6 +239,7 @@ static void omninet_read_bulk_callback (struct urb *urb)
 	struct omninet_header 	*header = (struct omninet_header *) &data[0];
 
 	int i;
+	int result;
 
 //	dbg("omninet_read_bulk_callback");
 
@@ -235,8 +253,7 @@ static void omninet_read_bulk_callback (struct urb *urb)
 		return;
 	}
 
-#ifdef DEBUG
-	if(header->oh_xxx != 0x30) {
+	if ((debug) && (header->oh_xxx != 0x30)) {
 		if (urb->actual_length) {
 			printk (KERN_DEBUG __FILE__ ": omninet_read %d: ", header->oh_len);
 			for (i = 0; i < (header->oh_len + OMNINET_HEADERLEN); i++) {
@@ -245,7 +262,6 @@ static void omninet_read_bulk_callback (struct urb *urb)
 			printk ("\n");
 		}
 	}
-#endif
 
 	if (urb->actual_length && header->oh_len) {
 		for (i = 0; i < header->oh_len; i++) {
@@ -255,8 +271,13 @@ static void omninet_read_bulk_callback (struct urb *urb)
 	}
 
 	/* Continue trying to always read  */
-	if (usb_submit_urb(urb))
-		dbg(__FUNCTION__" - failed resubmitting read urb");
+	FILL_BULK_URB(urb, serial->dev, 
+		      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+		      urb->transfer_buffer, urb->transfer_buffer_length,
+		      omninet_read_bulk_callback, port);
+	result = usb_submit_urb(urb);
+	if (result)
+		err(__FUNCTION__ " - failed resubmitting read urb, error %d", result);
 
 	return;
 }
@@ -270,11 +291,7 @@ static int omninet_write (struct usb_serial_port *port, int from_user, const uns
 	struct omninet_header	*header = (struct omninet_header *) wport->write_urb->transfer_buffer;
 
 	unsigned long		flags;
-/*
-#ifdef DEBUG
-	int i;
-#endif
-*/
+	int			result;
 
 //	dbg("omninet_write port %d", port->number);
 
@@ -282,18 +299,6 @@ static int omninet_write (struct usb_serial_port *port, int from_user, const uns
 		dbg(__FUNCTION__" - write request of 0 bytes");
 		return (0);
 	}
-/*
-#ifdef DEBUG
-	printk (KERN_DEBUG __FILE__ ": omninet_write %d: ", count);
-		for (i = 0; i < count; i++) {
-			if( isalpha(buf[i]) )
-				printk ("%c ", buf[i]);
-			else
-				printk ("%.2x ", buf[i]);
-		}
-		printk ("\n");
-#endif
-*/
 	if (wport->write_urb->status == -EINPROGRESS) {
 		dbg (__FUNCTION__" - already writing");
 		return (0);
@@ -310,6 +315,7 @@ static int omninet_write (struct usb_serial_port *port, int from_user, const uns
 		memcpy (wport->write_urb->transfer_buffer + OMNINET_DATAOFFSET, buf, count);
 	}
 
+	usb_serial_debug_data (__FILE__, __FUNCTION__, count, wport->write_urb->transfer_buffer);
 
 	header->oh_seq 	= od->od_outseq++;
 	header->oh_len 	= count;
@@ -319,8 +325,10 @@ static int omninet_write (struct usb_serial_port *port, int from_user, const uns
 	/* send the data out the bulk port, always 64 bytes */
 	wport->write_urb->transfer_buffer_length = 64;
 
-	if (usb_submit_urb(wport->write_urb)) {
-		dbg(__FUNCTION__" - usb_submit_urb(write bulk) failed");
+	wport->write_urb->dev = serial->dev;
+	result = usb_submit_urb(wport->write_urb);
+	if (result) {
+		err(__FUNCTION__ " - failed submitting write urb, error %d", result);
 		spin_unlock_irqrestore (&port->port_lock, flags);
 		return 0;
 	}
@@ -392,6 +400,8 @@ static void omninet_shutdown (struct usb_serial *serial)
 static int __init omninet_init (void)
 {
 	usb_serial_register (&zyxel_omninet_device);
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 }
 
@@ -404,4 +414,10 @@ static void __exit omninet_exit (void)
 
 module_init(omninet_init);
 module_exit(omninet_exit);
+
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
+MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug enabled or not");
 

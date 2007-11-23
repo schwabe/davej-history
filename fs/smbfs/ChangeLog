@@ -1,5 +1,16 @@
 ChangeLog for smbfs.
 
+2001-05-24 Urban Widmark <urban@teststation.com>
+
+	* proc.c: fix smb_proc_open to allow open being called more than once
+	  with different modes (O_RDONLY -> O_WRONLY) without closing.
+	  (bugfix from 2.4.3, fix by Michael Kockelkorn)
+	* inode.c: tail -f fix for non-readonly opened files
+	  (related to the smb_proc_open change).
+	  (bugfix from 2.4.3)
+	* inode.c: tail -f fix for fast size changes with the same mtime.
+	  (bugfix from 2.4.3)
+
 2000-11-22 Igor Zhbanov <bsg@uniyar.ac.ru>
 
 	* proc.c: fixed date_unix2dos for dates earlier than 01/01/1980

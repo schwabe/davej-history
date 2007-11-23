@@ -48,7 +48,7 @@ enum {
 typedef struct binfmt_entry {
 	struct binfmt_entry *next;
 	long id;
-	int flags;			/* type, status, etc. */
+	long flags;			/* type, status, etc. */
 	int offset;			/* offset of magic */
 	int size;			/* size of magic/mask */
 	char *magic;			/* magic or filename extension */

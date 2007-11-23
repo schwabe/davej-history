@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.18.2.7 2000/05/27 04:46:34 davem Exp $
+/* $Id: su.c,v 1.18.2.8 2001/05/16 08:37:26 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -1411,6 +1411,41 @@ su_unthrottle(struct tty_struct * tty)
  */
 
 /*
+ * get_serial_info - handle TIOCGSERIAL ioctl()
+ *
+ * Purpose: Return standard serial struct information about
+ *          a serial port handled by this driver.
+ *
+ * Added:   11-May-2001 Lars Kellogg-Stedman <lars@larsshack.org>
+ */
+static int get_serial_info(struct su_struct * info,
+			   struct serial_struct * retinfo)
+{
+	struct serial_struct	tmp;
+
+	if (!retinfo)
+		return -EFAULT;
+	memset(&tmp, 0, sizeof(tmp));
+
+	tmp.type		= info->type;
+	tmp.line		= info->line;
+	tmp.port		= info->port;
+	tmp.irq			= info->irq;
+	tmp.flags		= info->flags;
+	tmp.xmit_fifo_size	= info->xmit_fifo_size;
+	tmp.baud_base		= info->baud_base;
+	tmp.close_delay		= info->close_delay;
+	tmp.closing_wait	= info->closing_wait;
+	tmp.custom_divisor	= info->custom_divisor;
+	tmp.hub6		= 0;
+
+	if (copy_to_user(retinfo,&tmp,sizeof(*retinfo)))
+		return -EFAULT;
+
+	return 0;
+}
+
+/*
  * get_lsr_info - get line status register info
  *
  * Purpose: Let user call ioctl() to get info when the UART physically
@@ -1567,6 +1602,9 @@ su_ioctl(struct tty_struct *tty, struct file * file,
 		case TIOCMBIC:
 		case TIOCMSET:
 			return set_modem_info(info, cmd, (unsigned int *) arg);
+
+		case TIOCGSERIAL:
+			return get_serial_info(info, (struct serial_struct *)arg);
 
 		case TIOCSERGETLSR: /* Get line status register */
 			return get_lsr_info(info, (unsigned int *) arg);
@@ -2226,7 +2264,7 @@ done:
  */
 __initfunc(static __inline__ void show_su_version(void))
 {
-	char *revision = "$Revision: 1.18.2.7 $";
+	char *revision = "$Revision: 1.18.2.8 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

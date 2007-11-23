@@ -49,9 +49,10 @@
 #define TASK_FLAGS         4
 #define TASK_SIGPENDING    8
 #define TASK_NEED_RESCHED  20
-#define TASK_COUNTER       24
-#define TASK_PRIORITY      28
-#define TASK_MM            920
+#define TASK_PTRACE        24
+#define TASK_COUNTER       28
+#define TASK_PRIORITY      32
+#define TASK_MM            924
 
 /* MIPS specific thread_struct offsets. */
 #define THREAD_REG16   560

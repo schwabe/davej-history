@@ -375,7 +375,7 @@ beyond_if:
 	p = (unsigned long) create_aout32_tables((char *)p, bprm);
 	current->mm->start_stack = p;
 	start_thread32(regs, ex.a_entry, p);
-	if (current->flags & PF_PTRACED)
+	if (current->ptrace & PT_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;
 }

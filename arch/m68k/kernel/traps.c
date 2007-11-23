@@ -921,7 +921,7 @@ asmlinkage void trap_c(struct frame *fp)
 	if (fp->ptregs.sr & PS_S) {
 		if ((fp->ptregs.vector >> 2) == VEC_TRACE) {
 			/* traced a trapping instruction */
-			current->flags |= PF_DTRACE;
+			current->ptrace |= PT_DTRACE;
 		} else
 			bad_super_trap(fp);
 		return;

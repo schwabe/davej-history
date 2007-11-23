@@ -404,7 +404,7 @@ asmlinkage int sys_execve(struct pt_regs regs)
         error = do_execve(filename, (char **) regs.gprs[3], (char **) regs.gprs[4], &regs);
 	if (error == 0)
 	{
-		current->flags &= ~PF_DTRACE;
+		current->ptrace &= ~PT_DTRACE;
 		current->tss.fp_regs.fpc=0;
 		if(MACHINE_HAS_IEEE)
 		{

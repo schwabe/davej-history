@@ -1425,8 +1425,11 @@ static void set_rx_mode(struct device *dev)
 		rx_mode = AcceptBroadcast | AcceptMulticast | AcceptMyPhys;
 		mc_filter[1] = mc_filter[0] = 0;
 		for (i = 0, mclist = dev->mc_list; mclist && i < dev->mc_count;
-			 i++, mclist = mclist->next)
-			set_bit(ether_crc(ETH_ALEN, mclist->dmi_addr) >> 26, mc_filter);
+			 i++, mclist = mclist->next) {
+			int bit_nr = ether_crc(ETH_ALEN, mclist->dmi_addr) >> 26;
+
+			mc_filter[bit_nr >> 5] |= cpu_to_le32(1 << (bit_nr & 31));
+		}
 	}
 	/* We can safely update without stopping the chip. */
 	outb(rx_mode, ioaddr + RxConfig);

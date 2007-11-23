@@ -254,6 +254,7 @@ struct task_struct {
 					 */
 	struct exec_domain *exec_domain;
 	long need_resched;
+	unsigned long ptrace;
 
 /* various fields */
 	long counter;
@@ -361,8 +362,6 @@ struct task_struct {
 					/* Not implemented yet, only for 486*/
 #define PF_STARTING	0x00000002	/* being created */
 #define PF_EXITING	0x00000004	/* getting shut down */
-#define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called */
-#define PF_TRACESYS	0x00000020	/* tracing system calls */
 #define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
 #define PF_SUPERPRIV	0x00000100	/* used super-user privileges */
 #define PF_DUMPCORE	0x00000200	/* dumped core */
@@ -372,7 +371,14 @@ struct task_struct {
 #define PF_FREE_PAGES	0x00002000	/* The current-> */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
-#define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */
+
+/*
+ * Ptrace flags
+ */
+#define PT_PTRACED	0x00000001	/* set if ptrace (0) has been called */
+#define PT_TRACESYS	0x00000002	/* tracing system calls */
+#define PT_DTRACE	0x00000004	/* delayed trace (used on m68k, i386) */
+
 
 /*
  * Limit the stack by to some sane default: root can always
@@ -387,7 +393,7 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0, \
+/* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0,0, \
 /* counter */	DEF_PRIORITY,DEF_PRIORITY,0, \
 /* SMP */	0,0,0,-1, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \

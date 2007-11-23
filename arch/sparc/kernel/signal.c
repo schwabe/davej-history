@@ -1139,7 +1139,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 
 		if (!signr) break;
 
-		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
+		if ((current->ptrace & PT_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
 
@@ -1203,7 +1203,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 					continue;
 
 			case SIGSTOP:
-				if (current->flags & PF_PTRACED)
+				if (current->ptrace & PT_PTRACED)
 					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;

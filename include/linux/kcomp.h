@@ -17,7 +17,7 @@
 
 #define	net_device			device
 #define dev_kfree_skb_irq(a)		dev_kfree_skb(a)
-#define netif_wake_queue(dev)		clear_bit(0, &dev->tbusy)
+#define netif_wake_queue(dev)		do { clear_bit(0, &dev->tbusy); mark_bh(NET_BH); } while(0)
 #define netif_stop_queue(dev)		set_bit(0, &dev->tbusy)
 #define netif_start_queue(dev)		do { dev->tbusy = 0; dev->interrupt = 0; dev->start = 1; } while (0)
 #define netif_queue_stopped(dev)	dev->tbusy

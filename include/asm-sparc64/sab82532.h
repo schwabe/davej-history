@@ -1,4 +1,4 @@
-/* $Id: sab82532.h,v 1.4 1998/10/25 23:04:29 ecd Exp $
+/* $Id: sab82532.h,v 1.4.2.1 2001/05/28 23:13:36 ecd Exp $
  * sab82532.h: Register Definitions for the Siemens SAB82532 DUSCC
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -148,7 +148,7 @@ struct sab82532 {
 	int				 close_delay;
 	unsigned short			 closing_wait;
 	unsigned short			 closing_wait2;
-	int				 all_sent;
+	unsigned long			 irqflags;
 	int				 is_console;
 	unsigned char			 interrupt_mask0;
 	unsigned char			 interrupt_mask1;
@@ -179,6 +179,10 @@ struct sab82532 {
 	struct sab82532			*next;
 	struct sab82532			*prev;
 };
+
+/* irqflags bits */
+#define SAB82532_ALLS			0x00000001
+#define SAB82532_XPR			0x00000002
 
 
 /* RFIFO Status Byte */

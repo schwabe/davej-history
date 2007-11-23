@@ -13,6 +13,9 @@
 *
 *  Peter Berger (pberger@brimson.com)
 *  Al Borchers (borchers@steinerpoint.com)
+* 
+* (04/08/2001) gb
+*	Identify version on module load.
 *
 * (11/01/2000) pberger and borchers
 *    -- Turned off the USB_DISABLE_SPD flag for write bulk urbs--it caused
@@ -232,24 +235,31 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/tqueue.h>
+#include <linux/usb.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
-	#define DEBUG
+	static int debug = 1;
 #else
-	#undef DEBUG
+	static int debug;
 #endif
 
-#include <linux/usb.h>
 #include "usb-serial.h"
 
 
 /* Defines */
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.80.1.2"
+#define DRIVER_AUTHOR "Peter Berger <pberger@brimson.com>, Al Borchers <borchers@steinerpoint.com>"
+#define DRIVER_DESC "Digi AccelePort USB-2/USB-4 Serial Converter driver"
 
 /* port output buffer length -- must be <= transfer buffer length - 2 */
 /* so we can be sure to send the full buffer in one urb */
@@ -585,7 +595,7 @@ static void digi_wakeup_write_lock( struct usb_serial_port *port )
 	spin_lock_irqsave( &priv->dp_port_lock, flags );
 	digi_wakeup_write( port );
 	spin_unlock_irqrestore( &priv->dp_port_lock, flags );
-
+	MOD_DEC_USE_COUNT;
 }
 
 static void digi_wakeup_write( struct usb_serial_port *port )
@@ -1266,12 +1276,10 @@ priv->dp_port_num, count, from_user, in_interrupt() );
 	|| priv->dp_write_urb_in_use ) {
 
 		/* buffer data if count is 1 (probably put_char) if possible */
-		if( count == 1 ) {
-			new_len = MIN( count,
-				DIGI_OUT_BUF_SIZE-priv->dp_out_buf_len );
-			memcpy( priv->dp_out_buf+priv->dp_out_buf_len, buf,
-				new_len );
-			priv->dp_out_buf_len += new_len;
+		if( count == 1 && priv->dp_out_buf_len < DIGI_OUT_BUF_SIZE ) {
+			priv->dp_out_buf[priv->dp_out_buf_len++]
+				= *(from_user ? user_buf : buf);
+			new_len = 1;
 		} else {
 			new_len = 0;
 		}
@@ -1393,7 +1401,9 @@ dbg( "digi_write_bulk_callback: TOP, urb->status=%d", urb->status );
 
 	/* also queue up a wakeup at scheduler time, in case we */
 	/* lost the race in write_chan(). */
-	queue_task( &priv->dp_wakeup_task, &tq_scheduler );
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&priv->dp_wakeup_task) == 0)
+		MOD_DEC_USE_COUNT;
 
 	spin_unlock( &priv->dp_port_lock );
 
@@ -2052,6 +2062,8 @@ static int __init digi_init (void)
 {
 	usb_serial_register (&digi_acceleport_2_device);
 	usb_serial_register (&digi_acceleport_4_device);
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 }
 
@@ -2067,6 +2079,9 @@ module_init(digi_init);
 module_exit(digi_exit);
 
 
-MODULE_AUTHOR("Peter Berger <pberger@brimson.com>, Al Borchers <borchers@steinerpoint.com>");
-MODULE_DESCRIPTION("Digi AccelePort USB-2/USB-4 Serial Converter driver");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
+MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug enabled or not");
 

@@ -23,8 +23,15 @@
  *    framework in, but haven't analyzed the "tty_flip" interface yet.
  * -- Add support for flush commands
  * -- Add everything that is missing :)
+ * 
+ * 08-Apr-2001 gb
+ *	- Identify version on module load.
  *
- * (11/06/2000) gkh
+ * 12-Mar-2001 gkh
+ *	- Added support for the GoHubs GO-COM232 device which is the same as the
+ *	  Peracom device.
+ *
+ * 06-Nov-2000 gkh
  *	- Added support for the old Belkin and Peracom devices.
  *	- Made the port able to be opened multiple times.
  *	- Added some defaults incase the line settings are things these devices
@@ -59,21 +66,28 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/usb.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
- 	#define DEBUG
+ 	static int debug = 1;
 #else
- 	#undef DEBUG
+ 	static int debug;
 #endif
-#include <linux/usb.h>
 
 #include "usb-serial.h"
 #include "belkin_sa.h"
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "William Greathouse <wgreathouse@smva.com>"
+#define DRIVER_DESC "USB Belkin Serial converter driver"
 
 /* function prototypes for a Belkin USB Serial Adapter F5U103 */
 static int  belkin_sa_startup		(struct usb_serial *serial);
@@ -158,6 +172,30 @@ struct usb_serial_device_type peracom_device = {
 	shutdown:		belkin_sa_shutdown,
 };
 
+/* the GoHubs Go-COM232 device is the same as the Peracom single port adapter */
+static __u16	gocom232_vendor_id	= PERACOM_VID;
+static __u16	gocom232_product_id	= PERACOM_PID;
+struct usb_serial_device_type gocom232_device = {
+	name:			"GO-COM232 USB Serial Converter",
+	idVendor:		&gocom232_vendor_id,		/* the Go-COM232 vendor ID */
+	idProduct:		&gocom232_product_id,		/* the Go-COM232 product id */
+	needs_interrupt_in:	MUST_HAVE,			/* this device must have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,			/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,			/* this device must have a bulk out endpoint */
+	num_interrupt_in:	1,
+	num_bulk_in:		1,
+	num_bulk_out:		1,
+	num_ports:		1,
+	open:			belkin_sa_open,
+	close:			belkin_sa_close,
+	read_int_callback:	belkin_sa_read_int_callback,	/* How we get the status info */
+	ioctl:			belkin_sa_ioctl,
+	set_termios:		belkin_sa_set_termios,
+	break_ctl:		belkin_sa_break_ctl,
+	startup:		belkin_sa_startup,
+	shutdown:		belkin_sa_shutdown,
+};
+
 
 struct belkin_sa_private {
 	unsigned long		control_state;
@@ -217,8 +255,8 @@ static void belkin_sa_shutdown (struct usb_serial *serial)
 			belkin_sa_close (&serial->port[i], NULL);
 		}
 		/* My special items, the standard routines free my urbs */
-		if (serial->port->private)
-			kfree(serial->port->private);
+		if (serial->port[i].private)
+			kfree(serial->port[i].private);
 	}
 }
 
@@ -284,7 +322,6 @@ static void belkin_sa_read_int_callback (struct urb *urb)
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
 	struct belkin_sa_private *priv = (struct belkin_sa_private *)port->private;
 	struct usb_serial *serial;
-	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 
 	/* the urb might have been killed. */
@@ -360,7 +397,7 @@ static void belkin_sa_set_termios (struct usb_serial_port *port, struct termios 
 	unsigned int cflag = port->tty->termios->c_cflag;
 	unsigned int old_iflag = old_termios->c_iflag;
 	unsigned int old_cflag = old_termios->c_cflag;
-	__u16 urb_value; /* Will hold the new flags */
+	__u16 urb_value = 0; /* Will hold the new flags */
 	
 	/* Set the baud rate */
 	if( (cflag&CBAUD) != (old_cflag&CBAUD) ) {
@@ -543,6 +580,9 @@ static int __init belkin_sa_init (void)
 	usb_serial_register (&belkin_sa_device);
 	usb_serial_register (&belkin_old_device);
 	usb_serial_register (&peracom_device);
+	usb_serial_register (&gocom232_device);
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 }
 
@@ -552,10 +592,16 @@ static void __exit belkin_sa_exit (void)
 	usb_serial_deregister (&belkin_sa_device);
 	usb_serial_deregister (&belkin_old_device);
 	usb_serial_deregister (&peracom_device);
+	usb_serial_deregister (&gocom232_device);
 }
 
 
 module_init (belkin_sa_init);
-module_exit(belkin_sa_exit);
+module_exit (belkin_sa_exit);
 
-MODULE_DESCRIPTION("USB Belkin Serial converter driver");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
+MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug enabled or not");
+

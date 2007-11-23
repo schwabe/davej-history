@@ -94,7 +94,7 @@ int do_debugger_trap(struct pt_regs *regs,int signal)
 {
 	if(regs->psw.mask&PSW_PROBLEM_STATE)
 	{
-		if(current->flags & PF_PTRACED)
+		if(current->ptrace & PT_PTRACED)
 			force_sig(signal,current);
 		else
 			return(TRUE);

@@ -67,6 +67,8 @@
 #endif
 #include <linux/usb.h>
 
+static int debug;
+
 #include "usb-serial.h"
 
 #include "whiteheat_fw.h"		/* firmware for the ConnectTech WhiteHEAT device */

@@ -505,8 +505,10 @@ badreq:
 		}
 		/* Send Configure-Ack packet. */
 		sp->pp_loopcnt = 0;
-		sppp_cp_send (sp, PPP_LCP, LCP_CONF_ACK,
-				h->ident, len-4, h+1);
+		if (sp->lcp.state != LCP_STATE_OPENED) {
+			sppp_cp_send (sp, PPP_LCP, LCP_CONF_ACK,
+					h->ident, len-4, h+1);
+		}
 		/* Change the state. */
 		switch (sp->lcp.state) {
 		case LCP_STATE_CLOSED:
@@ -522,7 +524,9 @@ badreq:
 			sp->ipcp.state = IPCP_STATE_CLOSED;
 			/* Initiate renegotiation. */
 			sppp_lcp_open (sp);
-			/* An ACK has already been sent. */
+			/* Send ACK after our REQ in attempt to break loop */
+			sppp_cp_send (sp, PPP_LCP, LCP_CONF_ACK,
+					h->ident, len-4, h+1);
 			sp->lcp.state = LCP_STATE_ACK_SENT;
 			break;
 		}

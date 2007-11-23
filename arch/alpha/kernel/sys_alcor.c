@@ -15,6 +15,7 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/reboot.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -186,13 +187,21 @@ alcor_pci_fixup(void)
 static void
 alcor_kill_arch (int mode, char *reboot_cmd)
 {
-	/* Who said DEC engineer's have no sense of humor? ;-)  */
-	if (alpha_using_srm) {
-		*(vuip) GRU_RESET = 0x0000dead;
-		mb();
+	switch(mode) {
+	case LINUX_REBOOT_CMD_RESTART:
+		/* Who said DEC engineer's have no sense of humor? ;-)  */
+		if (alpha_using_srm) {
+			*(vuip) GRU_RESET = 0x0000dead;
+			mb();
+		}
+		break;
+	case LINUX_REBOOT_CMD_HALT:
+		break;
+	case LINUX_REBOOT_CMD_POWER_OFF:
+		break;
 	}
 
-	generic_kill_arch(mode, reboot_cmd);
+	halt();
 }
 
 

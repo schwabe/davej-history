@@ -2129,8 +2129,8 @@ DoSyscall:
         cmpi    1,r0,0x6666     /* Special case for 'sys_rt_sigreturn' */
 	beq-	10f
         beq-    cr1,16f
-	lwz	r10,TASK_FLAGS(r2)
-	andi.	r10,r10,PF_TRACESYS
+	lwz	r10,TASK_PTRACE(r2)
+	andi.	r10,r10,PT_TRACESYS
 	bne-	50f
 	cmpli	0,r0,NR_syscalls
 	bge-	66f

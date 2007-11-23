@@ -39,4 +39,7 @@ struct pci_ops {
 
 extern struct pci_ops *pci_ops;
 
+/* Return the index of the PCI controller for device PDEV. */
+#define pci_controller_num(PDEV)	(0)
+
 #endif /* __ASM_MIPS_PCI_H */

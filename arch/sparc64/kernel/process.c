@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.92.2.3 1999/12/05 07:24:38 davem Exp $
+/*  $Id: process.c,v 1.92.2.4 2001/06/03 13:41:48 ecd Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -116,6 +116,7 @@ extern char reboot_command [];
 extern void (*prom_palette)(int);
 extern int serial_console;
 #endif
+extern void (*prom_keyboard)(void);
 
 void machine_halt(void)
 {
@@ -126,6 +127,8 @@ void machine_halt(void)
 	if (!serial_console && prom_palette)
 		prom_palette (1);
 #endif
+	if (prom_keyboard)
+		prom_keyboard();
 	prom_halt();
 	panic("Halt failed!");
 }
@@ -144,6 +147,8 @@ void machine_restart(char * cmd)
 	if (!serial_console && prom_palette)
 		prom_palette (1);
 #endif
+	if (prom_keyboard)
+		prom_keyboard();
 	if (cmd)
 		prom_reboot(cmd);
 	if (*reboot_command)

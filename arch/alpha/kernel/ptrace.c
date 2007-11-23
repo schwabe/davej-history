@@ -527,10 +527,10 @@ sys_ptrace(long request, long pid, long addr, long data,
 	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
+		if (current->ptrace & PT_PTRACED)
 			goto out;
 		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
 		goto out;
 	}
@@ -553,9 +553,9 @@ sys_ptrace(long request, long pid, long addr, long data,
 		    && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
@@ -566,7 +566,7 @@ sys_ptrace(long request, long pid, long addr, long data,
 		goto out;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED)) {
+	if (!(child->ptrace & PT_PTRACED)) {
 		DBG(DBG_MEM, ("child not traced\n"));
 		goto out;
 	}
@@ -622,9 +622,9 @@ sys_ptrace(long request, long pid, long addr, long data,
 		if ((unsigned long) data > _NSIG)
 			goto out;
 		if (request == PTRACE_SYSCALL)
-			child->flags |= PF_TRACESYS;
+			child->ptrace |= PT_TRACESYS;
 		else
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 		child->exit_code = data;
 		wake_up_process(child);
 		/* make sure single-step breakpoint is gone. */
@@ -652,7 +652,7 @@ sys_ptrace(long request, long pid, long addr, long data,
 		if ((unsigned long) data > _NSIG)
 			goto out;
 		child->tss.bpt_nsaved = -1;	/* mark single-stepping */
-		child->flags &= ~PF_TRACESYS;
+		child->ptrace &= ~PT_TRACESYS;
 		wake_up_process(child);
 		child->exit_code = data;
 		/* give it a chance to run. */
@@ -663,7 +663,7 @@ sys_ptrace(long request, long pid, long addr, long data,
 		ret = -EIO;
 		if ((unsigned long) data > _NSIG)
 			goto out;
-		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 		wake_up_process(child);
 		child->exit_code = data;
 		REMOVE_LINKS(child);
@@ -686,8 +686,8 @@ sys_ptrace(long request, long pid, long addr, long data,
 asmlinkage void
 syscall_trace(void)
 {
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-	    != (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS))
+	    != (PT_PTRACED|PT_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

@@ -557,7 +557,7 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 	new_flags &= ~(PF_SUPERPRIV | PF_USEDFPU | PF_VFORK);
 	new_flags |= PF_FORKNOEXEC;
 	if (!(clone_flags & CLONE_PTRACE))
-		new_flags &= ~(PF_PTRACED|PF_TRACESYS);
+		p->ptrace = 0;
 	if (clone_flags & CLONE_VFORK)
 		new_flags |= PF_VFORK;
 	p->flags = new_flags;

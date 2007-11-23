@@ -1,5 +1,5 @@
 /*
- * Driver for USB Scanners (linux-2.4.0test1-ac7)
+ * Driver for USB Scanners (linux-2.4.0)
  *
  * Copyright (C) 1999, 2000 David E. Nelson
  *
@@ -30,12 +30,13 @@
 #include <linux/delay.h>
 #include <linux/ioctl.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 // #define DEBUG
 
 #include <linux/usb.h>
 
-static __s32 vendor=-1, product=-1;
+static __s32 vendor=-1, product=-1, read_timeout=0;
 
 MODULE_AUTHOR("David E. Nelson, dnelson@jump.net, http://www.jump.net/~dnelson");
 MODULE_DESCRIPTION("USB Scanner Driver");
@@ -45,6 +46,9 @@ MODULE_PARM_DESC(vendor, "User specified USB idVendor");
 
 MODULE_PARM(product, "i");
 MODULE_PARM_DESC(product, "User specified USB idProduct");
+
+MODULE_PARM(read_timeout, "i");
+MODULE_PARM_DESC(read_timeout, "User specified read timeout in seconds");
 
 
 /* Enable to activate the ioctl interface.  This is mainly meant for */
@@ -72,7 +76,7 @@ MODULE_PARM_DESC(product, "User specified USB idProduct");
 #define OBUF_SIZE 4096
 
 /* read_scanner timeouts -- RD_NAK_TIMEOUT * RD_EXPIRE = Number of seconds */
-#define RD_NAK_TIMEOUT (10*HZ)	/* Number of X seconds to wait */
+#define RD_NAK_TIMEOUT (10*HZ)	/* Default number of X seconds to wait */
 #define RD_EXPIRE 12		/* Number of attempts to wait X seconds */
 
 
@@ -89,11 +93,13 @@ struct scn_usb_data {
 	unsigned int ifnum;	/* Interface number of the USB device */
 	kdev_t scn_minor;	/* Scanner minor - used in disconnect() */
 	unsigned char button;	/* Front panel buffer */
-        char isopen;		/* Not zero if the device is open */
+	char isopen;		/* Not zero if the device is open */
 	char present;		/* Not zero if device is present */
 	char *obuf, *ibuf;	/* transfer buffers */
 	char bulk_in_ep, bulk_out_ep, intr_ep; /* Endpoint assignments */
 	wait_queue_head_t rd_wait_q; /* read timeouts */
+	struct semaphore gen_lock; /* lock to prevent concurrent reads or writes */
+	unsigned int rd_nak_timeout; /* Seconds to wait before read() timeout. */
 };
 
 static struct scn_usb_data *p_scn_table[SCN_MAX_MNR] = { NULL, /* ... */};
@@ -106,8 +112,10 @@ static const struct scanner_device {
 	/* Acer */
 		{ 0x04a5, 0x2060 },	/* Prisa Acerscan 620U & 640U (!) */
 		{ 0x04a5, 0x2040 },	/* Prisa AcerScan 620U (!) */
+		{ 0x04a5, 0x2022 },	/* Vuego Scan Brisa 340U */
 	/* Agfa */
 		{ 0x06bd, 0x0001 },	/* SnapScan 1212U */
+		{ 0x06bd, 0x0002 },	/* SnapScan 1236U */
 		{ 0x06bd, 0x2061 },	/* Another SnapScan 1212U (?) */
 		{ 0x06bd, 0x0100 },	/* SnapScan Touch */
 	/* Colorado -- See Primax/Colorado below */
@@ -120,20 +128,28 @@ static const struct scanner_device {
 		{ 0x03f0, 0x0105 },	/* 4200C */
 		{ 0x03f0, 0x0102 },	/* PhotoSmart S20 */
 		{ 0x03f0, 0x0401 },	/* 5200C */
+	//	{ 0x03f0, 0x0701 },	/* 5300C - NOT SUPPORTED - see http://www.neatech.nl/oss/HP5300C/ */
 		{ 0x03f0, 0x0201 },	/* 6200C */
 		{ 0x03f0, 0x0601 },	/* 6300C */
 	/* iVina */
 		{ 0x0638, 0x0268 },     /* 1200U */
-	/* Microtek */
-		{ 0x05da, 0x0099 },	/* ScanMaker X6 - X6U */
-		{ 0x05da, 0x0094 },	/* Phantom 336CX - C3 */
-		{ 0x05da, 0x00a0 },	/* Phantom 336CX - C3 #2 */
-		{ 0x05da, 0x009a },	/* Phantom C6 */
-		{ 0x05da, 0x00a3 },	/* ScanMaker V6USL */
-		{ 0x05da, 0x80a3 },	/* ScanMaker V6USL #2 */
-		{ 0x05da, 0x80ac },	/* ScanMaker V6UL - SpicyU */
+	/* Microtek No longer supported - Enable SCSI and USB Microtek in kernel config */
+	//	{ 0x05da, 0x0099 },	/* ScanMaker X6 - X6U */
+	//	{ 0x05da, 0x0094 },	/* Phantom 336CX - C3 */
+	//	{ 0x05da, 0x00a0 },	/* Phantom 336CX - C3 #2 */
+	//	{ 0x05da, 0x009a },	/* Phantom C6 */
+	//	{ 0x05da, 0x00a3 },	/* ScanMaker V6USL */
+	//	{ 0x05da, 0x80a3 },	/* ScanMaker V6USL #2 */
+	//	{ 0x05da, 0x80ac },	/* ScanMaker V6UL - SpicyU */
 	/* Mustek */
 		{ 0x055f, 0x0001 },	/* 1200 CU */
+		{ 0x0400, 0x1000 },	/* BearPaw 1200 */
+		{ 0x055f, 0x0002 },	/* 600 CU */
+		{ 0x055f, 0x0003 },	/* 1200 USB */
+		{ 0x055f, 0x0006 },	/* 1200 UB */
+		{ 0x0400, 0x1001 },	/* BearPaw 2400 */
+		{ 0x055f, 0x0008 },	/* 1200 CU Plus */
+		{ 0x0ff5, 0x0010 },	/* BearPaw 1200F */
 	/* Primax/Colorado */
 		{ 0x0461, 0x0300 },	/* G2-300 #1 */
 		{ 0x0461, 0x0380 },	/* G2-600 #1 */
@@ -151,7 +167,11 @@ static const struct scanner_device {
 		{ 0x04b8, 0x0101 },	/* Perfection 636U and 636Photo */
 		{ 0x04b8, 0x0103 },	/* Perfection 610 */
 		{ 0x04b8, 0x0104 },	/* Perfection 1200U and 1200Photo */
+		{ 0x04b8, 0x0106 },	/* Stylus Scan 2500 */
+		{ 0x04b8, 0x0107 },	/* Expression 1600 */
+		{ 0x04b8, 0x010a },	/* Perfection 1640SU and 1640SU Photo */
 		{ 0x04b8, 0x010b },	/* Perfection 1240U and 1240Photo */
+		{ 0x04b8, 0x010c },	/* Perfection 640U */
 	/* Umax */
 		{ 0x1606, 0x0010 },	/* Astra 1220U */
 		{ 0x1606, 0x0002 },	/* Astra 1236U */
@@ -161,6 +181,10 @@ static const struct scanner_device {
 		{ 0x04a7, 0x0221 },	/* OneTouch 5300 */
 		{ 0x04a7, 0x0221 },	/* OneTouch 7600 duplicate ID (!) */
 		{ 0x04a7, 0x0231 },	/* 6100 */
+		{ 0x04a7, 0x0211 },	/* OneTouch 7600 USB */
+		{ 0x04a7, 0x0311 },	/* 6200 EPP/USB */
+		{ 0x04a7, 0x0321 },	/* OneTouch 8100 EPP/USB */
+		{ 0x04a7, 0x0331 },	/* OneTouch 8600 EPP/USB */
 };
 
 /* Forward declarations */

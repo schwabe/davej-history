@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.11.2.2 2000/09/13 01:27:53 davem Exp $
+ *	$Id: ip6_input.c,v 1.11.2.3 2001/06/07 06:47:54 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -97,10 +97,14 @@ static __inline__ int icmpv6_filter(struct sock *sk, struct sk_buff *skb)
 {
 	struct icmp6hdr *icmph;
 	struct raw6_opt *opt;
+	int bit_nr;
 
 	opt = &sk->tp_pinfo.tp_raw;
 	icmph = (struct icmp6hdr *) skb->h.raw;
-	return test_bit(icmph->icmp6_type, &opt->filter);
+	bit_nr = icmph->icmp6_type;
+	if (bit_nr >= (8 * 32))
+		return 0;
+	return ((opt->filter.data[bit_nr >> 5] & (1 << bit_nr)) != 0);
 }
 
 /*

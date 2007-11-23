@@ -44,11 +44,13 @@
  * 03 Nov, 1999 -- update for 2.3.25 kernel API changes.
  * 08 Jan, 2000 .. multiple camera support
  * 12 Aug, 2000 .. add some real locking, remove an Oops
+ * 08 Apr, 2001 .. Identify version on module load. gb
  *
  * Thanks to:  the folk who've provided USB product IDs, sent in
- * patches, and shared their sucesses!
+ * patches, and shared their successes!
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -59,6 +61,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
+
 #ifdef CONFIG_USB_DEBUG
 	#define DEBUG
 #else
@@ -66,6 +69,13 @@
 #endif
 #include <linux/usb.h>
 
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "David Brownell, <dbrownell@users.sourceforge.net>"
+#define DRIVER_DESC "USB Camera Driver for Kodak DC-2xx series cameras"
 
 
 /* current USB framework handles max of 16 USB devices per driver */
@@ -170,7 +180,7 @@ static ssize_t camera_read (struct file *file,
 			  usb_rcvbulkpipe (camera->dev, camera->inEP),
 			  camera->buf, len, &count, HZ*10);
 
-		dbg ("read (%d) - 0x%x %d", len, retval, count);
+		dbg ("read (%Zd) - 0x%x %d", len, retval, count);
 
 		if (!retval) {
 			if (copy_to_user (buf, camera->buf, count))
@@ -183,7 +193,7 @@ static ssize_t camera_read (struct file *file,
 			break;
 		interruptible_sleep_on_timeout (&camera->wait, RETRY_TIMEOUT);
 
-		dbg ("read (%d) - retry", len);
+		dbg ("read (%Zd) - retry", len);
 	}
 	up (&camera->sem);
 	return retval;
@@ -267,7 +277,7 @@ static ssize_t camera_write (struct file *file,
 	}
 done:
 	up (&camera->sem);
-	dbg ("wrote %d", bytes_written); 
+	dbg ("wrote %Zd", bytes_written); 
 	return bytes_written;
 }
 
@@ -324,8 +334,9 @@ static int camera_release (struct inode *inode, struct file *file)
 	if (!camera->dev) {
 		minor_data [subminor] = NULL;
 		kfree (camera);
-	}
-	up (&camera->sem);
+	} else
+		up (&camera->sem);
+	
 	up (&state_table_mutex);
 
 	dbg ("close #%d", subminor); 
@@ -396,7 +407,6 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	}
 	if (i >= MAX_CAMERAS) {
 		info ("Ignoring additional USB Camera");
-		up (&state_table_mutex);
 		goto bye;
 	}
 
@@ -404,7 +414,6 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 	camera = minor_data [i] = kmalloc (sizeof *camera, GFP_KERNEL);
 	if (!camera) {
 		err ("no memory!");
-		up (&state_table_mutex);
 		goto bye;
 	}
 
@@ -471,13 +480,15 @@ static void camera_disconnect(struct usb_device *dev, void *ptr)
 	if (!camera->buf) {
 		minor_data [subminor] = NULL;
 		kfree (camera);
+		camera = NULL;
 	} else
 		camera->dev = NULL;
 
 	info ("USB Camera #%d disconnected", subminor);
 	usb_dec_dev_use (dev);
 
-	up (&camera->sem);
+	if (camera != NULL)
+		up (&camera->sem);
 	up (&state_table_mutex);
 }
 
@@ -496,6 +507,8 @@ int __init usb_dc2xx_init(void)
 {
  	if (usb_register (&camera_driver) < 0)
  		return -1;
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 }
 
@@ -504,9 +517,9 @@ void __exit usb_dc2xx_cleanup(void)
 	usb_deregister (&camera_driver);
 }
 
-
-MODULE_AUTHOR("David Brownell, dbrownell@users.sourceforge.net");
-MODULE_DESCRIPTION("USB Camera Driver for Kodak DC-2xx series cameras");
-
 module_init (usb_dc2xx_init);
 module_exit (usb_dc2xx_cleanup);
+
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+

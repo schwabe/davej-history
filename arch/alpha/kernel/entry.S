@@ -32,11 +32,12 @@
 #define TASK_ADDR_LIMIT		24	
 #define TASK_EXEC_DOMAIN	32
 #define TASK_NEED_RESCHED	40
+#define TASK_PTRACE             48
 
 /*
  * task flags (must match include/linux/sched.h):
  */
-#define	PF_PTRACED	0x00000010
+#define	PT_PTRACED	0x00000001
 
 /*
  * This defines the normal kernel pt-regs layout.
@@ -558,7 +559,7 @@ entSys:
 	ldq	$3,TASK_FLAGS($8)
 	stq	$17,SP_OFF+32($30)
 	s8addq	$0,$5,$5
-	and     $3,PF_PTRACED,$3
+	and     $3,PT_PTRACED,$3
 	stq	$18,SP_OFF+40($30)
 	bne     $3,strace
 	beq	$4,1f

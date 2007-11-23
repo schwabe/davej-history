@@ -62,7 +62,7 @@ static struct task_struct * get_task(int pid)
 		 * that we would allow ptrace to work.
 		 */
 		if (tsk) {
-			if (!(tsk->flags & PF_PTRACED)
+			if (!(tsk->ptrace & PT_PTRACED)
 			    || tsk->state != TASK_STOPPED
 			    || tsk->p_pptr != current)
 				tsk = NULL;

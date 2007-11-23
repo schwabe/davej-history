@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.16.2.1 2000/06/14 07:41:19 davem Exp $
+/* $Id: pbm.h,v 1.16.2.2 2001/05/16 07:28:43 davem Exp $
  * pbm.h: U2P PCI bus module pseudo driver software state.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -64,6 +64,7 @@ struct linux_psycho {
 	unsigned long			*pci_mem_space;
 	u32				upa_portid;
 	int				index;
+	int				pbms_same_domain;
 	struct linux_pbm_info		pbm_A;
 	struct linux_pbm_info		pbm_B;
 

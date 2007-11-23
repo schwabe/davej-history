@@ -12,6 +12,13 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/08/2001) gb
+ *	Identify version on module load.
+ * 
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (08/28/2000) gkh
  *	Added locks for SMP safeness.
  *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
@@ -54,19 +61,20 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/tqueue.h>
+#include <linux/usb.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
-	#define DEBUG
+	static int debug = 1;
 #else
-	#undef DEBUG
+	static int debug;
 #endif
-#include <linux/usb.h>
+
 
 struct ezusb_hex_record {
 	__u16 address;
@@ -75,8 +83,14 @@ struct ezusb_hex_record {
 };
 
 #include "keyspan_pda_fw.h"
-
 #include "usb-serial.h"
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "Brian Warner <warner@lothar.com>"
+#define DRIVER_DESC "USB Keyspan PDA Converter driver"
 
 struct keyspan_pda_private {
 	int			tx_room;
@@ -112,7 +126,7 @@ static void keyspan_pda_wakeup_write( struct usb_serial_port *port )
 	/* wake up other tty processes */
 	wake_up_interruptible( &tty->write_wait );
 	/* For 2.2.16 backport -- wake_up_interruptible( &tty->poll_wait ); */
-
+	MOD_DEC_USE_COUNT;
 }
 
 static void keyspan_pda_request_unthrottle( struct usb_serial *serial )
@@ -131,7 +145,7 @@ static void keyspan_pda_request_unthrottle( struct usb_serial *serial )
 			     NULL,
 			     0,
 			     2*HZ);
-
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -180,7 +194,9 @@ static void keyspan_pda_rx_interrupt (struct urb *urb)
 			tty = serial->port[0].tty;
 			priv->tx_throttled = 0;
 			/* queue up a wakeup at scheduler time */
-			queue_task( &priv->wakeup_task, &tq_scheduler );
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&priv->wakeup_task) == 0)
+				MOD_DEC_USE_COUNT;
 			break;
 		default:
 			break;
@@ -212,6 +228,7 @@ static void keyspan_pda_rx_unthrottle (struct usb_serial_port *port)
 {
 	/* just restart the receive interrupt URB */
 	dbg("keyspan_pda_rx_unthrottle port %d", port->number);
+	port->interrupt_in_urb->dev = port->serial->dev;
 	if (usb_submit_urb(port->interrupt_in_urb))
 		dbg(" usb_submit_urb(read urb) failed");
 	return;
@@ -506,6 +523,7 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		
 		priv->tx_room -= count;
 
+		port->write_urb->dev = port->serial->dev;
 		if (usb_submit_urb(port->write_urb)) {
 			dbg(" usb_submit_urb(write bulk) failed");
 			spin_unlock_irqrestore (&port->port_lock, flags);
@@ -520,7 +538,9 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 
 	if (request_unthrottle) {
 		priv->tx_throttled = 1; /* block writers */
-		queue_task( &priv->unthrottle_task, &tq_scheduler );
+		MOD_INC_USE_COUNT;
+		if (schedule_task(&priv->unthrottle_task) == 0)
+			MOD_DEC_USE_COUNT;
 	}
 
 	spin_unlock_irqrestore (&port->port_lock, flags);
@@ -546,8 +566,9 @@ static void keyspan_pda_write_bulk_callback (struct urb *urb)
 	}
 	
 	/* queue up a wakeup at scheduler time */
-	queue_task( &priv->wakeup_task, &tq_scheduler );
-
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&priv->wakeup_task) == 0)
+		MOD_DEC_USE_COUNT;
 }
 
 
@@ -627,6 +648,7 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 			keyspan_pda_set_modem_info(serial, 0);
 
 		/*Start reading from the device*/
+		port->interrupt_in_urb->dev = serial->dev;
 		if (usb_submit_urb(port->interrupt_in_urb))
 			dbg(__FUNCTION__" - usb_submit_urb(read int) failed");
 	} else {
@@ -783,6 +805,8 @@ static int __init keyspan_pda_init (void)
 {
 	usb_serial_register (&keyspan_pda_fake_device);
 	usb_serial_register (&keyspan_pda_device);
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 	return 0;
 }
 
@@ -797,5 +821,9 @@ static void __exit keyspan_pda_exit (void)
 module_init(keyspan_pda_init);
 module_exit(keyspan_pda_exit);
 
-MODULE_AUTHOR("Brian Warner <warner@lothar.com>");
-MODULE_DESCRIPTION("USB Keyspan PDA Converter driver");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
+MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug enabled or not");
+

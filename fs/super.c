@@ -589,7 +589,7 @@ out_null:
  * filesystems which don't use real block-devices.  -- jrs
  */
 
-static unsigned int unnamed_dev_in_use[256/(8*sizeof(unsigned int))] = { 0, };
+static unsigned long unnamed_dev_in_use[256/(8*sizeof(unsigned long))] = { 0, };
 
 kdev_t get_unnamed_dev(void)
 {

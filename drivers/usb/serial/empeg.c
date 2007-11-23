@@ -13,6 +13,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/08/2001) gb
+ *      Identify version on module load.
+ * 
  * (01/22/2001) gb
  *	Added write_room() and chars_in_buffer() support. 
  * 
@@ -55,14 +58,22 @@
 #include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
-#ifdef CONFIG_USB_SERIAL_DEBUG
-	#define DEBUG
-#else
-	#undef DEBUG
-#endif
 #include <linux/usb.h>
 
+#ifdef CONFIG_USB_SERIAL_DEBUG
+	static int debug = 1;
+#else
+	static int debug;
+#endif
+
 #include "usb-serial.h"
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_AUTHOR "Greg Kroah-Hartman <greg@kroah.com>, Gary Brubaker <xavyer@ix.netcom.com>"
+#define DRIVER_DESC "USB Empeg Mark I/II Driver"
 
 #define EMPEG_VENDOR_ID			0x084f
 #define EMPEG_PRODUCT_ID		0x0001
@@ -665,6 +676,9 @@ static int __init empeg_init (void)
 		}
 	}
 
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
+
 	return 0;
 
 }
@@ -699,5 +713,9 @@ static void __exit empeg_exit (void)
 module_init(empeg_init);
 module_exit(empeg_exit);
 
-MODULE_AUTHOR("Gary Brubaker <xavyer@ix.netcom.com>");
-MODULE_DESCRIPTION("USB Empeg Mark I/II Driver");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+
+MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug enabled or not");
+

@@ -166,7 +166,7 @@ struct pardevice {
 	struct wait_queue *wait_q;
 	unsigned long int time;
 	unsigned long int timeslice;
-	unsigned int waiting;
+	unsigned long waiting;
 	struct pardevice *waitprev;
 	struct pardevice *waitnext;
 };

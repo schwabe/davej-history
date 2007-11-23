@@ -76,6 +76,7 @@ sigpending	=  8
 addr_limit	= 12
 exec_domain	= 16
 need_resched	= 20
+ptrace		= 24
 
 ENOSYS = 38
 
@@ -174,7 +175,7 @@ ENTRY(system_call)
 	GET_CURRENT(%ebx)
 	cmpl $(NR_syscalls),%eax
 	jae badsys
-	testb $0x20,flags(%ebx)		# PF_TRACESYS
+	testb $0x02,ptrace(%ebx)	# PT_TRACESYS
 	jne tracesys
 	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value

@@ -966,7 +966,7 @@ static int parport_pc_init_pci (int irq, int dma)
 		printk (KERN_INFO
 			"Unknown PCI parallel I/O card (%04x/%04x)\n"
 			"Please send 'lspci' output to "
-			"tim@cyberelk.demon.co.uk\n",
+			"tim@cyberelk.net\n",
 			pcidev->vendor, pcidev->device);
 	}
 #endif

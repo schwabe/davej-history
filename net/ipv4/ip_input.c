@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.37.2.4 2001/01/04 04:20:16 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.37.2.5 2001/06/07 06:47:54 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -181,8 +181,11 @@ static __inline__ int icmp_filter(struct sock *sk, struct sk_buff *skb)
 	int    type;
 
 	type = skb->h.icmph->type;
-	if (type < 32)
-		return test_bit(type, &sk->tp_pinfo.tp_raw4.filter);
+	if (type < 32) {
+		__u32 data = sk->tp_pinfo.tp_raw4.filter.data;
+
+		return ((1 << type) & data) != 0;
+	}
 
 	/* Do not block unknown ICMP types */
 	return 0;

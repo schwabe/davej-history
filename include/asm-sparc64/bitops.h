@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.26.2.1 2000/08/10 23:50:04 davem Exp $
+/* $Id: bitops.h,v 1.26.2.2 2001/06/07 06:19:33 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -20,7 +20,7 @@
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long test_and_set_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 	unsigned long oldbit;
@@ -41,7 +41,7 @@ extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void *addr)
 	return oldbit != 0;
 }
 
-extern __inline__ void set_bit(unsigned long nr, void *addr)
+extern __inline__ void set_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 
@@ -60,7 +60,7 @@ extern __inline__ void set_bit(unsigned long nr, void *addr)
 	: "g5", "g7", "cc", "memory");
 }
 
-extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 	unsigned long oldbit;
@@ -81,7 +81,7 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void *addr)
 	return oldbit != 0;
 }
 
-extern __inline__ void clear_bit(unsigned long nr, void *addr)
+extern __inline__ void clear_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 
@@ -100,7 +100,7 @@ extern __inline__ void clear_bit(unsigned long nr, void *addr)
 	: "g5", "g7", "cc", "memory");
 }
 
-extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long test_and_change_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 	unsigned long oldbit;
@@ -119,7 +119,7 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void *addr
 	return oldbit != 0;
 }
 
-extern __inline__ void change_bit(unsigned long nr, void *addr)
+extern __inline__ void change_bit(unsigned long nr, volatile void *addr)
 {
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
 
@@ -135,7 +135,7 @@ extern __inline__ void change_bit(unsigned long nr, void *addr)
 	: "g5", "g7", "cc", "memory");
 }
 
-extern __inline__ unsigned long test_bit(int nr, __const__ void *addr)
+extern __inline__ unsigned long test_bit(int nr, __const__ volatile void *addr)
 {
 	return 1UL & (((__const__ long *) addr)[nr >> 6] >> (nr & 63));
 }

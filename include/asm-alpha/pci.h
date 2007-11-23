@@ -53,4 +53,13 @@ extern struct linux_hose_info *bus2hose[256];
 #define IOBASE_SPARSE_IO        3
 #define IOBASE_DENSE_IO         4
 
+/* Return the index of the PCI controller for device PDEV. */
+static __inline__ int pci_controller_num(struct pci_dev *pdev)
+{
+	if (bus2hose[pdev->bus->number] == NULL)
+		return -ENXIO;
+
+	return bus2hose[pdev->bus->number]->pci_host_index;
+}
+
 #endif /* __ALPHA_PCI_H */

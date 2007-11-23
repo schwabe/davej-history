@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/reboot.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -274,12 +275,22 @@ miata_pci_fixup(void)
 static void 
 miata_kill_arch (int mode, char *reboot_cmd) 
 { 
-	/* Who said DEC engineers have no sense of humor? ;-)  */ 
-	if (alpha_using_srm) { 
-		*(vuip) PYXIS_RESET = 0x0000dead; 
-		mb(); 
-	} 
-	generic_kill_arch(mode, reboot_cmd); 
+	switch(mode) {
+	case LINUX_REBOOT_CMD_HALT:
+		break;
+	case LINUX_REBOOT_CMD_RESTART:
+		/* Who said DEC engineers have no sense of humor? ;-)  */ 
+		if (alpha_using_srm) { 
+			*(vuip) PYXIS_RESET = 0x0000dead; 
+			mb(); 
+		} 
+		generic_kill_arch(mode, reboot_cmd); 
+		break;
+	case LINUX_REBOOT_CMD_POWER_OFF:
+		break;
+	}
+
+	halt();
 } 
 
 

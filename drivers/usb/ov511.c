@@ -30,8 +30,6 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-static const char version[] = "1.25";
-
 #define __NO_VERSION__
 
 #include <linux/config.h>
@@ -55,7 +53,12 @@ static const char version[] = "1.25";
 
 #include "ov511.h"
 
-#undef OV511_GBR422		/* Experimental -- sets the 7610 to GBR422 */
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v1.28"
+#define DRIVER_AUTHOR "Mark McClelland <mwm@i.am> & Bret Wallach & Orion Sky Lawlor <olawlor@acm.org> & Kevin Moore & Charl P. Botha <cpbotha@ieee.org> & Claudio Matsuoka <claudio@conectiva.com>"
+#define DRIVER_DESC "OV511 USB Camera Driver"
 
 #define OV511_I2C_RETRIES 3
 
@@ -64,8 +67,6 @@ static const char version[] = "1.25";
 #define MAX_DATA_SIZE (MAX_FRAME_SIZE + sizeof(struct timeval))
 
 #define GET_SEGSIZE(p) ((p) == VIDEO_PALETTE_GREY ? 256 : 384)
-#define GET_DEPTH(p) ((p) == VIDEO_PALETTE_GREY ? 8 : \
-		     ((p) == VIDEO_PALETTE_YUV422 ? 16 : 24))
 
 /* PARAMETER VARIABLES: */
 static int autoadjust = 1;    /* CCD dynamically changes exposure, etc... */
@@ -78,7 +79,7 @@ static int autoadjust = 1;    /* CCD dynamically changes exposure, etc... */
  * 5=highly repetitive mesgs
  * NOTE: This should be changed to 0, 1, or 2 for production kernels
  */
-static int debug = 3;
+static int debug = 0;
 
 /* Fix vertical misalignment of red and blue at 640x480 */
 static int fix_rgb_offset = 0;
@@ -116,6 +117,13 @@ static int compress = 0;
 /* Display test pattern - doesn't work yet either */
 static int testpat = 0;
 
+/* Setting this to 1 will make the sensor output GBR422 instead on YUV420. Only
+ * affects RGB24 mode. */
+static int sensor_gbr = 0;
+
+/* Dump raw pixel data, in one of 3 formats. See ov511_dumppix() for details. */
+static int dumppix = 0;
+
 MODULE_PARM(autoadjust, "i");
 MODULE_PARM_DESC(autoadjust, "CCD dynamically changes exposure");
 MODULE_PARM(debug, "i");
@@ -142,11 +150,13 @@ MODULE_PARM(compress, "i");
 MODULE_PARM_DESC(compress, "Turn on compression (not functional yet)");
 MODULE_PARM(testpat, "i");
 MODULE_PARM_DESC(testpat, "Replace image with vertical bar testpattern (only partially working)");
+MODULE_PARM(sensor_gbr, "i");
+MODULE_PARM_DESC(sensor_gbr, "Make sensor output GBR422 rather than YUV420");
+MODULE_PARM(dumppix, "i");
+MODULE_PARM_DESC(dumppix, "Dump raw pixel data, in one of 3 formats. See ov511_dumppix() for details");
 
-MODULE_AUTHOR("Mark McClelland <mwm@i.am> & Bret Wallach & Orion Sky Lawlor <olawlor@acm.org> & Kevin Moore & Charl P. Botha <cpbotha@ieee.org> & Claudio Matsuoka <claudio@conectiva.com>");
-MODULE_DESCRIPTION("OV511 USB Camera Driver");
-
-static char kernel_version[] = UTS_RELEASE;
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
 
 static struct usb_driver ov511_driver;
 
@@ -223,9 +233,10 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
 		if (!pmd_none(*pmd)) {
 			ptep = pte_offset(pmd, adr);
 			pte = *ptep;
-			if (pte_present(pte))
-				ret = page_address(pte_page(pte)) |
-				      (adr & (PAGE_SIZE-1));
+			if (pte_present(pte)) {
+				ret = (unsigned long) page_address(pte_page(pte));
+				ret |= (adr & (PAGE_SIZE - 1));
+			}
 		}
 	}
 
@@ -360,6 +371,7 @@ static int ov511_read_proc(char *page, char **start, off_t off,
 		ov511->bridge == BRG_OV511PLUS ? "OV511+" :
 		"unknown");
 	out += sprintf (out, "sensor          : %s\n",
+		ov511->sensor == SEN_OV6620 ? "OV6620" :
 		ov511->sensor == SEN_OV7610 ? "OV7610" :
 		ov511->sensor == SEN_OV7620 ? "OV7620" :
 		ov511->sensor == SEN_OV7620AE ? "OV7620AE" :
@@ -450,7 +462,6 @@ static void proc_ov511_destroy(void)
 	remove_proc_entry("ov511", video_proc_entry);
 }
 #endif /* CONFIG_PROC_FS && CONFIG_VIDEO_PROC_FS */
-
 
 /**********************************************************************
  *
@@ -703,7 +714,7 @@ static int ov511_reset(struct usb_device *dev, unsigned char reset_type)
 {
 	int rc;
 	
-	PDEBUG(3, "Reset: type=0x%X", reset_type);
+	PDEBUG(4, "Reset: type=0x%X", reset_type);
 	rc = ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, reset_type);
 	rc = ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0);
 
@@ -832,14 +843,21 @@ ov7610_set_picture(struct usb_ov511 *ov511, struct video_picture *p)
 	} else if ((ov511->sensor == SEN_OV7620) 
 	         || (ov511->sensor == SEN_OV7620AE)) {
 #if 0
-		cur_con = ov511_i2c_read(dev, OV7610_REG_CNT);
-		cur_brt = ov511_i2c_read(dev, OV7610_REG_BRT);
-	        // DEBUG_CODE
-	        PDEBUG(1, "con=%d brt=%d", ov511_i2c_read(dev, OV7610_REG_CNT),
-	         ov511_i2c_read(dev, OV7610_REG_BRT)); 
+		int cur_sat, new_sat, tmp;
 
-		if (ov511_i2c_write(dev, OV7610_REG_CNT, p->contrast >> 8) < 0)
+		cur_sat = ov511_i2c_read(dev, OV7610_REG_BLUE);
+
+		tmp = (p->hue >> 8) - cur_sat;
+		new_sat = (tmp < 0) ? (-tmp) | 0x80 : tmp;
+
+	        PDEBUG(1, "cur=%d target=%d diff=%d", cur_sat, p->hue >> 8, tmp); 
+
+		if (ov511_i2c_write(dev, OV7610_REG_BLUE, new_sat) < 0)
 			return -EIO;
+
+	        // DEBUG_CODE
+	        PDEBUG(1, "hue=%d", ov511_i2c_read(dev, OV7610_REG_BLUE)); 
+
 #endif
 	}
 
@@ -885,6 +903,23 @@ ov7610_get_picture(struct usb_ov511 *ov511, struct video_picture *p)
 	return 0;
 }
 
+/* Returns number of bits per pixel (regardless of where they are located; planar or
+ * not), or zero for unsupported format.
+ */
+static int ov511_get_depth(int palette)
+{
+	switch (palette) {
+	case VIDEO_PALETTE_GREY:    return 8;
+	case VIDEO_PALETTE_RGB565:  return 16;
+	case VIDEO_PALETTE_RGB24:   return 24;  
+	case VIDEO_PALETTE_YUV422:  return 16;
+	case VIDEO_PALETTE_YUYV:    return 16;
+	case VIDEO_PALETTE_YUV420:  return 24;
+	case VIDEO_PALETTE_YUV422P: return 24; /* Planar */
+	default:		    return 0;  /* Invalid format */
+	}
+}
+
 /* LNCNT values fixed by Lawrence Glaister <lg@jfm.bc.ca> */
 static struct mode_list mlist[] = {
 	/* W    H   C  PXCNT LNCNT PXDIV LNDIV M420  COMA  COML */
@@ -919,6 +954,12 @@ ov511_mode_init_regs(struct usb_ov511 *ov511,
 
 	if (ov511_stop(ov511->dev) < 0)
 		return -EIO;
+
+	/* Dumppix only works with RGB24 */
+	if (dumppix && (mode != VIDEO_PALETTE_RGB24)) {
+		err("dumppix only supported with RGB 24");
+		return -EINVAL;
+	}
 
 	if (mode == VIDEO_PALETTE_GREY) {
 		ov511_reg_write(dev, 0x16, 0x00);
@@ -956,9 +997,9 @@ ov511_mode_init_regs(struct usb_ov511 *ov511,
 		break;
 	case SEN_OV6620:
 		hwsbase = 0x38;
-		hwebase = 0x39;
-		vwsbase = 0x03;
-		vwebase = 0x04;
+		hwebase = 0x3a;
+		vwsbase = 0x05;
+		vwebase = 0x06;
 		break;
 	case SEN_OV7620:
 		hwsbase = 0x2c;
@@ -1042,13 +1083,16 @@ ov511_mode_init_regs(struct usb_ov511 *ov511,
 		/* Calculate and set the clock divisor */
 		clock = ((sub_flag ? ov511->subw * ov511->subh : width * height)
 			* (mlist[i].color ? 3 : 2) / 2) / 66000;
+#if 0
+		clock *= cams;
+#endif
 		ov511_i2c_write(dev, 0x11, clock);
 
-#ifdef OV511_GBR422
-		ov511_i2c_write(dev, 0x12, mlist[i].common_A | 0x08);
-#else
-		ov511_i2c_write(dev, 0x12, mlist[i].common_A | (testpat?0x02:0x00));
-#endif
+		/* We only have code to convert GBR -> RGB24 */
+		if ((mode == VIDEO_PALETTE_RGB24) && sensor_gbr)
+			ov511_i2c_write(dev, 0x12, mlist[i].common_A | (testpat?0x0a:0x08));
+		else
+			ov511_i2c_write(dev, 0x12, mlist[i].common_A | (testpat?0x02:0x00));
 
 		/* 7620/6620 don't have register 0x35, so play it safe */
 		if (ov511->sensor == SEN_OV7610 ||
@@ -1116,7 +1160,7 @@ ov511_mode_init_regs(struct usb_ov511 *ov511,
 
 static inline void
 ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v, 
-	int rowPixels, unsigned char * rgb)
+	int rowPixels, unsigned char * rgb, int bits)
 {
 	const int rvScale = 91881;
 	const int guScale = -22553;
@@ -1137,14 +1181,32 @@ ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v,
 	yTL *= yScale; yTR *= yScale;
 	yBL *= yScale; yBR *= yScale;
 
-	/* Write out top two pixels */
-	rgb[0] = LIMIT(b+yTL); rgb[1] = LIMIT(g+yTL); rgb[2] = LIMIT(r+yTL);
-	rgb[3] = LIMIT(b+yTR); rgb[4] = LIMIT(g+yTR); rgb[5] = LIMIT(r+yTR);
+	if (bits == 24) {
+		/* Write out top two pixels */
+		rgb[0] = LIMIT(b+yTL); rgb[1] = LIMIT(g+yTL); rgb[2] = LIMIT(r+yTL);
+		rgb[3] = LIMIT(b+yTR); rgb[4] = LIMIT(g+yTR); rgb[5] = LIMIT(r+yTR);
 
-	/* Skip down to next line to write out bottom two pixels */
-	rgb += 3 * rowPixels;
-	rgb[0] = LIMIT(b+yBL); rgb[1] = LIMIT(g+yBL); rgb[2] = LIMIT(r+yBL);
-	rgb[3] = LIMIT(b+yBR); rgb[4] = LIMIT(g+yBR); rgb[5] = LIMIT(r+yBR);
+		/* Skip down to next line to write out bottom two pixels */
+		rgb += 3 * rowPixels;
+		rgb[0] = LIMIT(b+yBL); rgb[1] = LIMIT(g+yBL); rgb[2] = LIMIT(r+yBL);
+		rgb[3] = LIMIT(b+yBR); rgb[4] = LIMIT(g+yBR); rgb[5] = LIMIT(r+yBR);
+	} else if (bits == 16) {
+		/* Write out top two pixels */
+		rgb[0] = ((LIMIT(b+yTL) >> 3) & 0x1F) | ((LIMIT(g+yTL) << 3) & 0xE0);
+		rgb[1] = ((LIMIT(g+yTL) >> 5) & 0x07) | (LIMIT(r+yTL) & 0xF8);
+
+		rgb[2] = ((LIMIT(b+yTR) >> 3) & 0x1F) | ((LIMIT(g+yTR) << 3) & 0xE0);
+		rgb[3] = ((LIMIT(g+yTR) >> 5) & 0x07) | (LIMIT(r+yTR) & 0xF8);
+
+		/* Skip down to next line to write out bottom two pixels */
+		rgb += 2 * rowPixels;
+
+		rgb[0] = ((LIMIT(b+yBL) >> 3) & 0x1F) | ((LIMIT(g+yBL) << 3) & 0xE0);
+		rgb[1] = ((LIMIT(g+yBL) >> 5) & 0x07) | (LIMIT(r+yBL) & 0xF8);
+
+		rgb[2] = ((LIMIT(b+yBR) >> 3) & 0x1F) | ((LIMIT(g+yBR) << 3) & 0xE0);
+		rgb[3] = ((LIMIT(g+yBR) >> 5) & 0x07) | (LIMIT(r+yBR) & 0xF8);
+	}
 }
 
 /*
@@ -1170,7 +1232,7 @@ ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v,
  * Note that the U and V data in one segment represents a 16 x 16 pixel
  * area, but the Y data represents a 32 x 8 pixel area.
  *
- * If OV511_DUMPPIX is defined, _parse_data just dumps the incoming segments,
+ * If dumppix module param is set, _parse_data just dumps the incoming segments,
  * verbatim, in order, into the frame. When used with vidcat -f ppm -s 640x480
  * this puts the data on the standard output and can be analyzed with the
  * parseppm.c utility I wrote.  That's a much faster way for figuring out how
@@ -1180,14 +1242,8 @@ ov511_move_420_block(int yTL, int yTR, int yBL, int yBR, int u, int v,
 #define HDIV 8
 #define WDIV (256/HDIV)
 
-#undef OV511_DUMPPIX
-
-/* #define this and OV511_DUMPPIX to disable parsing of UV data */
-#undef OV511_FORCE_MONO
-
-#ifdef OV511_GBR422
 static void
-ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
+ov511_parse_gbr422_to_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 		       int iOutY, int iOutUV, int iHalf, int iWidth)
 {
 	int k, l, m;
@@ -1234,14 +1290,12 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 	}
 }
 
-#else
-
 static void
-ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
-		       int iOutY, int iOutUV, int iHalf, int iWidth)
+ov511_parse_yuv420_to_rgb(unsigned char *pIn0, unsigned char *pOut0,
+		       int iOutY, int iOutUV, int iHalf, int iWidth, int bits)
 {
-#ifndef OV511_DUMPPIX
 	int k, l, m;
+	int bytes = bits >> 3;
 	unsigned char *pIn;
 	unsigned char *pOut, *pOut1;
 
@@ -1254,11 +1308,11 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 			for (l = 0; l < 8; l++) {
 				for (m = 0; m < 8; m++) {
 					*pOut1 = *pIn++;
-					pOut1 += 3;
+					pOut1 += bytes;
 				}
-				pOut1 += (iWidth - 8) * 3;
+				pOut1 += (iWidth - 8) * bytes;
 			}
-			pOut += 8 * 3;
+			pOut += 8 * bytes;
 		}
 	}
 
@@ -1268,16 +1322,16 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 	for (l = 0; l < 4; l++) {
 		for (m=0; m<8; m++) {
 			int y00 = *(pOut);
-			int y01 = *(pOut+3);
-			int y10 = *(pOut+iWidth*3);
-			int y11 = *(pOut+iWidth*3+3);
+			int y01 = *(pOut+bytes);
+			int y10 = *(pOut+iWidth*bytes);
+			int y11 = *(pOut+iWidth*bytes+bytes);
 			int v   = *(pIn+64) - 128;
 			int u   = *pIn++ - 128;
 			ov511_move_420_block(y00, y01, y10, y11, u, v, iWidth,
-				pOut);
-			pOut += 6;
+				pOut, bits);
+			pOut += 2 * bytes;
 		}
-		pOut += (iWidth*2 - 16) * 3;
+		pOut += (iWidth*2 - 16) * bytes;
 	}
 
 	/* Just copy the other UV rows */
@@ -1285,9 +1339,9 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 		for (m = 0; m < 8; m++) {
 			*pOut++ = *(pIn + 64);
 			*pOut = *pIn++;
-			pOut += 5;
+			pOut += 2 * bytes - 1;
 		}
-		pOut += (iWidth*2 - 16) * 3;
+		pOut += (iWidth*2 - 16) * bytes;
 	}
 
 	/* Calculate values if it's the second half */
@@ -1305,72 +1359,65 @@ ov511_parse_data_rgb24(unsigned char *pIn0, unsigned char *pOut0,
 					int v   = *pOut1 - 128;
 					int u   = *(pOut1+1) - 128;
 					ov511_move_420_block(y00, y01, y10,
-						y11, u, v, iWidth, pOut1);
-					pOut1 += 6;
+						y11, u, v, iWidth, pOut1, bits);
+					pOut1 += 2 * bytes;
 				}
-				pOut1 += (iWidth*2 - 8) * 3;
+				pOut1 += (iWidth*2 - 8) * bytes;
 				pIn += 8;
+			}
+			pOut += 8 * bytes;
+		}
+	}
+}
+
+static void
+ov511_dumppix(unsigned char *pIn0, unsigned char *pOut0,
+	      int iOutY, int iOutUV, int iHalf, int iWidth)
+{
+	int i, j, k;
+	unsigned char *pIn, *pOut, *pOut1;
+
+	switch (dumppix) {
+	case 1: /* Just dump YUV data straight out for debug */
+		pOut0 += iOutY;
+		for (i = 0; i < HDIV; i++) {
+			for (j = 0; j < WDIV; j++) {
+				*pOut0++ = *pIn0++;
+				*pOut0++ = *pIn0++;
+				*pOut0++ = *pIn0++;
+			}
+			pOut0 += (iWidth - WDIV) * 3;
+		}
+		break;
+	case 2: /* This converts the Y data to "black-and-white" RGB data */
+		/* Useful for experimenting with compression */
+		pIn = pIn0 + 128;
+		pOut = pOut0 + iOutY;
+		for (i = 0; i < 4; i++) {
+			pOut1 = pOut;
+			for (j = 0; j < 8; j++) {
+				for (k = 0; k < 8; k++) {
+					*pOut1++ = *pIn;
+					*pOut1++ = *pIn;
+					*pOut1++ = *pIn++;
+				}
+				pOut1 += (iWidth - 8) * 3;
 			}
 			pOut += 8 * 3;
 		}
-	}
-#else
-
-#ifndef OV511_FORCE_MONO
-	/* Just dump pix data straight out for debug */
-	int i, j;
-
-	pOut0 += iOutY;
-	for (i = 0; i < HDIV; i++) {
-		for (j = 0; j < WDIV; j++) {
-			*pOut0++ = *pIn0++;
-			*pOut0++ = *pIn0++;
-			*pOut0++ = *pIn0++;
+		break;
+	case 3: /* This will dump only the Y channel data stream as-is */
+		pIn = pIn0 + 128;
+		pOut = pOut0 + output_offset;
+		for (i = 0; i < 256; i++) {
+			*pOut++ = *pIn;
+			*pOut++ = *pIn;
+			*pOut++ = *pIn++;
+			output_offset += 3;
 		}
-		pOut0 += (iWidth - WDIV) * 3;
-	}
-#else
-
-#if 1
-	/* This converts the Y data to "black-and-white" RGB data */
-	/* Useful for experimenting with compression */
-	int k, l, m;
-	unsigned char *pIn, *pOut, *pOut1;
-
-	pIn = pIn0 + 128;
-	pOut = pOut0 + iOutY;
-	for (k = 0; k < 4; k++) {
-		pOut1 = pOut;
-		for (l = 0; l < 8; l++) {
-			for (m = 0; m < 8; m++) {
-				*pOut1++ = *pIn;
-				*pOut1++ = *pIn;
-				*pOut1++ = *pIn++;
-			}
-			pOut1 += (iWidth - 8) * 3;
-		}
-		pOut += 8 * 3;
-	}
-#else
-	/* This will dump the Y channel data stream as-is */ 
-	int count;
-	unsigned char *pIn, *pOut;
-
-	pIn = pIn0 + 128;
-	pOut = pOut0 + output_offset;
-	for (count = 0; count < 256; count++) {
-		*pOut++ = *pIn;
-		*pOut++ = *pIn;
-		*pOut++ = *pIn++;
-		output_offset += 3;
-	}	
-#endif
-
-#endif
-
-#endif
+		break;
+	} /* End switch (dumppix) */
 }
-#endif
 
 /* This converts YUV420 segments to YUYV */
 static void
@@ -1665,6 +1712,11 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 			/* Frame start */
 			PDEBUG(4, "Frame start, framenum = %d", ov511->curframe);
 
+#if 0
+			/* Make sure no previous data carries over; necessary
+			 * for compression experimentation */
+			memset(frame->data, 0, MAX_DATA_SIZE);
+#endif
 			output_offset = 0;
 
 			/* Check to see if it's a snapshot frame */
@@ -1743,8 +1795,19 @@ check_middle:
 				ov511_parse_data_grey (pData, pOut, iOutY, frame->width);
 				break;
 			case VIDEO_PALETTE_RGB24:
-				ov511_parse_data_rgb24 (pData, pOut, iOutY, iOutUV,
-					iY & 1, frame->width);
+				if (dumppix)
+					ov511_dumppix(pData, pOut, iOutY, iOutUV,
+						iY & 1, frame->width);
+				else if (sensor_gbr)
+					ov511_parse_gbr422_to_rgb24(pData, pOut, iOutY, iOutUV,
+						iY & 1, frame->width);
+				else
+					ov511_parse_yuv420_to_rgb(pData, pOut, iOutY, iOutUV,
+						iY & 1, frame->width, 24);
+				break;
+			case VIDEO_PALETTE_RGB565:
+				ov511_parse_yuv420_to_rgb(pData, pOut, iOutY, iOutUV,
+					iY & 1, frame->width, 16);
 				break;
 			case VIDEO_PALETTE_YUV422:
 			case VIDEO_PALETTE_YUYV:
@@ -1785,11 +1848,20 @@ check_middle:
 static void ov511_isoc_irq(struct urb *urb)
 {
 	int len;
-	struct usb_ov511 *ov511 = urb->context;
+	struct usb_ov511 *ov511;
 	struct ov511_sbuf *sbuf;
 
-	if (!ov511->dev)
+	if (!urb->context) {
+		PDEBUG(4, "no context");
 		return;
+	}
+
+	ov511 = (struct usb_ov511 *) urb->context;
+
+	if (!ov511->dev || !ov511->user) {
+		PDEBUG(4, "no device, or not open");
+		return;
+	}
 
 	if (!ov511->streaming) {
 		PDEBUG(4, "hmmm... not streaming, but got interrupt");
@@ -1807,6 +1879,8 @@ static void ov511_isoc_irq(struct urb *urb)
 
 	/* Move to the next sbuf */
 	ov511->cursbuf = (ov511->cursbuf + 1) % OV511_NUMSBUF;
+
+	urb->dev = ov511->dev;
 
 	return;
 }
@@ -1875,6 +1949,7 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 		ov511->sbuf[n].urb->next = ov511->sbuf[n+1].urb;
 
 	for (n = 0; n < OV511_NUMSBUF; n++) {
+		ov511->sbuf[n].urb->dev = ov511->dev;
 		err = usb_submit_urb(ov511->sbuf[n].urb);
 		if (err)
 			err("init isoc: usb_submit_urb(%d) ret %d", n, err);
@@ -2082,7 +2157,7 @@ static void ov511_dealloc(struct usb_ov511 *ov511, int now)
 static int ov511_open(struct video_device *dev, int flags)
 {
 	struct usb_ov511 *ov511 = (struct usb_ov511 *)dev;
-	int err = 0;
+	int err;
 
 	MOD_INC_USE_COUNT;
 	PDEBUG(4, "opening");
@@ -2171,14 +2246,15 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 
 		PDEBUG (4, "VIDIOCGCAP");
 
+		memset(&b, 0, sizeof(b));
 		strcpy(b.name, "OV511 USB Camera");
 		b.type = VID_TYPE_CAPTURE | VID_TYPE_SUBCAPTURE;
 		b.channels = 1;
 		b.audios = 0;
 		b.maxwidth = ov511->maxwidth;
 		b.maxheight = ov511->maxheight;
-		b.minwidth = 32;
-		b.minheight = 16;
+		b.minwidth = 160;
+		b.minheight = 120;
 
 		if (copy_to_user(arg, &b, sizeof(b)))
 			return -EFAULT;
@@ -2222,9 +2298,11 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 
 		PDEBUG (4, "VIDIOCGPICT");
 
+		memset(&p, 0, sizeof(p));
+
 		if (ov7610_get_picture(ov511, &p))
 			return -EIO;
-							
+
 		if (copy_to_user(arg, &p, sizeof(p)))
 			return -EFAULT;
 
@@ -2240,12 +2318,7 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 		if (copy_from_user(&p, arg, sizeof(p)))
 			return -EFAULT;
 
-		if (p.palette != VIDEO_PALETTE_GREY &&
-		    p.palette != VIDEO_PALETTE_RGB24 &&
-		    p.palette != VIDEO_PALETTE_YUV422 &&
-		    p.palette != VIDEO_PALETTE_YUYV &&
-		    p.palette != VIDEO_PALETTE_YUV420 &&
-		    p.palette != VIDEO_PALETTE_YUV422P)
+		if (!ov511_get_depth(p.palette))
 			return -EINVAL;
 			
 		if (ov7610_set_picture(ov511, &p))
@@ -2344,11 +2417,11 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 	{
 		struct video_window vw;
 
+		memset(&vw, 0, sizeof(vw));
 		vw.x = 0;		/* FIXME */
 		vw.y = 0;
 		vw.width = ov511->frame[0].width;
 		vw.height = ov511->frame[0].height;
-		vw.chromakey = 0;
 		vw.flags = 30;
 
 		PDEBUG (4, "VIDIOCGWIN: %dx%d", vw.width, vw.height);
@@ -2361,12 +2434,16 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 	case VIDIOCGMBUF:
 	{
 		struct video_mbuf vm;
+		int i;
 
 		memset(&vm, 0, sizeof(vm));
 		vm.size = OV511_NUMFRAMES * MAX_DATA_SIZE;
 		vm.frames = OV511_NUMFRAMES;
 		vm.offsets[0] = 0;
-		vm.offsets[1] = MAX_FRAME_SIZE + sizeof (struct timeval);
+		for (i = 1; i < OV511_NUMFRAMES; i++) {
+			vm.offsets[i] = vm.offsets[i-1] + MAX_FRAME_SIZE
+				+ sizeof (struct timeval);
+		}
 
 		if (copy_to_user((void *)arg, (void *)&vm, sizeof(vm)))
 			return -EFAULT;
@@ -2376,7 +2453,7 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 	case VIDIOCMCAPTURE:
 	{
 		struct video_mmap vm;
-		int ret;
+		int ret, depth;
 
 		if (copy_from_user((void *)&vm, (void *)arg, sizeof(vm)))
 			return -EFAULT;
@@ -2385,19 +2462,26 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 		PDEBUG(4, "frame: %d, size: %dx%d, format: %d",
 			vm.frame, vm.width, vm.height, vm.format);
 
-		if (vm.format != VIDEO_PALETTE_RGB24 &&
-		    vm.format != VIDEO_PALETTE_YUV422 &&
-		    vm.format != VIDEO_PALETTE_YUYV &&
-		    vm.format != VIDEO_PALETTE_YUV420 &&
-		    vm.format != VIDEO_PALETTE_YUV422P &&
-		    vm.format != VIDEO_PALETTE_GREY)
+		depth = ov511_get_depth(vm.format);
+		if (!depth) {
+			err("VIDIOCMCAPTURE: invalid format (%d)", vm.format);
 			return -EINVAL;
+		}
 
-		if ((vm.frame != 0) && (vm.frame != 1))
+		if ((vm.frame != 0) && (vm.frame != 1)) {
+			err("VIDIOCMCAPTURE: invalid frame (%d)", vm.frame);
 			return -EINVAL;
-				
-		if (vm.width > ov511->maxwidth || vm.height > ov511->maxheight)
+		}
+
+ 		if ((unsigned)vm.frame >= OV511_NUMFRAMES) {
+  			err("VIDIOCMCAPTURE: invalid frame (%d)", vm.frame);
+  			return -EINVAL;
+  		}
+
+		if (vm.width > ov511->maxwidth || vm.height > ov511->maxheight) {
+			err("VIDIOCMCAPTURE: requested dimensions too big");
 			return -EINVAL;
+		}
 
 		if (ov511->frame[vm.frame].grabstate == FRAME_GRABBING)
 			return -EBUSY;
@@ -2425,7 +2509,7 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 		ov511->frame[vm.frame].format = vm.format;
 		ov511->frame[vm.frame].sub_flag = ov511->sub_flag;
 		ov511->frame[vm.frame].segsize = GET_SEGSIZE(vm.format);
-		ov511->frame[vm.frame].depth = GET_DEPTH(vm.format);
+		ov511->frame[vm.frame].depth = depth;
 
 		/* Mark it as ready */
 		ov511->frame[vm.frame].grabstate = FRAME_READY;
@@ -2438,6 +2522,11 @@ static int ov511_ioctl(struct video_device *vdev, unsigned int cmd, void *arg)
 
 		if (copy_from_user((void *)&frame, arg, sizeof(int)))
 			return -EFAULT;
+
+		if ((unsigned)frame >= OV511_NUMFRAMES) {
+			err("VIDIOCSYNC: invalid frame (%d)", frame);
+			return -EINVAL;
+		}
 
 		PDEBUG(4, "syncing to frame %d, grabstate = %d", frame,
 		       ov511->frame[frame].grabstate);
@@ -2484,6 +2573,13 @@ redo:
 				goto redo;
 			}			
 		case FRAME_DONE:
+			if (ov511->snap_enabled && !ov511->frame[frame].snapshot) {
+				int ret;
+				if ((ret = ov511_new_frame(ov511, frame)) < 0)
+					return ret;
+				goto redo;
+			}
+
 			ov511->frame[frame].grabstate = FRAME_UNUSED;
 
 			/* Reset the hardware snapshot button */
@@ -2660,7 +2756,7 @@ static int ov511_mmap(struct video_device *dev, const char *adr,
 
 	PDEBUG(4, "mmap: %ld (%lX) bytes", size, size);
 
-	if (size > (((2 * MAX_DATA_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
+	if (size > (((OV511_NUMFRAMES * MAX_DATA_SIZE) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)))
 		return -EINVAL;
 
 	pos = (unsigned long)ov511->fbuf;
@@ -3171,7 +3267,7 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 
 	/* Checking vendor/product should be enough, but what the hell */
-	if (interface->bInterfaceClass != 0xFF) 
+	if (interface->bInterfaceClass != 0xFF)
 		return NULL;
 	if (interface->bInterfaceSubClass != 0x00)
 		return NULL;
@@ -3266,7 +3362,8 @@ error:
 }
 
 
-static void ov511_disconnect(struct usb_device *dev, void *ptr)
+static void
+ov511_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct usb_ov511 *ov511 = (struct usb_ov511 *) ptr;
 	int n;
@@ -3324,10 +3421,9 @@ static void ov511_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static struct usb_driver ov511_driver = {
-	"ov511",
-	ov511_probe,
-	ov511_disconnect,
-	{ NULL, NULL }
+	name:		"ov511",
+	probe:		ov511_probe,
+	disconnect:	ov511_disconnect
 };
 
 
@@ -3346,7 +3442,8 @@ static int __init usb_ov511_init(void)
 	if (usb_register(&ov511_driver) < 0)
 		return -1;
 
-	info("ov511 driver version %s registered", version);
+	info(DRIVER_VERSION " " DRIVER_AUTHOR);
+	info(DRIVER_DESC);
 
 	return 0;
 }

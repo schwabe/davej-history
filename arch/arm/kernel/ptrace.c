@@ -662,9 +662,9 @@ static int do_ptrace(int request, struct task_struct *child, long addr, long dat
 			if ((unsigned long) data > _NSIG)
 				break;
 			if (request == PTRACE_SYSCALL)
-				child->flags |= PF_TRACESYS;
+				child->ptrace |= PT_TRACESYS;
 			else
-				child->flags &= ~PF_TRACESYS;
+				child->ptrace &= ~PT_TRACESYS;
 			child->exit_code = data;
 			/* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
@@ -697,7 +697,7 @@ static int do_ptrace(int request, struct task_struct *child, long addr, long dat
 			if ((unsigned long) data > _NSIG)
 				break;
 			child->tss.debug.nsaved = -1;
-			child->flags &= ~PF_TRACESYS;
+			child->ptrace &= ~PT_TRACESYS;
 			child->exit_code = data;
 			/* give it a chance to run. */
 			wake_up_process(child);
@@ -711,7 +711,7 @@ static int do_ptrace(int request, struct task_struct *child, long addr, long dat
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
 				break;
-			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+			child->ptrace &= ~(PT_PTRACED|PT_TRACESYS);
 			child->exit_code = data;
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
@@ -799,10 +799,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	ret = -EPERM;
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
+		if (current->ptrace & PT_PTRACED)
 			goto out;
 		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
+		current->ptrace |= PT_PTRACED;
 		ret = 0;
 		goto out;
 	}
@@ -826,9 +826,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
+		if (child->ptrace & PT_PTRACED)
 			goto out;
-		child->flags |= PF_PTRACED;
+		child->ptrace |= PT_PTRACED;
 
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
@@ -841,7 +841,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		goto out;
 	}
 	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
+	if (!(child->ptrace & PT_PTRACED))
 		goto out;
 	if (child->state != TASK_STOPPED && request != PTRACE_KILL)
 		goto out;
@@ -857,8 +857,8 @@ out:
 
 asmlinkage void syscall_trace(void)
 {
-	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
-			!= (PF_PTRACED|PF_TRACESYS))
+	if ((current->ptrace & (PT_PTRACED|PT_TRACESYS))
+			!= (PT_PTRACED|PT_TRACESYS))
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;

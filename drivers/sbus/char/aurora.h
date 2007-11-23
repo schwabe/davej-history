@@ -243,7 +243,7 @@ struct Aurora_port {
 	struct tty_struct 	* tty;
 	int			count;
 	int			blocked_open;
-	int			event;
+	long			event;
 	int			timeout;
 	int			close_delay;
 	long			session;

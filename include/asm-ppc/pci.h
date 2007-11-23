@@ -9,5 +9,7 @@
 #define IOBASE_MEMORY		1
 #define IOBASE_IO		2
 
+/* Return the index of the PCI controller for device PDEV. */
+#define pci_controller_num(PDEV)	(0)
 
 #endif

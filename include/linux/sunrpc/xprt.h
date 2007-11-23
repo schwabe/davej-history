@@ -143,7 +143,7 @@ struct rpc_xprt {
 	struct rpc_wait_queue	pingwait;	/* waiting on ping() */
 	struct rpc_rqst *	free;		/* free slots */
 	struct rpc_rqst		slot[RPC_MAXREQS];
-	unsigned int		sockstate;	/* Socket state */
+	unsigned long		sockstate;	/* Socket state */
 	unsigned char		nocong	    : 1,/* no congestion control */
 				stream      : 1,/* TCP */
 				shutdown    : 1,/* being shut down */

@@ -222,7 +222,7 @@ static int ignored_signal(int sig, struct task_struct *t)
 	struct k_sigaction *ka;
 
 	/* Don't ignore traced or blocked signals */
-	if ((t->flags & PF_PTRACED) || sigismember(&t->blocked, sig))
+	if ((t->ptrace & PT_PTRACED) || sigismember(&t->blocked, sig))
 		return 0;
 	
 	signals = t->sig;

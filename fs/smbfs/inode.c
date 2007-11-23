@@ -242,19 +242,10 @@ smb_revalidate_inode(struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
 	time_t last_time;
+	off_t last_sz;
 	int error = 0;
 
 	DEBUG1("\n");
-
-	/*
-	 * If this is a file opened with write permissions,
-	 * the inode will be up-to-date.
-	 */
-	if (S_ISREG(inode->i_mode) && smb_is_open(inode))
-	{
-		if (inode->u.smbfs_i.access != SMB_O_RDONLY)
-			goto out;
-	}
 
 	/*
 	 * Check whether we've recently refreshed the inode.
@@ -271,8 +262,9 @@ smb_revalidate_inode(struct dentry *dentry)
 	 * (Note: a size change should have a different mtime.)
 	 */
 	last_time = inode->i_mtime;
+	last_sz = inode->i_size;
 	error = smb_refresh_inode(dentry);
-	if (error || inode->i_mtime != last_time)
+	if (error || inode->i_mtime != last_time || inode->i_size != last_sz)
 	{
 		VERBOSE("%s/%s changed, old=%ld, new=%ld\n",
 			DENTRY_PATH(dentry),
