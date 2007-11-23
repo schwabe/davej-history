@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.67.2.2 1999/07/23 15:29:26 davem Exp $
+ * Version:	$Id: route.c,v 1.67.2.3 1999/08/08 08:43:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1927,16 +1927,30 @@ int ipv4_sysctl_rtcache_flush(ctl_table *ctl, int write, struct file * filp,
 		return -EINVAL;
 }
 
+static int ipv4_sysctl_rtcache_flush_strategy(ctl_table *table, int *name, int nlen,
+			 void *oldval, size_t *oldlenp,
+			 void *newval, size_t newlen, 
+			 void **context)
+{
+	int delay;
+	if (newlen != sizeof(int))
+		return -EINVAL;
+	if (get_user(delay,(int *)newval))
+		return -EFAULT; 
+	rt_cache_flush(delay); 
+	return 0;
+}
+
 ctl_table ipv4_route_table[] = {
         {NET_IPV4_ROUTE_FLUSH, "flush",
-         &flush_delay, sizeof(int), 0200, NULL,
-         &ipv4_sysctl_rtcache_flush},
+         &flush_delay, sizeof(int), 0644, NULL,
+         &ipv4_sysctl_rtcache_flush, &ipv4_sysctl_rtcache_flush_strategy },
 	{NET_IPV4_ROUTE_MIN_DELAY, "min_delay",
          &ip_rt_min_delay, sizeof(int), 0644, NULL,
-         &proc_dointvec_jiffies},
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_ROUTE_MAX_DELAY, "max_delay",
          &ip_rt_max_delay, sizeof(int), 0644, NULL,
-         &proc_dointvec_jiffies},
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_ROUTE_GC_THRESH, "gc_thresh",
          &ipv4_dst_ops.gc_thresh, sizeof(int), 0644, NULL,
          &proc_dointvec},
@@ -1945,13 +1959,13 @@ ctl_table ipv4_route_table[] = {
          &proc_dointvec},
 	{NET_IPV4_ROUTE_GC_MIN_INTERVAL, "gc_min_interval",
          &ip_rt_gc_min_interval, sizeof(int), 0644, NULL,
-         &proc_dointvec_jiffies},
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_ROUTE_GC_TIMEOUT, "gc_timeout",
          &ip_rt_gc_timeout, sizeof(int), 0644, NULL,
-         &proc_dointvec_jiffies},
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_ROUTE_GC_INTERVAL, "gc_interval",
          &ip_rt_gc_interval, sizeof(int), 0644, NULL,
-         &proc_dointvec_jiffies},
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_ROUTE_REDIRECT_LOAD, "redirect_load",
          &ip_rt_redirect_load, sizeof(int), 0644, NULL,
          &proc_dointvec},
@@ -1972,7 +1986,7 @@ ctl_table ipv4_route_table[] = {
          &proc_dointvec},
 	{NET_IPV4_ROUTE_MTU_EXPIRES, "mtu_expires",
          &ip_rt_mtu_expires, sizeof(int), 0644, NULL,
-         &proc_dointvec_jiffies},
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	 {0}
 };
 #endif

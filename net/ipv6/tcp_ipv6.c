@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.104.2.5 1999/07/23 15:38:49 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.104.2.6 1999/08/08 08:43:23 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1121,6 +1121,57 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 	kfree_skb(buff);
 }
 
+static void tcp_v6_send_ack(struct sk_buff *skb, __u32 seq, __u32 ack)
+{
+	struct tcphdr *th = skb->h.th, *t1; 
+	struct sk_buff *buff;
+	struct flowi fl;
+
+	buff = alloc_skb(MAX_HEADER + sizeof(struct ipv6hdr), GFP_ATOMIC);
+	if (buff == NULL) 
+	  	return;
+
+	skb_reserve(buff, MAX_HEADER + sizeof(struct ipv6hdr));
+
+	t1 = (struct tcphdr *) skb_push(buff,sizeof(struct tcphdr));
+
+	/* Swap the send and the receive. */
+	memset(t1, 0, sizeof(*t1));
+	t1->dest = th->source;
+	t1->source = th->dest;
+	t1->doff = sizeof(*t1)/4;
+	t1->ack = 1;
+	t1->seq = seq;
+	t1->ack_seq = ack; 
+
+	buff->csum = csum_partial((char *)t1, sizeof(*t1), 0);
+
+	fl.nl_u.ip6_u.daddr = &skb->nh.ipv6h->saddr;
+	fl.nl_u.ip6_u.saddr = &skb->nh.ipv6h->daddr;
+	fl.fl6_flowlabel = 0;
+
+	t1->check = csum_ipv6_magic(fl.nl_u.ip6_u.saddr,
+				    fl.nl_u.ip6_u.daddr, 
+				    sizeof(*t1), IPPROTO_TCP,
+				    buff->csum);
+
+	fl.proto = IPPROTO_TCP;
+	fl.oif = tcp_v6_iif(skb);
+	fl.uli_u.ports.dport = t1->dest;
+	fl.uli_u.ports.sport = t1->source;
+
+	/* sk = NULL, but it is safe for now. static socket required. */
+	buff->dst = ip6_route_output(NULL, &fl);
+
+	if (buff->dst->error == 0) {
+		ip6_xmit(NULL, buff, &fl, NULL);
+		tcp_statistics.TcpOutSegs++;
+		return;
+	}
+
+	kfree_skb(buff);
+}
+
 static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
 					      struct ipv6hdr *ip6h,
 					      struct tcphdr *th,
@@ -1409,10 +1460,19 @@ discard_it:
 	return 0;
 
 do_time_wait:
-	if(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
-				      skb, th, skb->len))
+	switch (tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
+									   skb, th, skb->len)) {
+	case TCP_TW_ACK:
+		tcp_v6_send_ack(skb, ((struct tcp_tw_bucket *)sk)->snd_nxt,
+						((struct tcp_tw_bucket *)sk)->rcv_nxt); 
+		break; 
+	case TCP_TW_RST:
 		goto no_tcp_socket;
-	goto discard_it;
+	default:
+		goto discard_it; 
+	}
+
+	return 0;
 }
 
 static int tcp_v6_rebuild_header(struct sock *sk)

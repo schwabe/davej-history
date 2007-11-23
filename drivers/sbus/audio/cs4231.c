@@ -1,7 +1,9 @@
 /*
  * drivers/sbus/audio/cs4231.c
  *
- * Copyright 1996, 1997, 1998 Derrick J Brashear (shadow@andrew.cmu.edu)
+ * Copyright 1996, 1997, 1998, 1999 Derrick J Brashear (shadow@andrew.cmu.edu)
+ * The 4231/ebus support was written by David Miller, who didn't bother
+ * crediting himself here, so I will.
  *
  * Based on the AMD7930 driver:
  * Copyright 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
@@ -11,7 +13,7 @@
  * 
  * This was culled from the Crystal docs on the 4231a, and the addendum they
  * faxed me on the 4231.
- * The APC DMA controller support unfortunately is not documented. Thanks, Sun
+ * The APC DMA controller support unfortunately is not documented. Thanks, Sun.
  */
 
 #include <linux/config.h>
@@ -69,15 +71,17 @@ static int cs4231_record_gain(struct sparcaudio_driver *drv, int value,
 static int cs4231_play_gain(struct sparcaudio_driver *drv, int value, 
                             unsigned char balance);
 static void cs4231_ready(struct sparcaudio_driver *drv);
-static void cs4231_playintr(struct sparcaudio_driver *drv);
+static void cs4231_playintr(struct sparcaudio_driver *drv, int);
 static int cs4231_recintr(struct sparcaudio_driver *drv);
 static int cs4231_output_muted(struct sparcaudio_driver *drv, int value);
 static void cs4231_pollinput(struct sparcaudio_driver *drv);
-static void eb4231_pollinput(struct sparcaudio_driver *drv);
 static int cs4231_length_to_samplecount(struct audio_prinfo *thisdir, 
                                         unsigned int length);
 static void cs4231_getsamplecount(struct sparcaudio_driver *drv, 
                                   unsigned int length, unsigned int value);
+#ifdef EB4231_SUPPORT
+static void eb4231_pollinput(struct sparcaudio_driver *drv);
+#endif
 
 #define CHIP_READY udelay(100); cs4231_ready(drv); udelay(1000);
 
@@ -1228,10 +1232,19 @@ static void cs4231_release(struct inode * inode, struct file * file, struct spar
   MOD_DEC_USE_COUNT;
 }
 
-static void cs4231_playintr(struct sparcaudio_driver *drv)
+static void cs4231_playintr(struct sparcaudio_driver *drv, int push)
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   int status = 0;
+
+  if (!push) {
+    if (!cs4231_chip->perchip_info.play.active) {
+      cs4231_chip->regs->dmapnva = cs4231_chip->output_next_dma_handle;
+      cs4231_chip->regs->dmapnc = cs4231_chip->output_next_dma_size;
+    }
+    sparcaudio_output_done(drv, 0);
+    return;
+  }
 
   if (cs4231_chip->playlen == 0 && cs4231_chip->output_size > 0) 
     cs4231_chip->playlen = cs4231_chip->output_size;
@@ -1484,14 +1497,16 @@ static void cs4231_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
   cs4231_chip->perchip_info.play.active = 1;
   cs4231_chip->playing_count = 0;
 
-  cs4231_playintr(drv);
   if ((cs4231_chip->regs->dmacsr & APC_PPAUSE) || 
       !(cs4231_chip->regs->dmacsr & APC_PDMA_READY)) {
-    cs4231_chip->regs->dmacsr &= ~(APC_XINT_PLAY | APC_PPAUSE);
-    cs4231_chip->regs->dmacsr |= APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY
-      | APC_XINT_GENL | APC_XINT_PENA | APC_PDMA_READY;
+    cs4231_chip->regs->dmacsr &= ~APC_XINT_PLAY;
+    cs4231_chip->regs->dmacsr &= ~APC_PPAUSE;
+    
+    cs4231_playintr(drv, cs4231_chip->regs->dmapnva == 0 ? 1 : 0);
+
+    cs4231_chip->regs->dmacsr |= APC_PLAY_SETUP;
     cs4231_enable_play(drv);
-  
+
     cs4231_ready(drv);
   }
 }
@@ -1544,11 +1559,8 @@ static void cs4231_stop_output(struct sparcaudio_driver *drv)
     cs4231_chip->output_next_dma_handle = 0;
     cs4231_chip->output_next_dma_size = 0;
   }
-#if 1 /* Not safe without shutting off the DMA controller as well. -DaveM */
+#if 0 /* Not safe without shutting off the DMA controller as well. -DaveM */
   /* Else subsequent speed setting changes are ignored by the chip. */
-  cs4231_chip->regs->dmacsr &= ~(APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY 
-                                 | APC_XINT_GENL | APC_PDMA_READY 
-                                 | APC_XINT_PENA );
   cs4231_disable_play(drv);
 #endif
 }
@@ -1897,11 +1909,12 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
    */
 
   if (dummy & APC_PLAY_INT) {
-    if (dummy & APC_XINT_PEMP) {
+    if (dummy & APC_XINT_PNVA) {
       cs4231_chip->perchip_info.play.samples += 
 	cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
 				     cs4231_chip->playlen); 
-      cs4231_playintr(drv);
+      if (!(dummy & APC_XINT_EMPT))
+        cs4231_playintr(drv, 1);
     } 
     /* Any other conditions we need worry about? */
   }
@@ -1933,7 +1946,7 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
       cs4231_chip->perchip_info.play.error = 1;
     }
     cs4231_chip->perchip_info.play.active = 0;
-    cs4231_playintr(drv);
+    cs4231_playintr(drv, 0);
 
     cs4231_getsamplecount(drv, cs4231_chip->playlen, 0);
   }

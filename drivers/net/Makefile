@@ -566,6 +566,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SIS900),y)
+L_OBJS += sis900.o
+else
+  ifeq ($(CONFIG_SIS900),m)
+  M_OBJS += sis900.o
+  endif
+endif
+
 ifeq ($(CONFIG_YELLOWFIN),y)
 L_OBJS += yellowfin.o
 else

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.175.2.7 1999/07/23 15:38:46 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.175.2.8 1999/08/08 08:43:20 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -178,6 +178,17 @@ static __inline__ void __tcp_inherit_port(struct sock *sk, struct sock *child)
 {
 	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *)sk->prev;
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (child->num != sk->num) {
+		unsigned short snum = ntohs(child->num);
+		for(tb = tcp_bound_hash[tcp_bhashfn(snum)];
+		    tb && tb->port != snum;
+		    tb = tb->next)
+			;
+		if (tb == NULL)
+			tb = (struct tcp_bind_bucket *)sk->prev;
+	}
+#endif
 	if ((child->bind_next = tb->owners) != NULL)
 		tb->owners->bind_pprev = &child->bind_next;
 	tb->owners = child;
@@ -1008,6 +1019,46 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 	tcp_statistics.TcpOutRsts++;
 }
 
+/* 
+ *	Send an ACK for a socket less packet (needed for time wait) 
+ *
+ *  FIXME: Does not echo timestamps yet.
+ *
+ *  Assumes that the caller did basic address and flag checks.
+ */
+static void tcp_v4_send_ack(struct sk_buff *skb, __u32 seq, __u32 ack)
+{
+	struct tcphdr *th = skb->h.th;
+	struct tcphdr rth;
+	struct ip_reply_arg arg;
+
+	/* Swap the send and the receive. */
+	memset(&rth, 0, sizeof(struct tcphdr)); 
+	rth.dest = th->source;
+	rth.source = th->dest; 
+	rth.doff = sizeof(struct tcphdr)/4;
+
+	rth.seq = seq;
+	rth.ack_seq = ack; 
+	rth.ack = 1;
+
+	memset(&arg, 0, sizeof arg); 
+	arg.iov[0].iov_base = (unsigned char *)&rth; 
+	arg.iov[0].iov_len  = sizeof rth;
+	arg.csum = csum_tcpudp_nofold(skb->nh.iph->daddr, 
+				      skb->nh.iph->saddr, /*XXX*/
+				      sizeof(struct tcphdr),
+				      IPPROTO_TCP,
+				      0); 
+	arg.n_iov = 1;
+	arg.csumoffset = offsetof(struct tcphdr, check) / 2; 
+
+	ip_send_reply(tcp_socket->sk, skb, &arg, sizeof rth);
+
+	tcp_statistics.TcpOutSegs++;
+}
+
+
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 
 /*
@@ -1561,7 +1612,7 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 			sk = tcp_check_req(sk, skb, req);
 		}
 #ifdef CONFIG_SYN_COOKIES
-		else {
+		else if (flg == __constant_htonl(0x00120000))  {
 			sk = cookie_v4_check(sk, skb, &(IPCB(skb)->opt));
 		}
 #endif
@@ -1721,10 +1772,19 @@ discard_it:
   	return 0;
 
 do_time_wait:
-	if(tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
-				      skb, th, skb->len))
-		goto no_tcp_socket;
-	goto discard_it;
+	/* Sorry for the ugly switch. 2.3 will have a better solution. */ 
+	switch (tcp_timewait_state_process((struct tcp_tw_bucket *)sk,
+							   skb, th, skb->len)) {
+	case TCP_TW_ACK:
+		tcp_v4_send_ack(skb, ((struct tcp_tw_bucket *)sk)->snd_nxt,
+						((struct tcp_tw_bucket *)sk)->rcv_nxt); 
+		break; 
+	case TCP_TW_RST:
+		goto no_tcp_socket; 
+	default:
+		goto discard_it; 
+	}
+	return 0;
 }
 
 static void __tcp_v4_rehash(struct sock *sk)

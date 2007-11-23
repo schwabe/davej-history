@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.38 1999/01/02 16:51:48 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.38.2.1 1999/08/08 08:43:14 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -90,9 +90,23 @@ int ipv4_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
 	if (write && ipv4_devconf.forwarding != val)
 		inet_forward_change();
 
-        return ret;
+	return ret;
 }
 
+static int ipv4_sysctl_forward_strategy(ctl_table *table, int *name, int nlen,
+			 void *oldval, size_t *oldlenp,
+			 void *newval, size_t newlen, 
+			 void **context)
+{
+	int new;
+	if (newlen != sizeof(int))
+		return -EINVAL;
+	if (get_user(new,(int *)newval))
+		return -EFAULT; 
+	if (new != ipv4_devconf.forwarding) 
+		inet_forward_change(); 
+	return 0; /* caller does change again and handles handles oldval */ 
+}
 
 ctl_table ipv4_table[] = {
         {NET_IPV4_TCP_TIMESTAMPS, "tcp_timestamps",
@@ -109,7 +123,7 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
         {NET_IPV4_FORWARD, "ip_forward",
          &ipv4_devconf.forwarding, sizeof(int), 0644, NULL,
-         &ipv4_sysctl_forward},
+         &ipv4_sysctl_forward,&ipv4_sysctl_forward_strategy},
         {NET_IPV4_DEFAULT_TTL, "ip_default_ttl",
          &ip_statistics.IpDefaultTTL, sizeof(int), 0644, NULL,
          &proc_dointvec},
@@ -132,12 +146,13 @@ ctl_table ipv4_table[] = {
 	 &sysctl_ip_masq_debug, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
 	{NET_IPV4_IPFRAG_TIME, "ipfrag_time",
-	 &sysctl_ipfrag_time, sizeof(int), 0644, NULL, &proc_dointvec_jiffies},
+	 &sysctl_ipfrag_time, sizeof(int), 0644, NULL, &proc_dointvec_jiffies, 
+	 &sysctl_jiffies},
 	{NET_IPV4_TCP_MAX_KA_PROBES, "tcp_max_ka_probes",
 	 &sysctl_tcp_max_ka_probes, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_TCP_KEEPALIVE_TIME, "tcp_keepalive_time",
 	 &sysctl_tcp_keepalive_time, sizeof(int), 0644, NULL, 
-	 &proc_dointvec_jiffies},
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
 	{NET_IPV4_TCP_KEEPALIVE_PROBES, "tcp_keepalive_probes",
 	 &sysctl_tcp_keepalive_probes, sizeof(int), 0644, NULL, 
 	 &proc_dointvec},
@@ -148,7 +163,7 @@ ctl_table ipv4_table[] = {
 	 &sysctl_tcp_retries2, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_TCP_FIN_TIMEOUT, "tcp_fin_timeout",
 	 &sysctl_tcp_fin_timeout, sizeof(int), 0644, NULL, 
-	 &proc_dointvec_jiffies},
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
 #ifdef CONFIG_SYN_COOKIES
 	{NET_TCP_SYNCOOKIES, "tcp_syncookies",
 	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},

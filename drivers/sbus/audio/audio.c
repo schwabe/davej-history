@@ -117,6 +117,13 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
          * TODO: Make number of input/output buffers tunable parameters
          */
 
+#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x202ff
+        init_waitqueue_head(&drv->open_wait);
+        init_waitqueue_head(&drv->output_write_wait);
+        init_waitqueue_head(&drv->output_drain_wait);
+        init_waitqueue_head(&drv->input_read_wait);
+#endif
+
         drv->num_output_buffers = 8;
 	drv->output_buffer_size = (4096 * 2);
 	drv->playing_count = 0;
@@ -264,6 +271,7 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
    * If status & 2, a buffer was claimed for DMA and is still in use.
    *
    * The playing_count for non-DMA hardware should never be non-zero.
+   * Value of status for non-DMA hardware should always be 1.
    */
   if (status & 1) {
     if (drv->playing_count) 
@@ -300,8 +308,9 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
 
   /* If we got back a buffer, see if anyone wants to write to it */
   if ((status & 1) || ((drv->output_count + drv->playing_count) 
-		  < drv->num_output_buffers)) 
+                       < drv->num_output_buffers)) {
     wake_up_interruptible(&drv->output_write_wait);
+  }
 
   /* If the output queue is empty, shut down the driver. */
   if ((drv->output_count < 1) && (drv->playing_count < 1)) {
@@ -664,7 +673,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_CD:
   case SOUND_MIXER_WRITE_LINE:
   case SOUND_MIXER_WRITE_IMIX:
-    if(get_user(k, arg))
+    if(COPY_IN(arg, k))
       return -EFAULT;
     tprintk(("setting input volume (0x%x)", k));
     if (drv->ops->get_input_channels)
@@ -695,7 +704,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_PCM:
   case SOUND_MIXER_WRITE_VOLUME:
   case SOUND_MIXER_WRITE_SPEAKER:
-    if(get_user(k, arg))
+    if(COPY_IN(arg, k))
 	return -EFAULT;
     tprintk(("setting output volume (0x%x)", k));
     if (drv->ops->get_output_channels)
@@ -736,7 +745,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_RECSRC: 
     if (!drv->ops->set_input_port)
       return -EINVAL;
-    if(get_user(k, arg))
+    if(COPY_IN(arg, k))
       return -EFAULT;
     /* only one should ever be selected */
     if (k & SOUND_MASK_IMIX) j = AUDIO_ANALOG_LOOPBACK;

@@ -120,6 +120,8 @@ struct tcp_tw_bucket {
 	/* These _must_ match the beginning of struct sock precisely.
 	 * XXX Yes I know this is gross, but I'd have to edit every single
 	 * XXX networking file if I created a "struct sock_header". -DaveM
+	 * Just don't forget -fno-strict-aliasing, but it should be really
+	 * fixed -AK
 	 */
 	struct sock		*sklist_next;
 	struct sock		*sklist_prev;
@@ -140,12 +142,13 @@ struct tcp_tw_bucket {
 				nonagle;
 
 	/* And these are ours. */
-	__u32			rcv_nxt;
+	__u32			rcv_nxt,snd_nxt;
 	struct tcp_func		*af_specific;
 	struct tcp_bind_bucket	*tb;
 	struct tcp_tw_bucket	*next_death;
 	struct tcp_tw_bucket	**pprev_death;
 	int			death_slot;
+	
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 	struct in6_addr		v6_daddr;
 	struct in6_addr		v6_rcv_saddr;
@@ -476,7 +479,13 @@ extern int			tcp_rcv_established(struct sock *sk,
 						    struct tcphdr *th, 
 						    unsigned len);
 
-extern int			tcp_timewait_state_process(struct tcp_tw_bucket *tw,
+enum tcp_tw_status {
+		TCP_TW_SUCCESS = 0,
+		TCP_TW_RST = 1,
+		TCP_TW_ACK = 2
+		};
+
+extern enum tcp_tw_status tcp_timewait_state_process(struct tcp_tw_bucket *tw,
 							   struct sk_buff *skb,
 							   struct tcphdr *th,
 							   unsigned len);

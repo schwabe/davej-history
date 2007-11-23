@@ -228,7 +228,7 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 #ifdef CONFIG_ALPHA_GENERIC
 	       "Booting GENERIC",
 #else
-	       "Booting"
+	       "Booting",
 #endif
 	       type_name, (*var_name ? " variation " : ""),
 	       var_name, alpha_mv.vector_name,

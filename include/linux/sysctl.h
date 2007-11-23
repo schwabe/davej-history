@@ -470,6 +470,7 @@ extern int do_sysctl_strategy (ctl_table *table,
 
 extern ctl_handler sysctl_string;
 extern ctl_handler sysctl_intvec;
+extern ctl_handler sysctl_jiffies;
 
 extern int do_string (
 	void *oldval, size_t *oldlenp, void *newval, size_t newlen,

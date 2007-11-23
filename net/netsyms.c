@@ -21,6 +21,7 @@
 #include <net/dst.h>
 #include <net/checksum.h>
 #include <linux/etherdevice.h>
+#include <net/route.h>
 #ifdef CONFIG_HIPPI
 #include <linux/hippidevice.h>
 #endif
@@ -177,6 +178,7 @@ EXPORT_SYMBOL(neigh_destroy);
 EXPORT_SYMBOL(neigh_parms_alloc);
 EXPORT_SYMBOL(neigh_parms_release);
 EXPORT_SYMBOL(neigh_rand_reach_time);
+EXPORT_SYMBOL(neigh_compat_output); 
 
 /*	dst_entry	*/
 EXPORT_SYMBOL(dst_alloc);
@@ -238,6 +240,7 @@ EXPORT_SYMBOL(__ip_finish_output);
 EXPORT_SYMBOL(inet_dgram_ops);
 EXPORT_SYMBOL(ip_cmsg_recv);
 EXPORT_SYMBOL(__release_sock);
+EXPORT_SYMBOL(inet_addr_type); 
 
 /* Route manipulation */
 EXPORT_SYMBOL(ip_rt_ioctl);
@@ -321,7 +324,6 @@ EXPORT_SYMBOL(tcp_inherit_port);
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
 EXPORT_SYMBOL(tcp_v4_do_rcv);
 EXPORT_SYMBOL(tcp_v4_connect);
-EXPORT_SYMBOL(inet_addr_type);
 EXPORT_SYMBOL(net_reset_timer);
 EXPORT_SYMBOL(net_delete_timer);
 EXPORT_SYMBOL(udp_prot);

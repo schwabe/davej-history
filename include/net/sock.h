@@ -300,6 +300,7 @@ struct tcp_opt {
 
 	__u32	last_seg_size;	/* Size of last incoming segment */
 	__u32	rcv_mss;	/* MSS used for delayed ACK decisions */ 
+	__u32 	partial_writers; /* # of clients wanting at the head packet */
 
 	struct open_request	*syn_wait_queue;
 	struct open_request	**syn_wait_last;
@@ -672,6 +673,7 @@ static inline void lock_sock(struct sock *sk)
 #if 0
 /* debugging code: the test isn't even 100% correct, but it can catch bugs */
 /* Note that a double lock is ok in theory - it's just _usually_ a bug */
+/* Actually it can easily happen with multiple writers */ 
 	if (atomic_read(&sk->sock_readers)) {
 		printk("double lock on socket at %p\n", gethere());
 here:

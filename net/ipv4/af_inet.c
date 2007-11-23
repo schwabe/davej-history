@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.87.2.4 1999/07/23 15:29:19 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.87.2.5 1999/08/08 08:43:10 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -187,7 +187,6 @@ static __inline__ void kill_sk_later(struct sock *sk)
 			atomic_read(&sk->rmem_alloc),
 			atomic_read(&sk->wmem_alloc)));
 
-	sk->destroy = 1;
 	sk->ack_backlog = 0;
 	release_sock(sk);
 	net_reset_timer(sk, TIME_DESTROY, SOCK_DESTROY_TIME);
@@ -202,8 +201,10 @@ void destroy_sock(struct sock *sk)
   	 */
   	net_delete_timer(sk);
 
-	if (sk->prot->destroy)
+	if (sk->prot->destroy && !sk->destroy)
 		sk->prot->destroy(sk);
+
+	sk->destroy = 1;
 
 	kill_sk_queues(sk);
 
