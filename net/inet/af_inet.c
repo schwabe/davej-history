@@ -474,8 +474,8 @@ static int inet_listen(struct socket *sock, int backlog)
 	 * somewhere. We might as well truncate it to what everybody
 	 * else does..
 	 */
-	if (backlog > 5)
-		backlog = 5;
+	if ((unsigned) backlog > 128)
+		backlog = 128;
 	sk->max_ack_backlog = backlog;
 	if (sk->state != TCP_LISTEN)
 	{

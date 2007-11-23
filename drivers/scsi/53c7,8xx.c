@@ -271,8 +271,8 @@ static Scsi_Host_Template *the_template = NULL;
 struct pci_chip {
     unsigned short pci_device_id;
     int chip;
-    int max_revision;
     int min_revision;
+    int max_revision;
 };
 
 static struct pci_chip pci_chip_ids[] = { 
@@ -351,7 +351,7 @@ static void internal_setup(int board, int chip, char *str, int *ints) {
 	} else {
 	    overrides[commandline_current].data.pci.bus = ints[1];
 	    overrides[commandline_current].data.pci.device = ints[2];
-	    overrides[commandline_current].data.pci.device = ints[3];
+	    overrides[commandline_current].data.pci.function = ints[3];
     	    overrides[commandline_current].options = (ints[0] >= 4) ?
     	    	ints[4] : 0;
 	}

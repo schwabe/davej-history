@@ -4,7 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#define DEBUG_PROC_TREE
+#undef DEBUG_PROC_TREE
 
 #include <linux/wait.h>
 #include <linux/errno.h>

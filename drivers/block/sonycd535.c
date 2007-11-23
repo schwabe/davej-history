@@ -28,7 +28,7 @@
  *      (Heiko Eissfeldt <heiko@colossus.escape.de>)
  *
  * 1995-06-01
- *  More chages to support CDU-510/515 series
+ *  More changes to support CDU-510/515 series
  *      (Claudio Porfiri<C.Porfiri@nisms.tei.ericsson.se>)
  *
  * Things to do:
