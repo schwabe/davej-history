@@ -47,6 +47,7 @@ extern volatile unsigned long lost_ticks;	/* kernel/sched.c */
 
 static int set_rtc_mmss(unsigned long);
 
+spinlock_t rtc_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Shift amount by which scaled_ticks_per_cycle is scaled.  Shifting
@@ -455,6 +456,8 @@ set_rtc_mmss(unsigned long nowtime)
 	int real_seconds, real_minutes, cmos_minutes;
 	unsigned char save_control, save_freq_select;
 
+	/* irq are locally disabled here */
+	spin_lock(&rtc_lock);
 	/* Tell the clock it's being set */
 	save_control = CMOS_READ(RTC_CONTROL);
 	CMOS_WRITE((save_control|RTC_SET), RTC_CONTROL);
@@ -504,6 +507,7 @@ set_rtc_mmss(unsigned long nowtime)
 	 */
 	CMOS_WRITE(save_control, RTC_CONTROL);
 	CMOS_WRITE(save_freq_select, RTC_FREQ_SELECT);
+	spin_unlock(&rtc_lock);
 
 	return retval;
 }

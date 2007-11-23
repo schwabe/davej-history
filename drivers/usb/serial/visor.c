@@ -10,7 +10,11 @@
  *	(at your option) any later version.
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
- * 
+ *
+ * (09/06/2000) gkh
+ *	Fixed oops in visor_exit.  Need to uncomment usb_unlink_urb call _after_
+ *	the host controller drivers set urb->dev = NULL when the urb is finished.
+ *
  * (08/08/2000) gkh
  *	Fixed endian problem in visor_startup.
  *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
@@ -457,7 +461,10 @@ void visor_exit (void)
 	usb_serial_deregister (&handspring_device);
 	
 	for (i = 0; i < NUM_URBS; ++i) {
-		usb_unlink_urb(write_urb_pool[i]);
+		/* FIXME - uncomment the following usb_unlink_urb call when
+		 * the host controllers get fixed to set urb->dev = NULL after
+		 * the urb is finished.  Otherwise this call oopses. */
+		/* usb_unlink_urb(write_urb_pool[i]); */
 		if (write_urb_pool[i]->transfer_buffer)
 			kfree(write_urb_pool[i]->transfer_buffer);
 		usb_free_urb (write_urb_pool[i]);

@@ -467,12 +467,12 @@ __initfunc(void ide_scan_pcibus (void))
 		/*
 		 *	Don't try and tune a VIA 82C586 or 586A
 		 */
-		if (IDE_PCI_DEVID_RQ(devid, DEVID_VP_IDE))
+		if (IDE_PCI_DEVID_EQ(devid, DEVID_VP_IDE))
 		{
 			autodma_default = 0;
 			break;
 		}
-		if (IDE_PCI_DEVID_RQ(devid, DEVID_VP_OLDIDE))
+		if (IDE_PCI_DEVID_EQ(devid, DEVID_VP_OLDIDE))
 		{
 			autodma_default = 0;
 			break;

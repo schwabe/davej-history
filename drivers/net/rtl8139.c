@@ -1235,8 +1235,9 @@ static int rtl8129_rx(struct device *dev)
 			/* Malloc up new buffer, compatible with net-2e. */
 			/* Omit the four octet CRC from the length. */
 			struct sk_buff *skb;
+			int pkt_size = rx_size - 4;
 
-			skb = dev_alloc_skb(rx_size + 2);
+			skb = dev_alloc_skb(pkt_size + 2);
 			if (skb == NULL) {
 				printk(KERN_WARNING"%s: Memory squeeze, deferring packet.\n",
 					   dev->name);
@@ -1247,12 +1248,12 @@ static int rtl8129_rx(struct device *dev)
 			}
 			skb->dev = dev;
 			skb_reserve(skb, 2);	/* 16 byte align the IP fields. */
-			if (ring_offset+rx_size+4 > RX_BUF_LEN) {
+			if (ring_offset+rx_size > RX_BUF_LEN) {
 				int semi_count = RX_BUF_LEN - ring_offset - 4;
 				memcpy(skb_put(skb, semi_count), &rx_ring[ring_offset + 4],
 					   semi_count);
-				memcpy(skb_put(skb, rx_size-semi_count), rx_ring,
-					   rx_size-semi_count);
+				memcpy(skb_put(skb, pkt_size-semi_count), rx_ring,
+					   pkt_size-semi_count);
 				if (rtl8129_debug > 4) {
 					int i;
 					printk(KERN_DEBUG"%s:  Frame wrap @%d",
@@ -1265,17 +1266,17 @@ static int rtl8129_rx(struct device *dev)
 			} else {
 #if 1  /* USE_IP_COPYSUM */
 				eth_copy_and_sum(skb, &rx_ring[ring_offset + 4],
-						 rx_size - 4, 0);
-				skb_put(skb, rx_size - 4);
+						 pkt_size, 0);
+				skb_put(skb, pkt_size);
 #else
-				memcpy(skb_put(skb, rx_size), &rx_ring[ring_offset + 4],
-					   rx_size);
+				memcpy(skb_put(skb, pkt_size), &rx_ring[ring_offset + 4],
+					   pkt_size);
 #endif
 			}
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 #if LINUX_VERSION_CODE > 0x20119
-			tp->stats.rx_bytes += rx_size;
+			tp->stats.rx_bytes += pkt_size;
 #endif
 			tp->stats.rx_packets++;
 		}

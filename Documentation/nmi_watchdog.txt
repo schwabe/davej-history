@@ -30,5 +30,5 @@ http://people.redhat.com/mingo/NMI-watchdog-patches/
 
 [ feel free to send bug reports, suggestions and patches to
   Ingo Molnar <mingo@redhat.com> or the Linux SMP mailing
-  list at <linux-smp@vger.rutgers.edu> ]
+  list at <linux-smp@vger.kernel.org> ]
 

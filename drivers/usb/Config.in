@@ -69,6 +69,7 @@ comment 'USB Devices'
       dep_tristate '  USB Diamond Rio500 support (EXPERIMENTAL)' CONFIG_USB_RIO500 $CONFIG_USB
       dep_tristate '  D-Link USB FM radio support (EXPERIMENTAL)' CONFIG_USB_DSBR $CONFIG_USB $CONFIG_VIDEO_DEV
       dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_SCSI
+      dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
    fi
    dep_tristate '  Kawasaki USB-ethernet controller' CONFIG_USB_KAWETH $CONFIG_USB
 
