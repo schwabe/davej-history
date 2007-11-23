@@ -445,27 +445,29 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
+	
+	if(c->x86_vendor == X86_VENDOR_AMD)
+	{
+		/*  Set MTRR capability flag if appropriate  */
+		if(boot_cpu_data.x86 == 5) {
+			if((boot_cpu_data.x86_model == 9) ||
+			   ((boot_cpu_data.x86_model == 8) && 
+			    (boot_cpu_data.x86_mask >= 8)))
+				c->x86_capability |= X86_FEATURE_MTRR;
+		}
 
-	/*  Set MTRR capability flag if appropriate  */
-	if(boot_cpu_data.x86 == 5) {
-		if((boot_cpu_data.x86_model == 9) ||
-		   ((boot_cpu_data.x86_model == 8) && 
-		    (boot_cpu_data.x86_mask >= 8)))
-			c->x86_capability |= X86_FEATURE_MTRR;
+		if (n >= 0x80000005){
+			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+				ecx>>24, edx>>24);
+			c->x86_cache_size=(ecx>>24)+(edx>>24);
+		}
+		if (n >= 0x80000006){
+			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+			printk("CPU: L2 Cache: %dK\n", ecx>>16);
+			c->x86_cache_size = ecx>>16;
+		}
 	}
-
-	if (n >= 0x80000005){
-		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-			ecx>>24, edx>>24);
-		c->x86_cache_size=(ecx>>24)+(edx>>24);
-	}
-	if (n >= 0x80000006){
-		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L2 Cache: %dK\n", ecx>>16);
-		c->x86_cache_size = ecx>>16;
-	}
-
 	return 1;
 }
 
@@ -501,7 +503,7 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 				rdmsr(0xC0000082, l, h);
 				if((l&0x0000FFFF)==0)
 				{		
-					l=(1<<0)|(mbytes/4);
+					l=(1<<0)|((mbytes/4)<<1);
 					save_flags(flags);
 					__cli();
 					__asm__ __volatile__ ("wbinvd": : :"memory");

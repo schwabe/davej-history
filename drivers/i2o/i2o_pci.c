@@ -53,8 +53,10 @@ static void i2o_pci_dispose(struct i2o_controller *c)
 	iounmap(((u8 *)c->post_port)-0x40);
 
 #ifdef CONFIG_MTRR
-	if(c->bus.pci.mtrr_reg > 0)
-		mtrr_del(c->bus.pci.mtrr_reg, 0, 0);
+	if(c->bus.pci.mtrr_reg0 > 0)
+		mtrr_del(c->bus.pci.mtrr_reg0, 0, 0);
+	if(c->bus.pci.mtrr_reg1 > 0)
+		mtrr_del(c->bus.pci.mtrr_reg1, 0, 0);
 #endif
 }
 
@@ -109,7 +111,7 @@ static void i2o_pci_interrupt(int irq, void *dev_id, struct pt_regs *r)
  *
  * TODO: Add support for polled controllers
  */
-int __init i2o_pci_install(struct pci_dev *dev)
+int i2o_pci_install(struct pci_dev *dev)
 {
 	struct i2o_controller *c=kmalloc(sizeof(struct i2o_controller),
 						GFP_KERNEL);
@@ -183,8 +185,30 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	 * Enable Write Combining MTRR for IOP's memory region
 	 */
 #ifdef CONFIG_MTRR
-	c->bus.pci.mtrr_reg = 
-		mtrr_add(c->mem_phys, size, MTRR_TYPE_WRCOMB, 1);
+	c->bus.pci.mtrr_reg0 =  mtrr_add(c->mem_phys, size, MTRR_TYPE_WRCOMB, 1);
+
+	/*
+	 * If it is an INTEL i960 I/O processor then set the first 64K to Uncacheable
+	 * since the region contains the Messaging unit which shouldn't be cached.
+	 */
+
+	c->bus.pci.mtrr_reg1 = -1;
+
+	if(dev->vendor == PCI_VENDOR_ID_INTEL) 
+        {
+		printk(KERN_INFO "i2o_pci: MTRR workaround for Intel i960 processor\n");
+	        c->bus.pci.mtrr_reg1 = mtrr_add(c->mem_phys, 65536, MTRR_TYPE_UNCACHABLE, 1);
+	        if(c->bus.pci.mtrr_reg1< 0)
+	        {
+			printk(KERN_INFO "i2o_pci: Error in setting MTRR_TYPE_UNCACHABLE\n");
+			if(c->bus.pci.mtrr_reg0>=0)
+			{
+				mtrr_del(c->bus.pci.mtrr_reg0, 0, 0);
+				c->bus.pci.mtrr_reg0 = -1;
+			}
+		}
+	}
+
 #endif
 
 	I2O_IRQ_WRITE32(c,0xFFFFFFFF);
@@ -230,7 +254,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	return 0;	
 }
 
-int __init i2o_pci_scan(void)
+int i2o_pci_scan(void)
 {
 	struct pci_dev *dev;
 	int count=0;

@@ -13,7 +13,7 @@
 #define GEN_FLTUND	-5	/* fp underflow */
 #define GEN_FLTINV	-6	/* invalid fp operand */
 #define GEN_FLTINE	-7	/* inexact fp operand */
-#define GEN_DECOVF	-8	/* decimal overflow (for COBOL??) */
+#define GEN_DECOVF	-8	/* decimal overflow (for COBOL?) */
 #define GEN_DECDIV	-9	/* decimal division by zero */
 #define GEN_DECINV	-10	/* invalid decimal operand */
 #define GEN_ROPRAND	-11	/* reserved operand */

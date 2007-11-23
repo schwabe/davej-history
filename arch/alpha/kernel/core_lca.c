@@ -16,7 +16,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
-#include <asm/smp.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -24,6 +24,7 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "bios32.h"
 
 /*
  * BIOS32-style PCI interface:
@@ -349,6 +350,12 @@ lca_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	 * data parity errors.
 	 */
 	*(vulp)LCA_IOC_PAR_DIS = 1UL<<5;
+
+	/* Tell userland where I/O space is located.  */
+	default_hose.pci_sparse_io_space = LCA_IO - IDENT_ADDR;
+	default_hose.pci_sparse_mem_space = LCA_SPARSE_MEM - IDENT_ADDR;
+	default_hose.pci_dense_io_space = 0;
+	default_hose.pci_dense_mem_space = LCA_DENSE_MEM - IDENT_ADDR;
 }
 
 /*

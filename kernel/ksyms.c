@@ -116,6 +116,7 @@ EXPORT_SYMBOL(get_unmapped_area);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(in_group_p);
+EXPORT_SYMBOL(in_egroup_p);
 EXPORT_SYMBOL(update_atime);
 EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_fs_type);

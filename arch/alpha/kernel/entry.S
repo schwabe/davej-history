@@ -8,7 +8,7 @@
 
 #define SIGCHLD 20
 
-#define NR_SYSCALLS 371
+#define NR_SYSCALLS 377
 
 /*
  * These offsets must match with alpha_mv in <asm/machvec.h>.
@@ -1143,3 +1143,9 @@ sys_call_table:
 	.quad sys_capget
 	.quad sys_capset
 	.quad sys_sendfile			/* 370 */
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall			/* 375 */
+	.quad sys_pciconfig_iobase

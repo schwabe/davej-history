@@ -11,6 +11,7 @@
 #include <linux/errno.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
+#include <linux/sys.h> 
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -320,7 +321,9 @@ static int putreg(struct task_struct *child,
 {
 	switch (regno >> 2) {
 		case ORIG_EAX:
-			return -EIO;
+			if(value >= NR_syscalls)
+				return -EIO;
+			break;
 		case FS:
 			if (value && (value & 3) != 3)
 				return -EIO;

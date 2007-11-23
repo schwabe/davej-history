@@ -15,6 +15,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -22,6 +23,7 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "bios32.h"
 
 /* NOTE: Herein are back-to-back mb instructions.  They are magic.
    One plausible explanation is that the I/O controller does not properly
@@ -509,6 +511,12 @@ pyxis_finish_init_arch(void)
 			ctrl1 = *(vuip)PYXIS_CTRL1;  /* re-read */
 		}
 	}
+
+	/* Tell userland where I/O space is located.  */
+	default_hose.pci_sparse_io_space = 0;
+	default_hose.pci_sparse_mem_space = 0;
+	default_hose.pci_dense_io_space = PYXIS_BW_IO - IDENT_ADDR;
+	default_hose.pci_dense_mem_space = PYXIS_BW_MEM - IDENT_ADDR;
 }
 
 void __init

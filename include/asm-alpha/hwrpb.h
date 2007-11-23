@@ -16,7 +16,7 @@
 #define EV56_CPU		7	/* EV5.6 (21164)	*/
 #define EV6_CPU			8	/* EV6 (21164)		*/
 #define PCA56_CPU		9	/* PCA56 (21164PC)	*/
-#define PCA57_CPU		10	/* PCA57 (21164??)	*/
+#define PCA57_CPU		10	/* PCA57 (21164notyet)	*/
 
 /*
  * DEC system types for Alpha systems.  Found in HWRPB.

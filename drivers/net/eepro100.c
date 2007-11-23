@@ -42,7 +42,7 @@ static int rxdmacount = 0;
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx method.
    Lower values use more memory, but are faster. */
-#ifdef __alpha__
+#if defined(__alpha__) || defined(__sparc__)
 /* force copying of all packets to avoid unaligned accesses on Alpha */
 static int rx_copybreak = 1518;
 #else
@@ -366,7 +366,7 @@ enum commands {
 #if defined(__LITTLE_ENDIAN)
 #define clear_suspend(cmd)  ((__u16 *)&(cmd)->cmd_status)[1] &= ~0x4000
 #elif defined(__BIG_ENDIAN)
-#define clear_suspend(cmd)  ((__u16 *)&(cmd)->cmd_status)[0] &= ~0x4000
+#define clear_suspend(cmd)  ((__u16 *)&(cmd)->cmd_status)[1] &= ~0x0040
 #else
 #error Unsupported byteorder
 #endif
@@ -480,7 +480,7 @@ struct speedo_private {
 	struct timer_list timer;	/* Media selection timer. */
 	struct speedo_mc_block *mc_setup_head;/* Multicast setup frame list head. */
 	struct speedo_mc_block *mc_setup_tail;/* Multicast setup frame list tail. */
-	int in_interrupt;					/* Word-aligned dev->interrupt */
+	long in_interrupt;					/* Word-aligned dev->interrupt */
 	char rx_mode;						/* Current PROMISC/ALLMULTI setting. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
@@ -587,11 +587,19 @@ int eepro100_init(void)
 			ioaddr = pciaddr & ~3UL;
 			if (check_region(ioaddr, 32))
 				continue;
-		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
+		} else 
+#ifdef __sparc__
+		{
+			/* ioremap is hosed in 2.2.x on Sparc. */
+			ioaddr = pciaddr & ~0xfUL;
+		}
+#else
+		if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
 			printk(KERN_INFO "Failed to map PCI address %#lx.\n",
 				   pciaddr);
 			continue;
 		}
+#endif
 		if (speedo_debug > 2)
 			printk("Found Intel i82557 PCI Speedo at I/O %#lx, IRQ %d.\n",
 				   ioaddr, irq);

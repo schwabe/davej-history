@@ -320,7 +320,7 @@ __EXTERN_INLINE void * tsunami_bus_to_virt(unsigned long address)
 /*
  * I/O functions:
  *
- * TSUNAMI, the 21??? PCI/memory support chipset for the EV6 (21264)
+ * TSUNAMI, the 21272 PCI/memory support chipset for the EV6 (21264)
  * can only use linear accesses to get at PCI memory and I/O spaces.
  */
 

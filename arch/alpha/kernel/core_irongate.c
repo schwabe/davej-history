@@ -301,35 +301,21 @@ irongate_register_dump(const char *function_name)
 void __init
 irongate_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
-	struct linux_hose_info *hose;
-
 	irongate_register_dump(__FUNCTION__);
-
-	/* Align memory to cache line; we'll be allocating from it. */
-
-	*mem_start = (*mem_start | 31) + 1;
-
-	/*
-	 * Irongate only supports one PCI bus but do the hose thing anyway.
-	 * Anything to do for AGP???
-	 */
-
-	hose = (struct linux_hose_info *) *mem_start;
-	*mem_start = (unsigned long)(hose + 1);
-	memset(hose, 0, sizeof(*hose));
-	hose->pci_io_space = IRONGATE_IO;
-	hose->pci_mem_space = IRONGATE_MEM;
-	hose->pci_config_space = IRONGATE_CONF;
-	hose->pci_sparse_space = 0;
-	hose->pci_hose_index = 0;
-
-	/* add it to the hose list for bios32.[ch] */
-
-	*hose_tail = hose;
-	hose_tail = &hose->next;
 
 	IRONGATE0->stat_cmd = IRONGATE0->stat_cmd & ~0x100;
 	irongate_pci_clr_err();
+
+	/* Tell userland where I/O space is located.  For some reason,
+	   the 40-bit PIO bias that we use in the kernel through KSEG
+	   didn't work for the page table based user mappings.  So make
+	   sure we get the 43-bit PIO bias.  */
+	default_hose.pci_sparse_io_space = 0;
+	default_hose.pci_sparse_mem_space = 0;
+	default_hose.pci_dense_io_space
+	  = (IRONGATE_IO & 0xffffffffff) | 0x80000000000;
+	default_hose.pci_dense_mem_space
+	  = (IRONGATE_MEM & 0xffffffffff) | 0x80000000000;
 }
 
 int

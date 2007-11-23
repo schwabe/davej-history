@@ -329,7 +329,8 @@ struct i2o_pci
 {
 	int irq;
 #ifdef CONFIG_MTRR
-	int mtrr_reg;
+	int mtrr_reg0;
+	int mtrr_reg1;
 #endif
 };
 

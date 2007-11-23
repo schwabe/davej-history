@@ -308,6 +308,12 @@
 #define __NR_capget			368
 #define __NR_capset			369
 #define __NR_sendfile			370
+#define __NR_setresgid			371	/* implemented in 2.3 */
+#define __NR_getresgid			372	/* implemented in 2.3 */
+#define __NR_dipc			373	/* implemented in 2.3 */
+#define __NR_pivot_root			374	/* implemented in 2.3 */
+#define __NR_mincore			375	/* implemented in 2.3 */
+#define __NR_pciconfig_iobase		376
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

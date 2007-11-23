@@ -164,3 +164,4 @@ extern int common_swizzle(struct pci_dev *dev, int *pinp);
 extern struct linux_hose_info *hose_head, **hose_tail;
 extern int hose_count;
 extern int pci_probe_enabled;
+extern struct linux_hose_info default_hose;

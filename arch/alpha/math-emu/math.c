@@ -159,8 +159,7 @@ alpha_fp_emul (unsigned long pc)
 	FP_DECL_S(SA); FP_DECL_S(SB); FP_DECL_S(SR);
 	FP_DECL_D(DA); FP_DECL_D(DB); FP_DECL_D(DR);
 
-	unsigned long fa, fb, fc, func, mode, src;
-	unsigned long fpcw = current->tss.flags;
+	unsigned long fa, fb, fc, func, mode, src, swcr;
 	unsigned long res, va, vb, vc, fpcr;
 	__u32 insn;
 
@@ -175,10 +174,11 @@ alpha_fp_emul (unsigned long pc)
 	mode   = (insn >> 11) & 0x3;
 	
 	fpcr = rdfpcr();
+	swcr = swcr_update_status(current->tss.flags, fpcr);
 
 	if (mode == 3) {
-	    /* Dynamic -- get rounding mode from fpcr.  */
-	    mode = (fpcr >> FPCR_DYN_SHIFT) & 3;
+		/* Dynamic -- get rounding mode from fpcr.  */
+		mode = (fpcr >> FPCR_DYN_SHIFT) & 3;
 	}
 
 	switch (src) {
@@ -231,9 +231,14 @@ alpha_fp_emul (unsigned long pc)
 			}
 			FP_CMP_D(res, DA, DB, 3);
 			vc = 0x4000000000000000;
-			/* CMPTEQ, CMPTUN don't trap on QNaN, while CMPTLT and CMPTLE do */
-			if (res == 3 && ((func & 3) >= 2 || FP_ISSIGNAN_D(DA) || FP_ISSIGNAN_D(DB)))
+			/* CMPTEQ, CMPTUN don't trap on QNaN,
+			   while CMPTLT and CMPTLE do */
+			if (res == 3
+			    && ((func & 3) >= 2
+				|| FP_ISSIGNAN_D(DA)
+				|| FP_ISSIGNAN_D(DB))) {
 				FP_SET_EXCEPTION(FP_EX_INVALID);
+			}
 			switch (func) {
 			case FOP_FNC_CMPxUN: if (res != 3) vc = 0; break;
 			case FOP_FNC_CMPxEQ: if (res) vc = 0; break;
@@ -285,9 +290,11 @@ alpha_fp_emul (unsigned long pc)
 			}
 
 		case FOP_FNC_CVTxQ:
-			if (DB_c == FP_CLS_NAN && (_FP_FRAC_HIGH_RAW_D(DB) & _FP_QNANBIT_D))
-				vc = 0; /* AAHB Table B-2 sais QNaN should not trigger INV */
-			else
+			if (DB_c == FP_CLS_NAN
+			    && (_FP_FRAC_HIGH_RAW_D(DB) & _FP_QNANBIT_D)) {
+			  /* AAHB Table B-2 says QNaN should not trigger INV */
+				vc = 0;
+			} else
 				FP_TO_INT_ROUND_D(vc, DB, 64, 2);
 			goto done_d;
 		}
@@ -321,11 +328,15 @@ alpha_fp_emul (unsigned long pc)
 
 pack_s:
 	FP_PACK_SP(&vc, SR);
+	if ((_fex & FP_EX_UNDERFLOW) && (swcr & IEEE_MAP_UMZ))
+		vc = 0;
 	alpha_write_fp_reg_s(fc, vc);
 	goto done;
 
 pack_d:
 	FP_PACK_DP(&vc, DR);
+	if ((_fex & FP_EX_UNDERFLOW) && (swcr & IEEE_MAP_UMZ))
+		vc = 0;
 done_d:
 	alpha_write_fp_reg(fc, vc);
 	goto done;
@@ -345,16 +356,16 @@ done_d:
 done:
 	if (_fex) {
 		/* Record exceptions in software control word.  */
-		current->tss.flags
-		  = fpcw |= (_fex << IEEE_STATUS_TO_EXCSUM_SHIFT);
+		swcr |= (_fex << IEEE_STATUS_TO_EXCSUM_SHIFT);
+		current->tss.flags |= (_fex << IEEE_STATUS_TO_EXCSUM_SHIFT);
 
 		/* Update hardware control register */
 		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
-		fpcr |= ieee_swcr_to_fpcr(fpcw);
+		fpcr |= ieee_swcr_to_fpcr(swcr);
 		wrfpcr(fpcr);
 
 		/* Do we generate a signal?  */
-		if (_fex & fpcw & IEEE_TRAP_ENABLE_MASK) {
+		if (_fex & swcr & IEEE_TRAP_ENABLE_MASK) {
 			MOD_DEC_USE_COUNT;
 			return 0;
 		}

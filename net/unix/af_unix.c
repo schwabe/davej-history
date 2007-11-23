@@ -969,6 +969,10 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			return -ENOTCONN;
 	}
 
+	err = -EMSGSIZE;
+	if (len > sk->sndbuf)
+		goto out;
+
 	if (sock->passcred && !sk->protinfo.af_unix.addr)
 		unix_autobind(sock);
 

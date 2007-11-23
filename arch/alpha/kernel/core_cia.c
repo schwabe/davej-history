@@ -16,6 +16,7 @@
 
 #include <asm/system.h>
 #include <asm/ptrace.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -23,6 +24,7 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "bios32.h"
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
@@ -580,6 +582,12 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 		*((vuip)CIA_IOC_HAE_IO) = 0; mb();
 		*((vuip)CIA_IOC_HAE_IO);  /* read it back. */
         }
+
+	/* Tell userland where I/O space is located.  */
+	default_hose.pci_sparse_io_space = CIA_IO - IDENT_ADDR;
+	default_hose.pci_sparse_mem_space = CIA_SPARSE_MEM - IDENT_ADDR;
+	default_hose.pci_dense_io_space = 0;
+	default_hose.pci_dense_mem_space = CIA_DENSE_MEM - IDENT_ADDR;
 }
 
 void

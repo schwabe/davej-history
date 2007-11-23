@@ -57,6 +57,7 @@
 
 asmlinkage int sys_pciconfig_read() { return -ENOSYS; }
 asmlinkage int sys_pciconfig_write() { return -ENOSYS; }
+asmlinkage long sys_pciconfig_iobase() { return -ENOSYS; }
 void reset_for_srm(void) { }
 
 #else /* CONFIG_PCI */
@@ -93,6 +94,14 @@ pcibios_present(void)
 void __init
 pcibios_init(void)
 {
+	long i;
+
+	/* For the benefit of single-bus machines, emulate a multi-bus
+	   machine to the (limited) extent necessary.  Init all bus2hose
+	   entries to point to a dummy.  */
+	for (i = 0; i < 256; ++i)
+		bus2hose[i] = &default_hose;
+
 	if (!pcibios_present())
 		return;
 
@@ -278,6 +287,34 @@ sys_pciconfig_write(unsigned long bus, unsigned long dfn,
 		break;
 	}
 	return err;
+}
+
+/* Provide information on locations of various I/O regions in physical
+   memory.  Do this on a per-card basis so that we choose the right hose.  */
+
+asmlinkage long
+sys_pciconfig_iobase(long which, unsigned long bus, unsigned long dfn)
+{
+	struct linux_hose_info *hose;
+
+	hose = bus2hose[bus & 255];
+	if (!hose)
+		return -ENODEV;
+
+	switch (which) {
+	case IOBASE_HOSE:
+		return hose->pci_hose_index;
+	case IOBASE_SPARSE_MEM:
+		return hose->pci_sparse_mem_space;
+	case IOBASE_DENSE_MEM:
+		return hose->pci_dense_mem_space;
+	case IOBASE_SPARSE_IO:
+		return hose->pci_sparse_io_space;
+	case IOBASE_DENSE_IO:
+		return hose->pci_dense_io_space;
+	}
+
+	return -EOPNOTSUPP;
 }
 
 
@@ -1342,13 +1379,6 @@ layout_hoses(void)
 
 		for (hose = hose_head; hose; hose = hose->next)
 			layout_one_hose(hose);
-	} else {
-		/* For the benefit of single-bus machines, emulate a
-		   multi-bus machine to the (limited) extent necessary. 
-		   Init all bus2hose entries to point to a dummy.  */
-		hose = &default_hose;
-		for (i = 0; i < 256; ++i)
-			bus2hose[i] = hose;
 	}
 }
 

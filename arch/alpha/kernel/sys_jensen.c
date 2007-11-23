@@ -31,6 +31,11 @@
 #include "irq.h"
 #include "machvec.h"
 
+#ifdef CONFIG_PCI
+#include <asm/pci.h>
+#include "bios32.h"
+#endif
+
 
 static void
 jensen_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
@@ -116,6 +121,18 @@ jensen_machine_check (u64 vector, u64 la, struct pt_regs *regs)
 	printk(KERN_CRIT "Machine check\n");
 }
 
+static void __init
+jensen_init_arch(void)
+{
+#ifdef CONFIG_PCI
+	/* Tell userland where I/O space is located.  */
+	default_hose.pci_sparse_io_space = EISA_IO - IDENT_ADDR;
+	default_hose.pci_sparse_mem_space = EISA_MEM - IDENT_ADDR;
+	default_hose.pci_dense_io_space = 0;
+	default_hose.pci_dense_mem_space = 0;
+#endif
+}
+
 
 /*
  * The System Vector
@@ -136,7 +153,7 @@ struct alpha_machine_vector jensen_mv __initmv = {
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	jensen_device_interrupt,
 
-	init_arch:		NULL,
+	init_arch:		jensen_init_arch,
 	init_irq:		jensen_init_irq,
 	init_pit:		generic_init_pit,
 	kill_arch:		generic_kill_arch,

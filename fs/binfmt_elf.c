@@ -489,7 +489,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  	if (elf_interpreter ||
 			    elf_ppnt->p_filesz < 2 ||
 			    elf_ppnt->p_filesz > PAGE_SIZE)
-				goto out_free_interp;
+				goto out_free_dentry;
 
 			/* This is the program interpreter used for
 			 * shared libraries - for now assume that this
@@ -526,12 +526,12 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 					
 				current->personality = PER_SVR4;
 				interpreter_dentry = open_namei(elf_interpreter,
-								0, 0);
+								1, 0);
 				current->personality = old_pers;
 			} else
 #endif					
 				interpreter_dentry = open_namei(elf_interpreter,
-								0, 0);
+								1, 0);
 			set_fs(old_fs);
 			retval = PTR_ERR(interpreter_dentry);
 			if (IS_ERR(interpreter_dentry))

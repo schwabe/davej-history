@@ -98,12 +98,12 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, struct linux_hose_info *hose,
 		 "pci_addr=0x%p, type1=0x%p)\n",
 		 bus, device_fn, where, pci_addr, type1));
 
-        *type1 = (bus != 0);
+	*type1 = (bus != 0);
 
-        if (hose->pci_first_busno == bus)
+	if (hose->pci_first_busno == bus)
 		bus = 0;
 
-        addr = (bus << 16) | (device_fn << 8) | where;
+	addr = (bus << 16) | (device_fn << 8) | where;
 	addr |= hose->pci_config_space;
 		
 	*pci_addr = addr;
@@ -266,11 +266,19 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index,
 	*hose_tail = hose;
 	hose_tail = &hose->next;
 
-	hose->pci_io_space = TSUNAMI_IO(index);
-	hose->pci_mem_space = TSUNAMI_MEM(index);
 	hose->pci_config_space = TSUNAMI_CONF(index);
-	hose->pci_sparse_space = 0;
 	hose->pci_hose_index = index;
+
+	/* This is for userland consumption.  For some reason, the 40-bit
+	   PIO bias that we use in the kernel through KSEG didn't work for
+	   the page table based user mappings.  So make sure we get the
+	   43-bit PIO bias.  */
+	hose->pci_sparse_io_space = 0;
+	hose->pci_sparse_mem_space = 0;
+	hose->pci_dense_io_space
+	  = (TSUNAMI_IO(index) & 0xffffffffff) | 0x80000000000;
+	hose->pci_dense_mem_space
+	  = (TSUNAMI_MEM(index) & 0xffffffffff) | 0x80000000000;
 
 	switch (alpha_use_srm_setup)
 	{
@@ -329,7 +337,7 @@ tsunami_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
 	extern asmlinkage void entInt(void);
-        unsigned long tmp;
+	unsigned long tmp;
 	
 	/* Ho hum.. init_arch is called before init_IRQ, but we need to be
 	   able to handle machine checks.  So install the handler now.  */

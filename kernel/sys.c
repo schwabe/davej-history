@@ -807,6 +807,27 @@ out:
 	return 1;
 }
 
+/* Like in_group_p, but testing against egid, not fsgid */
+
+int in_egroup_p(gid_t grp)
+{
+	if (grp != current->egid) {
+		int i = current->ngroups;
+		if (i) {
+			gid_t *groups = current->groups;
+			do {
+				if (*groups == grp)
+					goto out;
+				groups++;
+				i--;
+			} while (i);
+		}
+		return 0;
+	}
+out:
+	return 1;
+}
+
 /*
  * This should really be a blocking read-write lock
  * rather than a semaphore. Anybody want to implement

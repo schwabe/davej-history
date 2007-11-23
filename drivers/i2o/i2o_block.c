@@ -705,6 +705,9 @@ static int i2ob_release(struct inode *inode, struct file *file)
 		 */
 		u32 msg[5];
 		int *query_done = &dev->done_flag;
+
+		fsync_dev(inode->i_rdev);
+
 		msg[0] = FIVE_WORD_MSG_SIZE|SGL_OFFSET_0;
 		msg[1] = I2O_CMD_BLOCK_CFLUSH<<24|HOST_TID<<12|dev->tid;
 		msg[2] = i2ob_context|0x40000000;

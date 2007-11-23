@@ -18,6 +18,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE
 #include <asm/io.h>
@@ -25,6 +26,7 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "bios32.h"
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
@@ -477,6 +479,12 @@ t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 		*(vulp)T2_HAE_4 = 0; mb(); /* do not touch this */
 #endif
 	}
+
+	/* Tell userland where I/O space is located.  */
+	default_hose.pci_sparse_io_space = T2_IO - IDENT_ADDR;
+	default_hose.pci_sparse_mem_space = T2_SPARSE_MEM - IDENT_ADDR;
+	default_hose.pci_dense_io_space = 0;
+	default_hose.pci_dense_mem_space = T2_DENSE_MEM - IDENT_ADDR;
 }
 
 #define SIC_SEIC (1UL << 33)    /* System Event Clear */

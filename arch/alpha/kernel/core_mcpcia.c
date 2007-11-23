@@ -328,13 +328,16 @@ mcpcia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 
 		mcpcia_hoses[h] = hose;
 
-		hose->pci_io_space = MCPCIA_IO(h);
-		hose->pci_mem_space = MCPCIA_DENSE(h);
 		hose->pci_config_space = MCPCIA_CONF(h);
-		hose->pci_sparse_space = MCPCIA_SPARSE(h);
 		hose->pci_hose_index = h;
 		hose->pci_first_busno = 255;
 		hose->pci_last_busno = 0;
+
+		/* Tell userland where I/O space is located.  */
+		hose->pci_sparse_io_space = MCPCIA_IO(h) - IDENT_ADDR;
+		hose->pci_sparse_mem_space = MCPCIA_SPARSE(h) - IDENT_ADDR;
+		hose->pci_dense_io_space = 0;
+		hose->pci_dense_mem_space = MCPCIA_DENSE(h) - IDENT_ADDR;
 	}
 
 #if 1

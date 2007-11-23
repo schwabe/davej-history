@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.26.2.1 1999/09/22 11:37:38 jj Exp $
+/* $Id: sys_sparc.c,v 1.26.2.2 2000/03/24 00:03:27 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -211,6 +211,13 @@ c_sys_nis_syscall (struct pt_regs *regs)
 	show_regs (regs);
 #endif
 	unlock_kernel();
+	return -ENOSYS;
+}
+
+/* We don't want to warn about LFS syscalls which are defined in our headers */
+asmlinkage unsigned long
+sys_lfs_syscall (void)
+{
 	return -ENOSYS;
 }
 

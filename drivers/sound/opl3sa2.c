@@ -4,7 +4,7 @@
  * A low level driver for Yamaha OPL3-SA2 and SA3 cards.
  * SAx cards should work, as they are just variants of the SA3.
  *
- * Copyright 1998, 1999 Scott Murray <scottm@interlog.com>
+ * Copyright 1998, 1999, 2000 Scott Murray <scott@spiteful.org>
  *
  * Originally based on the CS4232 driver (in cs4232.c) by Hannu Savolainen
  * and others.  Now incorporates code/ideas from pss.c, also by Hannu
@@ -32,6 +32,7 @@
  * Scott Murray            Simpler detection code should work all the time now
  *                         (with thanks to Ben Hutchings for the heuristic),
  *                         removed now unnecessary force option. (Jan 5, 1999)
+ * Scott Murray            Updated e-mail address. (Mar 18, 2000)
  *
  */
 
@@ -648,7 +649,7 @@ MODULE_PARM(dma2, "i");
 MODULE_PARM_DESC(dma2, "Set MSS (audio) second DMA channel (0, 1, 3)");
 
 MODULE_DESCRIPTION("Module for OPL3-SA2 and SA3 sound cards (uses AD1848 MSS driver).");
-MODULE_AUTHOR("Scott Murray <scottm@interlog.com>");
+MODULE_AUTHOR("Scott Murray <scott@spiteful.org>");
 
 EXPORT_NO_SYMBOLS;
 

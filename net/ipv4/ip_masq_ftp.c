@@ -16,7 +16,7 @@
  * 	Juan Jose Ciarlante	:	Litl bits for 2.1
  *	Juan Jose Ciarlante	:	use ip_masq_listen() 
  *	Juan Jose Ciarlante	: 	use private app_data for own flag(s)
- *
+ *  Bjarni R. Einarsson :	Added protection against "extended FTP ALG attack"
  *
  *
  *	This program is free software; you can redistribute it and/or
@@ -34,7 +34,21 @@
  *	/etc/conf.modules (or /etc/modules.conf depending on your config)
  *	where modload will pick it up should you use modload to load your
  *	modules.
- *	
+ * 
+ * Protection against the "extended FTP ALG vulnerability".
+ *	This vulnerability was reported in:
+ *
+ *	http://www.securityfocus.com/templates/archive.pike?list=82&date=2000-03-08&msg=38C8C8EE.544524B1@enternet.se
+ * 
+ *	The protection here is very simplistic, but it at least denies access 
+ *	to all ports under 1024, and allows the user to specify an additional 
+ *	list of high ports on the insmod command line, like this:
+ *		noport=x1,x2,x3, ...
+ *	Up to MAX_MASQ_APP_PORTS (normally 12) ports may be specified, the 
+ *	default blocks access to the X server (port 6000) only.
+ * 
+ *	Patch by Bjarni R. Einarsson <bre@netverjar.is>.  The original patch is
+ *	available at: http://bre.klaki.net/programs/ip_masq_ftp.2000-03-20.diff
  */
 
 #include <linux/config.h>
@@ -61,6 +75,13 @@ static int ports[MAX_MASQ_APP_PORTS] = {21}; /* I rely on the trailing items bei
 struct ip_masq_app *masq_incarnations[MAX_MASQ_APP_PORTS];
 
 /*
+ * List of ports (up to MAX_MASQ_APP_PORTS) we don't allow ftp-data 
+ * connections to.  Default is to block connections to port 6000 (X servers).
+ * This is in addition to all ports under 1024.
+ */
+static int noport[MAX_MASQ_APP_PORTS] = {6000, 0}; /* I rely on the trailing items being set to zero */
+
+/*
  *	Debug level
  */
 #ifdef CONFIG_IP_MASQ_DEBUG
@@ -69,6 +90,7 @@ MODULE_PARM(debug, "i");
 #endif
 
 MODULE_PARM(ports, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
+MODULE_PARM(noport, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
 
 /*	Dummy variable */
 static int masq_ftp_pasv;
@@ -100,7 +122,7 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 	struct ip_masq *n_ms;
 	char buf[24];		/* xxx.xxx.xxx.xxx,ppp,ppp\000 */
         unsigned buf_len;
-	int diff;
+	int diff, i, unsafe;
 
         skb = *skb_p;
 	iph = skb->nh.iph;
@@ -140,6 +162,20 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 
 		from = (p1<<24) | (p2<<16) | (p3<<8) | p4;
 		port = (p5<<8) | p6;
+
+		if (port < 1024) 
+		{
+			IP_MASQ_DEBUG(1-debug, "Unsafe PORT %X:%X detected, ignored\n",from,port);
+			continue;
+		}
+
+		for (unsafe = i = 0; (i < MAX_MASQ_APP_PORTS) && (noport[i]); i++)
+		  if (port == noport[i])
+		{
+			IP_MASQ_DEBUG(1-debug, "Unsafe PORT %X:%X detected, ignored\n",from,port);
+			unsafe = 1;
+		}
+		if (unsafe) continue;
 
 		IP_MASQ_DEBUG(1-debug, "PORT %X:%X detected\n",from,port);
 

@@ -193,6 +193,12 @@ polaris_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 #if 0
 	printk("polaris_init_arch(): trusting firmware for setup\n");
 #endif
+
+	/* Tell userland where I/O space is located.  */
+	default_hose.pci_sparse_io_space = 0;
+	default_hose.pci_sparse_mem_space = 0;
+	default_hose.pci_dense_io_space = POLARIS_DENSE_IO_BASE - IDENT_ADDR;
+	default_hose.pci_dense_mem_space = POLARIS_DENSE_MEM_BASE - IDENT_ADDR;
 }
 
 int polaris_pci_clr_err(void)
