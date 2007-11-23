@@ -10125,14 +10125,13 @@ static void ncr_sir_task_recovery(ncb_p np, int num)
 				if (i >= MAX_START*2)
 					i = 0;
 			}
-			assert(k != -1);
-			if (k != 1) {
+			if (k != -1) {
 				np->squeue[k] = np->squeue[i]; /* Idle task */
 				np->squeueput = k; /* Start queue pointer */
-				cp->host_status = HS_ABORTED;
-				cp->scsi_status = S_ILLEGAL;
-				ncr_complete(np, cp);
 			}
+			cp->host_status = HS_ABORTED;
+			cp->scsi_status = S_ILLEGAL;
+			ncr_complete(np, cp);
 		}
 		break;
 	/*

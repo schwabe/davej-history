@@ -3,7 +3,7 @@
 
 #include <linux/config.h>
 #include <linux/pci.h>
-
+#include <linux/errno.h>
 
 /*
  * The following structure is used to manage multiple PCI busses.
@@ -59,7 +59,7 @@ static __inline__ int pci_controller_num(struct pci_dev *pdev)
 	if (bus2hose[pdev->bus->number] == NULL)
 		return -ENXIO;
 
-	return bus2hose[pdev->bus->number]->pci_host_index;
+	return bus2hose[pdev->bus->number]->pci_hose_index;
 }
 
 #endif /* __ALPHA_PCI_H */

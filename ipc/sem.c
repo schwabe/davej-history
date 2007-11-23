@@ -229,7 +229,19 @@ static int try_atomic_semop (struct semid_ds * sma, struct sembuf * sops,
 		curr->sempid = (curr->sempid << 16) | pid;
 		curr->semval += sem_op;
 		if (sop->sem_flg & SEM_UNDO)
-			un->semadj[sop->sem_num] -= sem_op;
+		{
+			int undo = un->semadj[sop->sem_num] - sem_op;
+			/*
+			*      Exceeding the undo range is an error.
+			*/
+			if(undo < (-SEMAEM - 1) || undo > SEMAEM)
+			{
+				/* Don't undo the undo */
+				sop->sem_flg &= ~SEM_UNDO;
+				goto out_of_range;
+			}
+			un->semadj[sop->sem_num] = undo;
+		}
 
 		if (curr->semval < 0)
 			goto would_block;

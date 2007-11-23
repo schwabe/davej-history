@@ -149,7 +149,8 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order, unsi
 	 * local since we must deal with fragmentation too and we
 	 * can't rely on the nr_local_pages information.
 	 */
-	if (current->nr_local_pages && !current->allocation_order)
+	if ((current->nr_local_pages && !current->allocation_order) ||
+	    in_interrupt())
 		goto back_local_freelist;
 
 	page = mem_map + map_nr;

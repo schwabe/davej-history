@@ -239,6 +239,7 @@ typedef unsigned int  u32;
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/processor.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -1463,7 +1464,7 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
       command |= PCI_COMMAND_MASTER|PCI_COMMAND_IO;
       pci_write_config_word(pdev, PCI_COMMAND, command);
 
-      if (io_port >= 0x10000000 && is_prep ) {
+      if (io_port >= 0x10000000 && (_machine == _MACH_prep)) {
 	      /* Mapping on PowerPC can't handle this! */
 	      unsigned long new_io_port;
 	      new_io_port = (io_port & 0x00FFFFFF) | 0x01000000;

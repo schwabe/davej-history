@@ -4,6 +4,7 @@
    Written By: Adam Radford <linux@3ware.com>
    Modifications By: Joel Jacobson <linux@3ware.com>
 		     Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+                     Brad Strand <linux@3ware.com>
 
    Copyright (C) 1999-2001 3ware Inc.
 
@@ -98,6 +99,11 @@
                  Fix possible null pointer dereference in tw_aen_drain_queue()
                  during initialization.
                  Clear pci parity errors during initialization and during io.
+   1.02.00.009 - Remove redundant increment in tw_state_request_start().
+                 Add ioctl support for direct ATA command passthru.
+                 Add entire aen code string list.
+   1.02.00.010 - Cleanup queueing code, fix jbod throughput.
+                 Fix get_param for specific units.
 */
 
 #include <linux/module.h>
@@ -149,7 +155,7 @@ struct proc_dir_entry tw_scsi_proc_entry = {
 };
 
 /* Globals */
-char *tw_driver_version="1.02.00.008";
+char *tw_driver_version="1.02.00.010";
 TW_Device_Extension *tw_device_extension_list[TW_MAX_SLOT];
 int tw_device_extension_count = 0;
 
@@ -170,21 +176,17 @@ int tw_aen_complete(TW_Device_Extension *tw_dev, int request_id)
 	dprintk(KERN_NOTICE "3w-xxxx: tw_aen_complete(): Queue'd code 0x%x\n", aen);
 
 	/* Print some useful info when certain aen codes come out */
-	switch (aen & 0x0ff) {
-		case TW_AEN_APORT_TIMEOUT:
-			printk(KERN_WARNING "3w-xxxx: scsi%d: Received drive timeout AEN on port %d, check drive and drive cables.\n", tw_dev->host->host_no, aen >> 8);
-		break;
-		case TW_AEN_DRIVE_ERROR:
-			printk(KERN_WARNING "3w-xxxx: scsi%d: Received drive error AEN on port %d, check/replace cabling, or possible bad drive.\n", tw_dev->host->host_no, aen >> 8);
-			break;
-		case TW_AEN_SMART_FAIL:
-			printk(KERN_WARNING "3w-xxxx: scsi%d: Received S.M.A.R.T. threshold AEN on port %d, check drive/cooling, or possible bad drive.\n", tw_dev->host->host_no, aen >> 8);
-			break;
-		case TW_AEN_SBUF_FAIL:
-			printk(KERN_WARNING "3w-xxxx: scsi%d: Received SBUF integrity check failure AEN, reseat card or bad card.\n", tw_dev->host->host_no);
-			break;
-		default:
-			printk(KERN_WARNING "3w-xxxx: Received AEN 0x%x\n", aen);
+	if (aen == 0x0ff) {
+		printk(KERN_WARNING "3w-xxxx: scsi%d: AEN: AEN queue overflow.\n", tw_dev->host->host_no);
+	} else {
+		if ((aen & 0x0ff) < TW_AEN_STRING_MAX) {
+			if ((tw_aen_string[aen & 0xff][strlen(tw_aen_string[aen & 0xff])-1]) == '#') {
+				printk(KERN_WARNING "3w-xxxx: scsi%d: AEN: %s%d.\n", tw_dev->host->host_no, tw_aen_string[aen & 0xff], aen >> 8);
+			} else {
+				printk(KERN_WARNING "3w-xxxx: scsi%d: AEN: %s.\n", tw_dev->host->host_no, tw_aen_string[aen & 0xff]);
+			}
+		} else
+			printk(KERN_WARNING "3w-xxxx: scsi%d: Received AEN %d.\n", tw_dev->host->host_no, aen);
 	}
 
 	tw_dev->aen_count++;
@@ -236,7 +238,7 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 	response_que_addr = tw_dev->registers.response_que_addr;
 
 	if (tw_poll_status(tw_dev, TW_STATUS_ATTENTION_INTERRUPT, 15)) {
-		printk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): No attention interrupt for card %d\n", tw_device_extension_count);
+		dprintk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): No attention interrupt for card %d\n", tw_device_extension_count);
 		return 1;
 	}
 
@@ -292,7 +294,7 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 			mdelay(5);
 			status_reg_value = inl(status_reg_addr);
 			if (tw_check_bits(status_reg_value)) {
-				printk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): Unexpected bits.\n");
+				dprintk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): Unexpected bits.\n");
 				tw_decode_bits(tw_dev, status_reg_value);
 				return 1;
 			}
@@ -309,7 +311,8 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 				if (command_packet->status != 0) {
 					if (command_packet->flags != TW_AEN_TABLE_UNDEFINED) {
 						/* Bad response */
-						printk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+						dprintk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+						tw_decode_error(tw_dev, command_packet->status, command_packet->flags, command_packet->byte3.unit);
 						return 1;
 					} else {
 						/* We know this is a 3w-1x00, and doesn't support aen's */
@@ -429,7 +432,7 @@ int tw_aen_read_queue(TW_Device_Extension *tw_dev, int request_id)
 
 	status_reg_value = inl(status_reg_addr);
 	if (tw_check_bits(status_reg_value)) {
-		printk(KERN_WARNING "3w-xxxx: tw_aen_read_queue(): Unexpected bits.\n");
+		dprintk(KERN_WARNING "3w-xxxx: tw_aen_read_queue(): Unexpected bits.\n");
 		tw_decode_bits(tw_dev, status_reg_value);
 		return 1;
 	}
@@ -527,11 +530,11 @@ int tw_allocate_memory(TW_Device_Extension *tw_dev, int request_id, int size, in
 int tw_check_bits(u32 status_reg_value)
 {
 	if ((status_reg_value & TW_STATUS_EXPECTED_BITS) != TW_STATUS_EXPECTED_BITS) {  
-		printk(KERN_WARNING "3w-xxxx: tw_check_bits(): No expected bits (0x%x).\n", status_reg_value);
+		dprintk(KERN_WARNING "3w-xxxx: tw_check_bits(): No expected bits (0x%x).\n", status_reg_value);
 		return 1;
 	}
 	if ((status_reg_value & TW_STATUS_UNEXPECTED_BITS) != 0) {
-		printk(KERN_WARNING "3w-xxxx: tw_check_bits(): Found unexpected bits (0x%x).\n", status_reg_value);
+		dprintk(KERN_WARNING "3w-xxxx: tw_check_bits(): Found unexpected bits (0x%x).\n", status_reg_value);
 		return 1;
 	}
 
@@ -635,9 +638,13 @@ void tw_decode_error(TW_Device_Extension *tw_dev, unsigned char status, unsigned
                 case 0x51:
                         printk(KERN_WARNING "3w-xxxx: scsi%d: Unrecoverable drive error on unit %d, check/replace cabling, or possible bad drive.\n", tw_dev->host->host_no, unit);
                         break;
-                }
+		default:
+			printk(KERN_WARNING "3w-xxxx: scsi%d: Controller error: status = 0x%x, flags = 0x%x, unit #%d.\n", tw_dev->host->host_no, status, flags, unit);
+		}
                 break;
-        }
+	default:
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Controller error: status = 0x%x, flags = 0x%x, unit #%d.\n", tw_dev->host->host_no, status, flags, unit);
+	}
 } /* End tw_decode_error() */
 
 /* This function will disable interrupts on the controller */  
@@ -662,7 +669,7 @@ int tw_empty_response_que(TW_Device_Extension *tw_dev)
 	status_reg_value = inl(status_reg_addr);
 
 	if (tw_check_bits(status_reg_value)) {
-		printk(KERN_WARNING "3w-xxxx: tw_empty_response_queue(): Unexpected bits 1.\n");
+		dprintk(KERN_WARNING "3w-xxxx: tw_empty_response_queue(): Unexpected bits 1.\n");
 		tw_decode_bits(tw_dev, status_reg_value);
 		return 1;
 	}
@@ -671,7 +678,7 @@ int tw_empty_response_que(TW_Device_Extension *tw_dev)
 		response_que_value = inl(response_que_addr);
 		status_reg_value = inl(status_reg_addr);
 		if (tw_check_bits(status_reg_value)) {
-			printk(KERN_WARNING "3w-xxxx: tw_empty_response_queue(): Unexpected bits 2.\n");
+			dprintk(KERN_WARNING "3w-xxxx: tw_empty_response_queue(): Unexpected bits 2.\n");
 			tw_decode_bits(tw_dev, status_reg_value);
 			return 1;
 		}
@@ -817,9 +824,20 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 				continue;
 			}
 
-			/* Calculate max cmds per lun */
-			if (tw_dev->num_units > 0)
-				tw_host->cmd_per_lun = (TW_Q_LENGTH-2)/tw_dev->num_units;
+			/* Calculate max cmds per lun, and setup queues */
+			if (tw_dev->num_units > 0) {
+				if ((tw_dev->num_raid_five > 0) && (tw_dev->tw_pci_dev->device == TW_DEVICE_ID)) {
+					tw_host->cmd_per_lun = (TW_MAX_BOUNCEBUF-1)/tw_dev->num_units;
+					tw_dev->free_head = TW_Q_START;
+					tw_dev->free_tail = TW_MAX_BOUNCEBUF - 1;
+					tw_dev->free_wrap = TW_MAX_BOUNCEBUF - 1;
+				} else {
+					tw_host->cmd_per_lun = (TW_Q_LENGTH-1)/tw_dev->num_units;
+					tw_dev->free_head = TW_Q_START;
+					tw_dev->free_tail = TW_Q_LENGTH - 1;
+					tw_dev->free_wrap = TW_Q_LENGTH - 1;
+				}
+			}
 			
 			/* Register the card with the kernel SCSI layer */
 			host = scsi_register(tw_host, sizeof(TW_Device_Extension));
@@ -890,18 +908,19 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 /* This function will free up device extension resources */
 void tw_free_device_extension(TW_Device_Extension *tw_dev)
 {
-	int i, imax;
-	imax = TW_Q_LENGTH;
+	int i;
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_free_device_extension()\n");
 	/* Free command packet and generic buffer memory */
-	for (i=0;i<imax;i++) {
+	for (i=0;i<TW_Q_LENGTH;i++) {
 		if (tw_dev->command_packet_virtual_address[i]) 
 			kfree(tw_dev->command_packet_virtual_address[i]);
 
 		if (tw_dev->alignment_virtual_address[i])
 			kfree(tw_dev->alignment_virtual_address[i]);
 
+	}
+	for (i=0;i<TW_MAX_BOUNCEBUF;i++) {
 		if (tw_dev->bounce_buffer[i])
 			kfree(tw_dev->bounce_buffer[i]);
 	}
@@ -913,7 +932,7 @@ static int tw_halt(struct notifier_block *nb, ulong event, void *buf)
 	int i;
 	
 	for (i=0;i<tw_device_extension_count;i++) {
-		printk(KERN_NOTICE "3w-xxxx: Notifying card #%d\n", i);
+		printk(KERN_NOTICE "3w-xxxx: Shutting down card %d.\n", i);
 		tw_shutdown_device(tw_device_extension_list[i]);
 	}
 	unregister_reboot_notifier(&tw_notifier);
@@ -972,7 +991,7 @@ int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits)
 		mdelay(5);
 		status_reg_value = inl(status_reg_addr);
 		if (tw_check_bits(status_reg_value)) {
-			printk(KERN_WARNING "3w-xxxx: tw_initconnection(): Unexpected bits.\n");
+			dprintk(KERN_WARNING "3w-xxxx: tw_initconnection(): Unexpected bits.\n");
 			tw_decode_bits(tw_dev, status_reg_value);
 			return 1;
 		}
@@ -986,7 +1005,8 @@ int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits)
 			}
 			if (command_packet->status != 0) {
 				/* bad response */
-				printk(KERN_WARNING "3w-xxxx: tw_initconnection(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				dprintk(KERN_WARNING "3w-xxxx: tw_initconnection(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				tw_decode_error(tw_dev, command_packet->status, command_packet->flags, command_packet->byte3.unit);
 				return 1;
 			}
 			break;	/* Response was okay, so we exit */
@@ -1034,8 +1054,6 @@ int tw_initialize_device_extension(TW_Device_Extension *tw_dev)
 	tw_dev->num_units = 0;
 	tw_dev->num_aborts = 0;
 	tw_dev->num_resets = 0;
-	tw_dev->free_head = TW_Q_START;
-	tw_dev->free_tail = TW_Q_LENGTH - 1;
 	tw_dev->posted_request_count = 0;
 	tw_dev->max_posted_request_count = 0;
 	tw_dev->max_sgl_entries = 0;
@@ -1125,7 +1143,7 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 		mdelay(5);
 		status_reg_value = inl(status_reg_addr);
 		if (tw_check_bits(status_reg_value)) {
-			printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Unexpected bits.\n");
+			dprintk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Unexpected bits.\n");
 			tw_decode_bits(tw_dev, status_reg_value);
 			return 1;
 		}
@@ -1139,7 +1157,8 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 			}
 			if (command_packet->status != 0) {
 				/* bad response */
-				printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				dprintk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				tw_decode_error(tw_dev, command_packet->status, command_packet->flags, command_packet->byte3.unit);
 				return 1;
 			}
 			found = 1;
@@ -1228,7 +1247,7 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 			mdelay(5);
 			status_reg_value = inl(status_reg_addr);
 			if (tw_check_bits(status_reg_value)) {
-				printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Unexpected bits.\n");
+				dprintk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Unexpected bits.\n");
 				tw_decode_bits(tw_dev, status_reg_value);
 				return 1;
 			}
@@ -1242,7 +1261,8 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 				}
 				if (command_packet->status != 0) {
 				/* bad response */
-					printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+					dprintk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+					tw_decode_error(tw_dev, command_packet->status, command_packet->flags, command_packet->byte3.unit);
 					return 1;
 				}
 				found = 1;
@@ -1267,13 +1287,13 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 
 	/* Now allocate raid5 bounce buffers */
 	if ((num_raid_five != 0) && (tw_dev->tw_pci_dev->device == TW_DEVICE_ID)) {
-		for (i=0;i<TW_Q_LENGTH;i++) {
-			tw_allocate_memory(tw_dev, i, sizeof(TW_Sector)*128, 2);
+		for (i=0;i<TW_MAX_BOUNCEBUF;i++) {
+			tw_allocate_memory(tw_dev, i, sizeof(TW_Sector)*TW_MAX_SECTORS, 2);
 			if (tw_dev->bounce_buffer[i] == NULL) {
 				printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bounce buffer allocation failed.\n");
 				return 1;
 			}
-			memset(tw_dev->bounce_buffer[i], 0, sizeof(TW_Sector)*128);
+			memset(tw_dev->bounce_buffer[i], 0, sizeof(TW_Sector)*TW_MAX_SECTORS);
 		}
 	}
   
@@ -1330,7 +1350,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			tw_state_request_start(tw_dev, &request_id);
 			error = tw_aen_read_queue(tw_dev, request_id);
 			if (error) {
-				printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Error reading aen queue.\n");
+				printk(KERN_WARNING "3w-xxxx: scsi%d: Error reading aen queue.\n", tw_dev->host->host_no);
 				tw_dev->state[request_id] = TW_S_COMPLETED;
 				tw_state_request_finish(tw_dev, request_id);
 			}
@@ -1342,7 +1362,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			while (tw_dev->pending_request_count > 0) {
 				request_id = tw_dev->pending_queue[tw_dev->pending_head];
 				if (tw_dev->state[request_id] != TW_S_PENDING) {
-					printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Found request id that wasn't pending.\n");
+					printk(KERN_WARNING "3w-xxxx: scsi%d: Found request id that wasn't pending.\n", tw_dev->host->host_no);
 					break;
 				}
 				if (tw_post_command_packet(tw_dev, request_id)==0) {
@@ -1370,12 +1390,12 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				command_packet = (TW_Command *)tw_dev->command_packet_virtual_address[request_id];
 				error = 0;
 				if (command_packet->status != 0) {
-					printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Bad response, status = 0x%x, flags = 0x%x, unit = 0x%x.\n", command_packet->status, command_packet->flags, command_packet->byte3.unit);
+					dprintk(KERN_WARNING "3w-xxxx: tw_interrupt(): Bad response, status = 0x%x, flags = 0x%x, unit = 0x%x.\n", command_packet->status, command_packet->flags, command_packet->byte3.unit);
 					tw_decode_error(tw_dev, command_packet->status, command_packet->flags, command_packet->byte3.unit);
 					error = 1;
 				}
 				if (tw_dev->state[request_id] != TW_S_POSTED) {
-					printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Received a request id (%d) (opcode = 0x%x) that wasn't posted.\n", request_id, command_packet->byte0.opcode);
+					printk(KERN_WARNING "3w-xxxx: scsi%d: Received a request id (%d) (opcode = 0x%x) that wasn't posted.\n", tw_dev->host->host_no, request_id, command_packet->byte0.opcode);
 					error = 1;
 				}
 				if (TW_STATUS_ERRORS(status_reg_value)) {
@@ -1388,24 +1408,22 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					dprintk(KERN_WARNING "3w-xxxx: tw_interrupt(): Found internally posted command.\n");
 					error = tw_aen_complete(tw_dev, request_id);
 					if (error) {
-						printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Error completing aen.\n");
+						printk(KERN_WARNING "3w-xxxx: scsi%d: Error completing aen.\n", tw_dev->host->host_no);
 					}
 					status_reg_value = inl(status_reg_addr);
 					if (tw_check_bits(status_reg_value)) {
-						printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Unexpected bits.\n");
+						dprintk(KERN_WARNING "3w-xxxx: tw_interrupt(): Unexpected bits.\n");
 						tw_decode_bits(tw_dev, status_reg_value);
 					}
 		} else {
 				switch (tw_dev->srb[request_id]->cmnd[0]) {
 					case READ_10:
-						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught READ_10\n");
 					case READ_6:
-						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught READ_6\n");
+						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught READ_10/READ_6\n");
 						break;
 					case WRITE_10:
-						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught WRITE_10\n");
 					case WRITE_6:
-						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught WRITE_6\n");
+						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught WRITE_10/WRITE_6\n");
 						break;
 					case INQUIRY:
 						dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): caught INQUIRY\n");
@@ -1420,7 +1438,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 						error = tw_ioctl_complete(tw_dev, request_id);
 						break;
 					default:
-						printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Unknown scsi opcode: 0x%x.\n", tw_dev->srb[request_id]->cmnd[0]);
+						printk(KERN_WARNING "3w-xxxx: scsi%d: Unknown scsi opcode: 0x%x.\n", tw_dev->host->host_no, tw_dev->srb[request_id]->cmnd[0]);
 						tw_dev->srb[request_id]->result = (DID_BAD_TARGET << 16);
 						tw_dev->srb[request_id]->scsi_done(tw_dev->srb[request_id]);
 					}
@@ -1438,7 +1456,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					tw_dev->srb[request_id]->scsi_done(tw_dev->srb[request_id]);
 					status_reg_value = inl(status_reg_addr);
 					if (tw_check_bits(status_reg_value)) {
-						printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Unexpected bits.\n");
+						dprintk(KERN_WARNING "3w-xxxx: tw_interrupt(): Unexpected bits.\n");
 						tw_decode_bits(tw_dev, status_reg_value);
 					}
 				}
@@ -1458,6 +1476,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 	TW_Command *command_packet;
 	u32 param_value;
 	TW_Ioctl *ioctl = NULL;
+	TW_Passthru *passthru = NULL;
 	int tw_aen_code;
 
 	ioctl = (TW_Ioctl *)tw_dev->srb[request_id]->request_buffer;
@@ -1506,6 +1525,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 		case TW_OP_GET_PARAM:
 			dprintk(KERN_NOTICE "3w-xxxx: tw_ioctl(): caught TW_OP_GET_PARAM.\n");
 			command_packet->byte0.opcode = TW_OP_GET_PARAM;
+			command_packet->byte3.unit = ioctl->unit_index;
 			param->table_id = ioctl->table_id;
 			param->parameter_id = ioctl->parameter_id;
 			param->parameter_size_bytes = ioctl->parameter_size_bytes;
@@ -1549,6 +1569,25 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 			tw_dev->srb[request_id]->result = (DID_OK << 16);
 			tw_dev->srb[request_id]->scsi_done(tw_dev->srb[request_id]);
 			return 0;
+		case TW_ATA_PASSTHRU:
+			if (ioctl->data != NULL) {
+				memcpy(command_packet, ioctl->data, sizeof(TW_Command));
+				command_packet->request_id = request_id;
+			} else {
+				printk(KERN_WARNING "3w-xxxx: tw_ioctl(): ioctl->data NULL.\n");
+				return 1;
+			}
+
+			passthru = (TW_Passthru *)tw_dev->command_packet_virtual_address[request_id];
+			passthru->sg_list[0].length = passthru->sector_count*512;
+			if (passthru->sg_list[0].length > TW_MAX_PASSTHRU_BYTES) {
+				printk(KERN_WARNING "3w-xxxx: tw_ioctl(): Passthru size (%ld) too big.\n", passthru->sg_list[0].length);
+				return 1;
+			}
+			passthru->sg_list[0].address = virt_to_bus(tw_dev->alignment_virtual_address[request_id]);
+			tw_post_command_packet(tw_dev, request_id);
+                        return 0;
+
 		case TW_CMD_PACKET:
 			if (ioctl->data != NULL) {
 				memcpy(command_packet, ioctl->data, sizeof(TW_Command));
@@ -1583,7 +1622,6 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 	command_packet->byte0.sgl_offset = 2;
 	command_packet->size = 4;
 	command_packet->request_id = request_id;
-	command_packet->byte3.unit = 0;
 	command_packet->byte3.host_id = 0;
 	command_packet->status = 0;
 	command_packet->flags = 0;
@@ -1601,7 +1639,10 @@ int tw_ioctl_complete(TW_Device_Extension *tw_dev, int request_id)
 	unsigned char *param_data;
 	unsigned char *buff;
 	TW_Param *param;
+	TW_Ioctl *ioctl = NULL;
+	TW_Passthru *passthru = NULL;
 
+	ioctl = (TW_Ioctl *)tw_dev->srb[request_id]->request_buffer;
 	dprintk(KERN_NOTICE "3w-xxxx: tw_ioctl_complete()\n");
 	buff = tw_dev->srb[request_id]->request_buffer;
 	if (buff == NULL) {
@@ -1609,16 +1650,23 @@ int tw_ioctl_complete(TW_Device_Extension *tw_dev, int request_id)
 		return 1;
 	}
 	dprintk(KERN_NOTICE "3w-xxxx: tw_ioctl_complete(): Request_bufflen = %d\n", tw_dev->srb[request_id]->request_bufflen);
-	memset(buff, 0, tw_dev->srb[request_id]->request_bufflen);
-	param = (TW_Param *)tw_dev->alignment_virtual_address[request_id];
-	if (param == NULL) {
-		printk(KERN_WARNING "3w-xxxx: tw_scsiop_read_capacity_complete(): Bad alignment virtual address.\n");
-		return 1;
+
+	ioctl = (TW_Ioctl *)buff;
+	switch (ioctl->opcode) {
+		case TW_ATA_PASSTHRU:
+			passthru = (TW_Passthru *)ioctl->data;
+			memcpy(buff, tw_dev->alignment_virtual_address[request_id], passthru->sector_count * 512);
+			break;
+		default:
+			memset(buff, 0, tw_dev->srb[request_id]->request_bufflen);
+			param = (TW_Param *)tw_dev->alignment_virtual_address[request_id];
+			if (param == NULL) {
+				printk(KERN_WARNING "3w-xxxx: tw_ioctl_complete(): Bad alignment virtual address.\n");
+				return 1;
+			}
+			param_data = &(param->data[0]);
+			memcpy(buff, param_data, tw_dev->ioctl_size[request_id]);
 	}
-	param_data = &(param->data[0]);
-
-	memcpy(buff, param_data, tw_dev->ioctl_size[request_id]);
-
 	return 0;
 } /* End tw_ioctl_complete() */
 
@@ -1646,7 +1694,7 @@ int tw_poll_status(TW_Device_Extension *tw_dev, u32 flag, int seconds)
 		status_reg_value = inl(status_reg_addr);
 		do_gettimeofday(&timeout);
 		if (before.tv_sec + seconds < timeout.tv_sec) { 
-			printk(KERN_WARNING "3w-xxxx: tw_poll_status(): Flag 0x%x not found.\n", flag);
+			dprintk(KERN_WARNING "3w-xxxx: tw_poll_status(): Flag 0x%x not found.\n", flag);
 			return 1;
 		}
 		mdelay(1);
@@ -1667,7 +1715,7 @@ int tw_post_command_packet(TW_Device_Extension *tw_dev, int request_id)
 	status_reg_value = inl(status_reg_addr);
 
 	if (tw_check_bits(status_reg_value)) {
-		printk(KERN_WARNING "3w-xxxx: tw_post_command_packet(): Unexpected bits.\n");
+		dprintk(KERN_WARNING "3w-xxxx: tw_post_command_packet(): Unexpected bits.\n");
 		tw_decode_bits(tw_dev, status_reg_value);
 	}
 
@@ -1711,7 +1759,7 @@ int tw_reset_device_extension(TW_Device_Extension *tw_dev)
 	imax = TW_Q_LENGTH;
 
 	if (tw_reset_sequence(tw_dev)) {
-		printk(KERN_WARNING "3w-xxxx: tw_reset_device_extension(): Reset sequence failed for card %d.\n", tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Reset sequence failed.\n", tw_dev->host->host_no);
 		return 1;
 	}
 
@@ -1758,14 +1806,14 @@ int tw_reset_sequence(TW_Device_Extension *tw_dev)
 
 		error = tw_aen_drain_queue(tw_dev);
 		if (error) {
-			printk(KERN_WARNING "3w-xxxx: tw_reset_sequence(): No attention interrupt for card %d.\n", tw_dev->host->host_no);
+			printk(KERN_WARNING "3w-xxxx: scsi%d: Card not responding, retrying.\n", tw_dev->host->host_no);
 			tries++;
 			continue;
 		}
 
 		/* Check for controller errors */
 		if (tw_check_errors(tw_dev)) {
-			printk(KERN_WARNING "3w-xxxx: tw_reset_sequence(): Controller errors found, soft resetting card %d.\n", tw_dev->host->host_no);
+			printk(KERN_WARNING "3w-xxxx: scsi%d: Controller errors found, retrying.\n", tw_dev->host->host_no);
 			tries++;
 			continue;
 		}
@@ -1773,7 +1821,7 @@ int tw_reset_sequence(TW_Device_Extension *tw_dev)
 		/* Empty the response queue again */
 		error = tw_empty_response_que(tw_dev);
 		if (error) {
-			printk(KERN_WARNING "3w-xxxx: tw_reset_sequence(): Couldn't empty response queue for card %d.\n", tw_dev->host->host_no);
+			printk(KERN_WARNING "3w-xxxx: scsi%d: Couldn't empty response queue, retrying.\n", tw_dev->host->host_no);
 			tries++;
 			continue;
 		}
@@ -1783,13 +1831,13 @@ int tw_reset_sequence(TW_Device_Extension *tw_dev)
 	}
 
 	if (tries >= TW_MAX_RESET_TRIES) {
-		printk(KERN_WARNING "3w-xxxx: tw_reset_sequence(): Controller error or no attention interrupt: giving up for card %d.\n", tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Controller errors, card not responding, check all cabling.\n", tw_dev->host->host_no);
 		return 1;
 	}
 
 	error = tw_initconnection(tw_dev, TW_INIT_MESSAGE_CREDITS);
 	if (error) {
-		printk(KERN_WARNING "3w-xxxx: tw_reset_sequence(): Couldn't initconnection for card %d.\n", tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Connection initialization failed.\n", tw_dev->host->host_no);
 		return 1;
 	}
 
@@ -1879,14 +1927,14 @@ int tw_scsi_eh_abort(Scsi_Cmnd *SCpnt)
 	for (i=0;i<TW_Q_LENGTH;i++) {
 		if (tw_dev->srb[i] == SCpnt) {
 			if (tw_dev->state[i] == TW_S_STARTED) {
-				printk(KERN_WARNING "3w-xxxx: tw_scsi_eh_abort(): Abort succeeded for started Scsi_Cmnd 0x%x\n", (u32)tw_dev->srb[i]);
+				printk(KERN_WARNING "3w-xxxx: scsi%d: Command (0x%x) timed out.\n", tw_dev->host->host_no, (u32)SCpnt);
 				tw_dev->state[i] = TW_S_COMPLETED;
 				tw_state_request_finish(tw_dev, i);
 				spin_unlock(&tw_dev->tw_lock);
 				return (SUCCESS);
 			}
 			if (tw_dev->state[i] == TW_S_PENDING) {
-				printk(KERN_WARNING "3w-xxxx: tw_scsi_eh_abort(): Abort succeeded for pending Scsi_Cmnd 0x%x\n", (u32)tw_dev->srb[i]);
+				printk(KERN_WARNING "3w-xxxx: scsi%d: Command (0x%x) timed out.\n", tw_dev->host->host_no, (u32)SCpnt);
 				if (tw_dev->pending_head == TW_Q_LENGTH-1) {
 					tw_dev->pending_head = TW_Q_START;
 				} else {
@@ -1902,10 +1950,9 @@ int tw_scsi_eh_abort(Scsi_Cmnd *SCpnt)
 	}
 
 	/* If the command has already been posted, we have to reset the card */
-	printk(KERN_WARNING "3w-xxxx: tw_scsi_eh_abort(): Abort failed for unknown Scsi_Cmnd 0x%x, resetting card %d.\n", (u32)SCpnt, tw_dev->host->host_no);
-
+	printk(KERN_WARNING "3w-xxxx: scsi%d: Command (0x%x) timed out, resetting card.\n", tw_dev->host->host_no, (u32)SCpnt);
 	if (tw_reset_device_extension(tw_dev)) {
-		printk(KERN_WARNING "3w-xxxx: tw_scsi_eh_abort(): Reset failed for card %d.\n", tw_dev->host->host_no);
+		dprintk(KERN_WARNING "3w-xxxx: tw_scsi_eh_abort(): Reset failed for card %d.\n", tw_dev->host->host_no);
 		spin_unlock(&tw_dev->tw_lock);
 		return (FAILED);
 	}
@@ -1943,11 +1990,11 @@ int tw_scsi_eh_reset(Scsi_Cmnd *SCpnt)
 
 	/* Now reset the card and some of the device extension data */
 	if (tw_reset_device_extension(tw_dev)) {
-		printk(KERN_WARNING "3w-xxxx: tw_scsi_eh_reset(): Reset failed for card %d.\n", tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Reset failed.\n", tw_dev->host->host_no);
 		spin_unlock_irqrestore(&tw_dev->tw_lock, flags);
 		return (FAILED);
 	}
-	printk(KERN_WARNING "3w-xxxx: tw_scsi_eh_reset(): Reset succeeded for card %d.\n", tw_dev->host->host_no);
+	printk(KERN_WARNING "3w-xxxx: scsi%d: Reset succeeded.\n", tw_dev->host->host_no);
 	spin_unlock_irqrestore(&tw_dev->tw_lock, flags);
 
 	return (SUCCESS);
@@ -2060,13 +2107,10 @@ int tw_scsi_queue(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 
 	switch (*command) {
 		case READ_10:
-			dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_queue(): caught READ_10.\n");
 		case READ_6:
-			dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_queue(): caught READ_6.\n");
 		case WRITE_10:
-			dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_queue(): caught WRITE_10.\n");
 		case WRITE_6:
-			dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_queue(): caught WRITE_6.\n");
+			dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_queue(): caught READ/WRITE.\n");
 			error = tw_scsiop_read_write(tw_dev, request_id);
 			break;
 		case TEST_UNIT_READY:
@@ -2090,7 +2134,7 @@ int tw_scsi_queue(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 			error = tw_ioctl(tw_dev, request_id);
 			break;
 		default:
-			printk(KERN_NOTICE "3w-xxxx: tw_scsi_queue(): Unknown scsi opcode: 0x%x\n", *command);
+			printk(KERN_NOTICE "3w-xxxx: scsi%d: Unknown scsi opcode: 0x%x\n", tw_dev->host->host_no, *command);
 			tw_dev->state[request_id] = TW_S_COMPLETED;
 			tw_state_request_finish(tw_dev, request_id);
 			SCpnt->result = (DID_BAD_TARGET << 16);
@@ -2558,7 +2602,7 @@ int tw_setfeature(TW_Device_Extension *tw_dev, int parm, int param_size,
 		mdelay(5);
 		status_reg_value = inl(status_reg_addr);
 		if (tw_check_bits(status_reg_value)) {
-			printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Unexpected bits.\n");
+			dprintk(KERN_WARNING "3w-xxxx: tw_setfeature(): Unexpected bits.\n");
 			tw_decode_bits(tw_dev, status_reg_value);
 			return 1;
 		}
@@ -2572,7 +2616,8 @@ int tw_setfeature(TW_Device_Extension *tw_dev, int parm, int param_size,
 			}
 			if (command_packet->status != 0) {
 				/* bad response */
-				printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				dprintk(KERN_WARNING "3w-xxxx: tw_setfeature(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				tw_decode_error(tw_dev, command_packet->status, command_packet->flags, command_packet->byte3.unit);
 				return 1;
 			}
 			break; /* Response was okay, so we exit */
@@ -2592,7 +2637,7 @@ int tw_setup_irq(TW_Device_Extension *tw_dev)
 	error = request_irq(tw_dev->tw_pci_dev->irq, tw_interrupt, SA_SHIRQ, device, tw_dev);
 
 	if (error < 0) {
-		printk(KERN_WARNING "3w-xxxx: tw_setup_irq(): Error requesting IRQ: %d for card %d.\n", tw_dev->tw_pci_dev->irq, tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Error requesting IRQ: %d.\n", tw_dev->host->host_no, tw_dev->tw_pci_dev->irq);
 		return 1;
 	}
 	return 0;
@@ -2610,9 +2655,9 @@ int tw_shutdown_device(TW_Device_Extension *tw_dev)
 	/* poke the board */
 	error = tw_initconnection(tw_dev, 1);
 	if (error) {
-		printk(KERN_WARNING "3w-xxxx: tw_shutdown_device(): Couldn't initconnection for card %d.\n", tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: Connection shutdown failed.\n", tw_dev->host->host_no);
 	} else {
-		printk(KERN_NOTICE "3w-xxxx shutdown succeeded\n");
+		printk(KERN_NOTICE "3w-xxxx: Shutdown complete.\n");
 	}
 
 	/* Re-enable interrupts */
@@ -2643,7 +2688,7 @@ int tw_state_request_finish(TW_Device_Extension *tw_dev, int request_id)
 	dprintk(KERN_NOTICE "3w-xxxx: tw_state_request_finish()\n");
   
 	do {    
-		if (tw_dev->free_tail == TW_Q_LENGTH-1) {
+		if (tw_dev->free_tail == tw_dev->free_wrap) {
 			tw_dev->free_tail = TW_Q_START;
 		} else {
 			tw_dev->free_tail = tw_dev->free_tail + 1;
@@ -2667,23 +2712,14 @@ int tw_state_request_start(TW_Device_Extension *tw_dev, int *request_id)
 
 	/* Obtain next free request_id */
 	do {
-		if (tw_dev->free_head == TW_Q_LENGTH - 1) {
+		if (tw_dev->free_head == tw_dev->free_wrap) {
 			tw_dev->free_head = TW_Q_START;
 		} else {
 			tw_dev->free_head = tw_dev->free_head + 1;
 		}
-	} while ((tw_dev->state[tw_dev->free_queue[tw_dev->free_head]] == TW_S_STARTED) ||
-		 (tw_dev->state[tw_dev->free_queue[tw_dev->free_head]] == TW_S_POSTED) ||
-		 (tw_dev->state[tw_dev->free_queue[tw_dev->free_head]] == TW_S_PENDING) ||
-		 (tw_dev->state[tw_dev->free_queue[tw_dev->free_head]] == TW_S_COMPLETED));
+	} while (tw_dev->state[tw_dev->free_queue[tw_dev->free_head]] & TW_START_MASK);
 
 	id = tw_dev->free_queue[tw_dev->free_head];
-
-	if (tw_dev->free_head == TW_Q_LENGTH - 1) {
-		tw_dev->free_head = TW_Q_START;
-	} else {
-		tw_dev->free_head = tw_dev->free_head + 1;
-	}
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_state_request_start(): id = %d.\n", id);
 	*request_id = id;

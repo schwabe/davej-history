@@ -454,7 +454,7 @@ struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base, un
 
 	de = (struct proc_dir_entry *) inode->u.generic_ip;
 	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	if (de->readlink_proc)
 		len = de->readlink_proc(de, page);

@@ -1000,9 +1000,8 @@ L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
 USB SUBSYSTEM
-P:	Johannes Erdfelt
-M	jerdfelt@valinux.com
-M:	johannes@erdfelt.com
+P:	Greg Kroah-Hartman
+M:	greg@kroah.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 W:	http://www.linux-usb.org

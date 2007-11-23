@@ -420,7 +420,7 @@ nfs_readpage_result(struct rpc_task *task)
 {
 	struct nfs_read_data	*data = (struct nfs_read_data *) task->tk_calldata;
 	struct inode		*inode = data->inode;
-	int			count = data->res.count;
+	unsigned int		count = data->res.count;
 
 	dprintk("NFS: %4d nfs_readpage_result, (status %d)\n",
 		task->tk_pid, task->tk_status);
@@ -431,10 +431,15 @@ nfs_readpage_result(struct rpc_task *task)
 		struct page *page = req->wb_page;
 		nfs_list_remove_request(req);
 
-		if (task->tk_status >= 0 && count >= 0) {
+		if (task->tk_status >= 0) {
+			char *p = page_address(page);
+			if (count < PAGE_CACHE_SIZE) {
+				memset(p + count, 0, PAGE_CACHE_SIZE - count);
+				count = 0;
+			} else
+				count -= PAGE_CACHE_SIZE;
 			flush_dcache_page(page_address(page)); /* Is this correct? */
 			set_bit(PG_uptodate, &page->flags);
-			count -= PAGE_CACHE_SIZE;
 		} else
 			set_bit(PG_error, &page->flags);
 		nfs_unlock_page(page);
