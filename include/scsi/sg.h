@@ -11,10 +11,12 @@ Original driver (sg.h):
 2.x extensions to driver:
 *       Copyright (C) 1998 - 2001 Douglas Gilbert
 
-    Version: 2.1.40 (20010620)
+    Version: 2.1.41 (20020409)
     This version for 2.2.x series kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.40 (20010620)
+    	- zero buffers for non-root users
     Changes since 2.1.38 (20000626)
         - fix bug that caused long wait when large buffer requested
     Changes since 2.1.38 (20000527)

@@ -16,8 +16,8 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.40 (20010620)";
- static int sg_version_num = 20140; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 2.1.41 (20020409)";
+ static int sg_version_num = 20141; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -1644,10 +1644,14 @@ static char * sg_low_malloc(int rqSz, int lowDma, int mem_src, int * retSzp)
         return resp;
     if (SG_HEAP_KMAL == mem_src) {
         resp = kmalloc(rqSz, page_mask);
-        if (resp && retSzp) *retSzp = rqSz;
+	if (resp) {
+	    if (! capable(CAP_SYS_ADMIN))
+	    	memset(resp, 0, rqSz);
+	    if (retSzp) *retSzp = rqSz;
 #ifdef SG_DEBUG
-        if (resp) ++sg_num_kmal;
+	    ++sg_num_kmal;
 #endif
+	}
         return resp;
     }
     if (SG_HEAP_POOL == mem_src) {
@@ -1664,6 +1668,8 @@ static char * sg_low_malloc(int rqSz, int lowDma, int mem_src, int * retSzp)
                 (scsi_dma_free_sectors > (SG_LOW_POOL_THRESHHOLD + num_sect))) {
                 resp = scsi_malloc(rqSz);
                 if (resp) {
+		    if (! capable(CAP_SYS_ADMIN))
+			memset(resp, 0, rqSz);
                     if (retSzp) *retSzp = rqSz;
                     sg_pool_secs_avail -= num_sect;
 #ifdef SG_DEBUG
@@ -1692,10 +1698,14 @@ static char * sg_low_malloc(int rqSz, int lowDma, int mem_src, int * retSzp)
             resp = (char *)__get_free_pages(page_mask, order); /* try half */
             resSz = a_size;
         }
-        if (retSzp) *retSzp = resSz;
+	if (resp) {
+	    if (! capable(CAP_SYS_ADMIN))
+		memset(resp, 0, resSz);
+	    if (retSzp) *retSzp = resSz;
 #ifdef SG_DEBUG
-        if (resp) ++sg_num_page;
+	    ++sg_num_page;
 #endif
+	}
     }
     else
         printk("sg_low_malloc: bad mem_src=%d, rqSz=%df\n", mem_src, rqSz);

@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.06.10 Feb 28 2002
+   Revision:	1.06.11 Apr. 30 2002
 
    Modified from the driver which is originally written by Donald Becker.
    
@@ -18,8 +18,9 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
 
-   Rev 1.06.10 Feb. 28 2002 Allan Jacobsen (aj@2m.dk) Made RTL8201 PHY work on ECS K7S5A
-   Rev 1.06.09 Sep. 28 2001 Hui-Fen Hsu (hfhsu@sis.com.tw) update for 630ET & workaround for ICS1893 PHY
+   Rev 1.06.11 Apr. 25 2002 Mufasa Yang (mufasa@sis.com.tw) added SiS962 support
+   Rev 1.06.10 Dec. 18 2001 Hui-Fen Hsu workaround for EDB & RTL8201 PHY
+   Rev 1.06.09 Sep. 28 2001 Hui-Fen Hsu update for 630ET & workaround for ICS1893 PHY
    Rev 1.06.08 Mar.  2 2001 Hui-Fen Hsu (hfhsu@sis.com.tw) some bug fix & 635M/B support
    Rev 1.06.07 Jan.  8 2001 Lei-Chun Chang added RTL8201 PHY support
    Rev 1.06.06 Sep.  6 2000 Lei-Chun Chang added ICS1893 PHY support
@@ -56,7 +57,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.06.10  02/28/2002\n";
+"sis900.c: v1.06.11  4/30/2002\n";
 
 static int max_interrupt_work = 20;
 static int multicast_filter_limit = 128;
@@ -102,7 +103,7 @@ static struct mii_chip_info {
 	{ "AMD 79C901 HomePNA PHY",		0x0000, 0x6B90, HOME},
 	{ "ICS LAN PHY",			0x0015, 0xF440, LAN },
 	{ "NS  83851 PHY",			0x2000, 0x5C20, MIX },
-	{ "Realtek RTL8201 PHY",		0x0000, 0x8200, LAN },
+        { "Realtek RTL8201 PHY",		0x0000, 0x8200, LAN },
 	{0,},
 };
 
@@ -305,6 +306,43 @@ static int sis635_get_mac_addr(struct pci_dev * pci_dev, struct device *net_dev)
 	return 1;
 }
 
+
+/**
+ *	sis962_get_mac_addr: - Get MAC address for SiS962 model
+ *	@pci_dev: the sis900 pci device
+ *	@net_dev: the net device to get address for 
+ *
+ *	SiS962 model, use EEPROM to store MAC address. And EEPROM is shared by
+ *	LAN and 1394. When access EEPROM, send EEREQ signal to hardware first 
+ *	and wait for EEGNT. If EEGNT is ON, EEPROM is permitted to be access 
+ *	by LAN, otherwise is not. After MAC address is read from EEPROM, send
+ *	EEDONE signal to refuse EEPROM access by LAN. 
+ *	MAC address is read into @net_dev->dev_addr.
+ */
+
+static int sis962_get_mac_addr(struct pci_dev * pci_dev, struct device *net_dev)
+{
+
+	long ioaddr = net_dev->base_addr;
+	long ee_addr = ioaddr + mear;
+	u32 waittime = 0;
+	int ret = 0;
+	
+	outl(EEREQ, ee_addr);
+	while(waittime < 2000) {
+		if(inl(ee_addr) & EEGNT) {
+			ret = sis900_get_mac_addr(pci_dev, net_dev);
+			outl(EEDONE, ee_addr);
+			return(ret);
+		} else {
+			udelay(1);	
+			waittime ++;
+		}
+	}
+	outl(EEDONE, ee_addr);
+	return 0;
+}
+
 static struct device * sis900_mac_probe (struct mac_chip_info * mac, struct pci_dev * pci_dev,
 					 struct device * net_dev)
 {
@@ -341,6 +379,8 @@ static struct device * sis900_mac_probe (struct mac_chip_info * mac, struct pci_
 		ret = sis630e_get_mac_addr(pci_dev, net_dev);
 	else if ((revision > 0x81) && (revision <= 0x90))
 		ret = sis635_get_mac_addr(pci_dev, net_dev);
+	else if (revision == SIS962_900_REV)
+		ret = sis962_get_mac_addr(pci_dev, net_dev);
 	else
 		ret = sis900_get_mac_addr(pci_dev, net_dev);
 
@@ -740,6 +780,9 @@ sis900_open(struct device *net_dev)
 	net_dev->interrupt = 0;
 	net_dev->start = 1;
 
+	/* Workaround for EDB */
+	sis900_set_mode(ioaddr, HW_SPEED_10_MBPS, FDX_CAPABLE_HALF_SELECTED);
+
 	/* Enable all known interrupts by setting the interrupt mask. */
 	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxIDLE), ioaddr + imr);
 	outl(RxENA | inl(ioaddr + cr), ioaddr + cr);
@@ -1107,17 +1150,16 @@ static void sis900_read_mode(struct device *net_dev, int *speed, int *duplex)
 	autorec = mdio_read(net_dev, phy_addr, MII_ANLPAR);
 	status = autoadv & autorec;
 
+	*speed = HW_SPEED_10_MBPS;
+	*duplex = FDX_CAPABLE_HALF_SELECTED;
+
 	if (status & (MII_NWAY_TX | MII_NWAY_TX_FDX))
 		*speed = HW_SPEED_100_MBPS;
-	else
-		*speed = HW_SPEED_10_MBPS;
 	if (status & ( MII_NWAY_TX_FDX | MII_NWAY_T_FDX))
 		*duplex = FDX_CAPABLE_FULL_SELECTED;
-	else
-		*duplex = FDX_CAPABLE_HALF_SELECTED;
 
 	sis_priv->autong_complete = 1;
-	
+
 	/* Workaround for Realtek RTL8201 PHY issue */
 	if((phy->phy_id0 == 0x0000) && ((phy->phy_id1 & 0xFFF0) == 0x8200)){
 		if(mdio_read(net_dev, phy_addr, MII_CONTROL) & MII_CNTL_FDX)
@@ -1125,7 +1167,7 @@ static void sis900_read_mode(struct device *net_dev, int *speed, int *duplex)
 		if(mdio_read(net_dev, phy_addr, 0x0019) & 0x01)
 			*speed = HW_SPEED_100_MBPS;
 	}
-
+			
 	printk(KERN_INFO "%s: Media Link On %s %s-duplex \n",
 	       net_dev->name,
 	       *speed == HW_SPEED_100_MBPS ?
@@ -1562,7 +1604,7 @@ static u16 sis900_compute_hashtable_index(u8 *addr, u8 revision)
 	}
 
 	/* leave 8 or 7 most siginifant bits */
-	if((revision == SIS635A_900_REV) || (revision == SIS900B_900_REV))
+	if((revision >= SIS635A_900_REV) || (revision == SIS900B_900_REV))
 		return ((int)(crc >> 24));
 	else
 		return ((int)(crc >> 25));
@@ -1579,7 +1621,7 @@ static void set_rx_mode(struct device *net_dev)
 
 	/* 635 Hash Table entires = 256(2^16) */
 	pci_read_config_byte(sis_priv->pci_dev, PCI_CLASS_REVISION, &revision);
-	if((revision == SIS635A_900_REV) || (revision == SIS900B_900_REV))
+	if((revision >= SIS635A_900_REV) || (revision == SIS900B_900_REV))
 		table_entries = 16;
 	else
 		table_entries = 8;
@@ -1651,7 +1693,7 @@ static void sis900_reset(struct device *net_dev)
 	}
 
 	pci_read_config_byte(sis_priv->pci_dev, PCI_CLASS_REVISION, &revision);
-	if( (revision == SIS635A_900_REV) || (revision == SIS900B_900_REV) )
+	if( (revision >= SIS635A_900_REV) || (revision == SIS900B_900_REV) )
 		outl(PESEL | RND_CNT, ioaddr + cfg);
 	else
 		outl(PESEL, ioaddr + cfg);
