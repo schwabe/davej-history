@@ -5250,7 +5250,7 @@ CONFIG_WAN_ROUTER
   ftp://ftp.sangoma.com. Read Documentation/networking/wan-router.txt
   for more information.
 
-  The WAN routing support is also available as a module called
+  The WAN routing support is only available as a module called
   wanrouter.o ( = code which can be inserted in and removed from the
   running kernel whenever you want). If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
@@ -5273,6 +5273,7 @@ CONFIG_NET_FASTROUTE
   ftp://ftp.inr.ac.ru/ip-routing/fastroute/fastroute-8390.tar.gz).
 
   If unsure, say N.
+
 
 Forwarding between high speed interfaces
 CONFIG_NET_HW_FLOWCONTROL
@@ -5532,9 +5533,12 @@ CONFIG_VENDOR_SANGOMA
   that has a program like lynx or netscape) is a family of intelligent
   multiprotocol WAN adapters with data transfer rates up to T1 (1.544
   Mbps). They are also known as Synchronous Data Link Adapters (SDLA)
-  and designated S502E(A), S503 or S508. These cards support the X.25,
-  Frame Relay, and PPP protocols. If you have one or more of these
-  cards, say Y to this option; you may then also want to read the file
+  and designated S503 or S508. These cards support the X.25, Frame
+  Relay, PPP, Cisco HDLC protocols. The driver also offers API support
+  for protocols like HDLC (LAPB), HDLC Streaming and BiSync. 
+
+  If you have one or more of these cards, say M to this option; you
+  may then also want to read the file
   Documentation/networking/wanpipe.txt. The next questions will ask
   you about the protocols you want the driver to support.
 
@@ -5554,26 +5558,32 @@ CONFIG_WANPIPE_CARDS
 WANPIPE X.25 support
 CONFIG_WANPIPE_X25
   Say Y to this option if you are planning to connect a WANPIPE card
-  to an X.25 network. You should then also have said Y to "CCITT X.25
-  Packet Layer" and "LAPB Data Link Driver", above. If you say N, the
-  X.25 support will not be included in the driver (saves about 16 KB
-  of kernel memory).
+  to an X.25 network. If you say N, the X.25 support will not be
+  included in the driver. The X.25 option is ONLY supported on S508
+  cards.
 
 WANPIPE Frame Relay support
 CONFIG_WANPIPE_FR
   Say Y to this option if you are planning to connect a WANPIPE card
-  to a frame relay network. You should then also have said Y to "Frame
-  Relay (DLCI) support", above. If you say N, the frame relay
-  support will not be included in the driver (saves about 16 KB of
-  kernel memory).
+  to a frame relay network. If you say N, the frame relay support will
+  not be included in the driver. The Frame Relay option is ONLY
+  supported on S508 cards.
 
 WANPIPE PPP support
 CONFIG_WANPIPE_PPP
   Say Y to this option if you are planning to connect a WANPIPE card
-  to a leased line using Point-to-Point protocol (PPP). You should
-  then also have said Y to "PPP (point-to-point) support", above. If
-  you say N, the PPP support will not be included in the driver (saves
-  about 16 KB of kernel memory).
+  to a leased line using Point-to-Point protocol (PPP). If you say N,
+  the PPP support will not be included in the driver. The PPP option
+  is ONLY supported on S508 cards.
+
+WANPIPE Cisco HDLC support
+CONFIG_WANPIPE_CHDLC
+  Say Y to this option if you are planning to connect a WANPIPE card
+  to a leased line using the Cisco HDLC protocol. This now supports
+  Dual Port Cisco HDLC on the S508 card ONLY. This support also allows
+  user to build applications using the HDLC streaming API. If you say
+  N, the Cisco HDLC support and HDLC streaming API will not be
+  included in the driver.
 
 MultiGate/COMX support
 CONFIG_COMX
@@ -11901,6 +11911,68 @@ CONFIG_BVME6000_SCC
   This is the driver for the serial ports on the BVME4000 and BVME6000
   boards from BVM Ltd.  Everyone using one of these boards should say
   Y here.
+
+IBM's S/390 architecture
+CONFIG_ARCH_S390
+  Select this option, if you want to run the Kernel on one of IBM's
+  mainframes of the S/390 generation. You should have installed the
+  s390-compiler released by IBM (based on gcc-2.95.1) before.
+
+Merge some code into the kernel to make the image IPLable
+CONFIG_IPLABLE
+  If you want to use the produced kernel to IPL directly from a
+  device, you have to merge a bootsector specific to the device
+  into the first bytes of the kernel. You will have to select the
+  IPL device on another question, that pops up, when you select
+  CONFIG_IPLABE.
+
+IPL from a /390 tape unit
+CONFIG_IPL_TAPE
+  Select this option if you want to IPL the image from a Tape.
+
+IPL from a virtual card reader emulated by VM/ESA
+CONFIG_IPL_RDR_VM
+  Select this option if you are running under VM/ESA and want 
+  to IPL the image from the emulated card reader.
+
+IPL from a real card reader
+CONFIG_IPL_RDR
+  Select this option if you want to IPL the image from a real
+  card reader. Maybe you still got one and want to try. We didn't
+  test.
+
+IBMs S/390 Harddisks (DASDs)
+CONFIG_DASD
+  Enable this option if you want to access DASDs directly utilizing
+  S/390s channel subsystem commands. This is necessary for running
+  natively on a single image or an LPAR.
+
+Enable DASD fast write
+CONFIG_DASD_FAST_IO
+  Enable fast I/O for DASDs. That means that the next I/O command
+  is already issued at interrupt time, if an I/O request is pending.
+  This option gives significant speedup of I/O, because we don't
+  schedule the bottom-halves as often as Intel.
+
+Support for IBM-style disk-labels (S/390)
+CONFIG_S390_PARTITION
+  Enable this option to assure standard IBM labels on the DASDs.
+  You must enable it, if you are planning to access DASDs also
+  attached to another IBM mainframe operation system (OS/390, 
+  VM/ESA, VSE/ESA).
+
+ECKD devices
+CONFIG_DASD_ECKD
+  ECKD devices are the most commonly used devices. you should enable
+  this option unless you are very sure to have no ECKD device.
+
+CKD devices
+CONFIG_DASD_CKD
+  CKD devices are currently unsupported.
+
+FBA devices
+CONFIG_DASD_FBA
+  FBA devices are currently unsupported.
 
 Compaq SMART2 support
 CONFIG_BLK_CPQ_DA

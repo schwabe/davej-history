@@ -862,7 +862,11 @@ move_rr_last:
 
 scheduling_in_interrupt:
 	printk("Scheduling in interrupt\n");
+#ifdef CONFIG_ARCH_S390
+	asm volatile ( ".word 0\n" );
+#else
 	*(int *)0 = 0;
+#endif /* CONFIG_ARCH_S390 */
 	return;
 }
 

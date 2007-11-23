@@ -1257,6 +1257,7 @@ plip_init(void))
 			if (!dev_plip[i]->name) {
 				printk(KERN_ERR "plip: memory squeeze.\n");
 				kfree(dev_plip[i]);
+				dev_plip[i] = NULL;
 				break;
 			}
 			sprintf(dev_plip[i]->name, "plip%d", i);
@@ -1264,6 +1265,7 @@ plip_init(void))
 			if (plip_init_dev(dev_plip[i],pb) || register_netdev(dev_plip[i])) {
 				kfree(dev_plip[i]->name);
 				kfree(dev_plip[i]);
+				dev_plip[i] = NULL;
 			} else {
 				i++;
 			}

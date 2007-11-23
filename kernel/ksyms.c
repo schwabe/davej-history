@@ -279,8 +279,6 @@ EXPORT_SYMBOL(proc_dointvec_minmax);
 /* interrupt handling */
 EXPORT_SYMBOL(request_irq);
 EXPORT_SYMBOL(free_irq);
-EXPORT_SYMBOL(probe_irq_on);
-EXPORT_SYMBOL(probe_irq_off);
 EXPORT_SYMBOL(bh_active);
 EXPORT_SYMBOL(bh_mask);
 EXPORT_SYMBOL(bh_mask_count);
@@ -300,14 +298,23 @@ EXPORT_SYMBOL(tqueue_lock);
 EXPORT_SYMBOL(waitqueue_lock);
 #endif
 
+/*
+ *	S390 has no auto-irq
+ */
+ 
+#ifndef CONFIG_ARCH_S390
+EXPORT_SYMBOL(probe_irq_on);
+EXPORT_SYMBOL(probe_irq_off);
 /* autoirq from  drivers/net/auto_irq.c */
 EXPORT_SYMBOL(autoirq_setup);
 EXPORT_SYMBOL(autoirq_report);
+#endif
 
 /* dma handling */
 EXPORT_SYMBOL(request_dma);
 EXPORT_SYMBOL(free_dma);
 EXPORT_SYMBOL(dma_spin_lock);
+
 #ifdef HAVE_DISABLE_HLT
 EXPORT_SYMBOL(disable_hlt);
 EXPORT_SYMBOL(enable_hlt);

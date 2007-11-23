@@ -85,6 +85,9 @@ NORET_TYPE void panic(const char * fmt, ...)
 	if (alpha_using_srm)
 		halt();
 #endif
+#ifdef CONFIG_ARCH_S390
+        disabled_wait(0x1234);
+#endif
 	sti();
 	for(;;) {
 		CHECK_EMERGENCY_SYNC

@@ -131,7 +131,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
-    tristate 'Old DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP_OLD
+    if [ "$CONFIG_DEC_ELCP" != "y" ]; then
+      tristate 'Old DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP_OLD
+    fi
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
     tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -310,15 +312,15 @@ fi
 #
 
 if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
-  bool 'WAN drivers' CONFIG_WAN_DRIVERS
+  bool 'WAN drivers' CONFIG_WAN_DRIVERS 
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
-    dep_tristate 'Sangoma WANPIPE(tm) multiprotocol cards' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS
+    dep_tristate 'Sangoma WANPIPE(tm) multi-prot cards: (select M not Y !)' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS 
     if [ "$CONFIG_VENDOR_SANGOMA" != "n" ]; then
       int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
-      bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
+      #bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
       bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
       bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
-  #    bool '  WANPIPE Cisco HDLC support' CONFIG_WANPIPE_CHDLC
+      bool '  WANPIPE Cisco HDLC support' CONFIG_WANPIPE_CHDLC
     fi
   fi
 fi

@@ -46,6 +46,10 @@
 #include <linux/apm_bios.h>
 #endif
 
+#ifdef CONFIG_DASD
+#include "../drivers/s390/block/dasd.h"
+#endif
+
 #ifdef CONFIG_MAC
 extern void nubus_init(void);
 #endif
@@ -135,6 +139,9 @@ extern void com20020_setup(char *str, int *ints);
 #ifdef CONFIG_ARCNET_RIM_I
 extern void arcrimi_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_CTC  
+extern void ctc_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_ARCNET_COM90xxIO
 extern void com90io_setup(char *str, int *ints);
 #endif
@@ -165,6 +172,12 @@ extern void pg_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_MDISK
+extern void mdisk_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_DASD
+extern void dasd_setup(char *str, int *ints);
 #endif
 extern void floppy_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
@@ -327,6 +340,9 @@ extern void nfs_root_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_FTAPE
 extern void ftape_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_3215_CONSOLE
+extern int con3215_activate(void);
 #endif
 #ifdef CONFIG_MDA_CONSOLE
 extern void mdacon_setup(char *str, int *ints);
@@ -525,6 +541,26 @@ static struct dev_name_struct {
 #if CONFIG_DDV
 	{ "ddv", DDV_MAJOR << 8},
 #endif
+#ifdef CONFIG_MDISK
+        { "mnd0", (MDISK_MAJOR << MINORBITS)},
+        { "mnd1", (MDISK_MAJOR << MINORBITS) + 1},
+        { "mnd2", (MDISK_MAJOR << MINORBITS) + 2},
+        { "mnd3", (MDISK_MAJOR << MINORBITS) + 3},
+        { "mnd4", (MDISK_MAJOR << MINORBITS) + 4},
+        { "mnd5", (MDISK_MAJOR << MINORBITS) + 5},
+        { "mnd6", (MDISK_MAJOR << MINORBITS) + 6},
+        { "mnd7", (MDISK_MAJOR << MINORBITS) + 7},
+#endif
+#ifdef CONFIG_DASD
+       { "dasd0", (DASD_MAJOR << MINORBITS) },
+       { "dasd1", (DASD_MAJOR << MINORBITS) + (1 << 2) },
+       { "dasd2", (DASD_MAJOR << MINORBITS) + (2 << 2) },
+       { "dasd3", (DASD_MAJOR << MINORBITS) + (3 << 2) },
+       { "dasd4", (DASD_MAJOR << MINORBITS) + (4 << 2) },
+       { "dasd5", (DASD_MAJOR << MINORBITS) + (5 << 2) },
+       { "dasd6", (DASD_MAJOR << MINORBITS) + (6 << 2) },
+       { "dasd7", (DASD_MAJOR << MINORBITS) + (7 << 2) },
+#endif
 	{ NULL, 0 }
 };
 
@@ -589,7 +625,12 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_BLK_DEV_INITRD
 	{ "noinitrd", no_initrd },
 #endif
+
+#ifdef CONFIG_CTC
+        { "ctc=", ctc_setup } ,
 #endif
+#endif
+
 #ifdef CONFIG_FB
 	{ "video=", video_setup },
 #endif
@@ -928,6 +969,12 @@ static struct kernel_param raw_params[] __initdata = {
 #ifdef CONFIG_APM
 	{ "apm=", apm_setup },
 #endif
+#ifdef CONFIG_MDISK
+        { "mdisk=", mdisk_setup },
+#endif
+#ifdef CONFIG_DASD
+        { "dasd=", dasd_setup },
+#endif
 	{ 0, 0 }
 };
 
@@ -1203,6 +1250,9 @@ asmlinkage void __init start_kernel(void)
 #endif
 	mem_init(memory_start,memory_end);
 	kmem_cache_sizes_init();
+#ifdef CONFIG_3215_CONSOLE
+        con3215_activate();
+#endif
 #ifdef CONFIG_PROC_FS
 	proc_root_init();
 #endif

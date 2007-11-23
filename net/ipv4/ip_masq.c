@@ -790,6 +790,8 @@ void ip_masq_put(struct ip_masq *ms)
 	}
 }
 
+extern int sysctl_ip_always_defrag;
+
 static void masq_expire(unsigned long data)
 {
 	struct ip_masq *ms = (struct ip_masq *)data;
@@ -883,8 +885,6 @@ static __u16 get_next_mport(void)
  *
  * 	Be careful, it can be called from u-space
  */
-
-extern int sysctl_ip_always_defrag;
 
 struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
 {

@@ -8,7 +8,11 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc sk98lin
 
 L_TARGET := net.a
-L_OBJS   := auto_irq.o
+L_OBJS   :=
+ifneq ($(ARCH),s390)  
+L_OBJS   += auto_irq.o
+endif
+
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
@@ -1185,6 +1189,7 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   L_OBJS += sdlamain.o
   ifeq ($(CONFIG_WANPIPE_X25),y)
     L_OBJS += sdla_x25.o
+    L_OBJS += sdla_x25api.o
   endif
   ifeq ($(CONFIG_WANPIPE_FR),y)
     L_OBJS += sdla_fr.o
@@ -1192,6 +1197,9 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   ifeq ($(CONFIG_WANPIPE_PPP),y)
     L_OBJS += sdla_ppp.o
   endif
+  ifeq ($(CONFIG_WANPIPE_CHDLC),y)
+    L_OBJS += sdla_chdlc.o
+  endif    
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),m)
@@ -1200,6 +1208,7 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),m)
   WANPIPE_OBJS = sdlamain.o
   ifeq ($(CONFIG_WANPIPE_X25),y)
     WANPIPE_OBJS += sdla_x25.o
+    WANPIPE_OBJS += sdla_x25api.o
   endif
   ifeq ($(CONFIG_WANPIPE_FR),y)
     WANPIPE_OBJS += sdla_fr.o
@@ -1207,6 +1216,9 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),m)
   ifeq ($(CONFIG_WANPIPE_PPP),y)
     WANPIPE_OBJS += sdla_ppp.o
   endif
+  ifeq ($(CONFIG_WANPIPE_CHDLC),y)
+    WANPIPE_OBJS += sdla_chdlc.o
+  endif    
 endif
 
 ifeq ($(CONFIG_X25_ASY),y)

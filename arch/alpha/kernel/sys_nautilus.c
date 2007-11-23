@@ -118,6 +118,14 @@ nautilus_kill_arch (int mode, char *restart_cmd)
 		}
 		break;
         case LINUX_REBOOT_CMD_POWER_OFF:
+                {
+                        int pmuport;
+                        irongate_hose_read_config_dword(0, 0x11<<3, 0x10, &pmuport, 0);
+                        pmuport &= 0xfffe;
+                        outl(0xffff, pmuport); /* clear pending events */
+                        outw(0x2000, pmuport+4); /* power off */
+                        printk("Press power button");
+                }
 	}
 
 	while (1)
@@ -439,7 +447,7 @@ void nautilus_machine_check(unsigned long vector, unsigned long la_ptr,
      * add to that the two levels of severity - correctable or not
      */
 
-    if (vector == SCB_Q_SYSMCHK && ((IRONGATE0->dramms & 0x3FF) == 0x300)) {
+    if (vector == SCB_Q_SYSMCHK && ((IRONGATE0->dramms & 0x300) == 0x300)) {
 	unsigned long nmi_ctl, temp;
 
 	/* Clear ALI NMI */
@@ -450,6 +458,7 @@ void nautilus_machine_check(unsigned long vector, unsigned long la_ptr,
         outb(nmi_ctl, 0x61);
 	
 	temp = IRONGATE0->stat_cmd;
+	temp &= ~0x100;
 	IRONGATE0->stat_cmd = temp; /* write again clears error bits */
 	mb();
 	temp = IRONGATE0->stat_cmd;  /* re-read to force write */

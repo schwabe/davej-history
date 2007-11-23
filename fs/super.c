@@ -998,10 +998,7 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!(page = get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}
-	if (copy_from_user((void *) page,data,i) == i) {
-		free_page(page); 
-		return -EFAULT;
-	}
+	copy_from_user((void *) page,data,i);
 	*where = page;
 	return 0;
 }

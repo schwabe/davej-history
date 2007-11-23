@@ -59,7 +59,9 @@ ifdef CONFIG_VT
 LX_OBJS += keyboard.o
 endif
  ifneq ($(ARCH),m68k)
+  ifneq ($(ARCH),s390)
    L_OBJS += pc_keyb.o defkeymap.o
+ endif
  endif
 else
 ifdef CONFIG_PCI

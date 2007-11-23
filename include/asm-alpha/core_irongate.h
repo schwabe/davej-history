@@ -13,7 +13,7 @@
  * This file is based on:
  *
  * IronGate management library, (c) 1999 Alpha Processor, Inc.
- * Begun 19 January 1999 by Stig Telfer, Alpha Processor, Inc.
+ * Copyright (C) 1999 Alpha Processor, Inc., (David Daniel, Stig Telfer, Soohoon Lee)
  */
 
 /*
@@ -25,13 +25,6 @@
  *
  */
 
-
-/* ???
-
-#define IRONGATE_DMA_WIN_BASE_DEFAULT	 (1024*1024*1024U)
-#define IRONGATE_DMA_WIN_SIZE_DEFAULT	 (1024*1024*1024U)
-
-*/
 
 #define IRONGATE_DMA_WIN_BASE_DEFAULT	 (0U)
 #define IRONGATE_DMA_WIN_SIZE_DEFAULT	 (0U)
@@ -364,9 +357,7 @@ typedef union {
  * Memory spaces:
  */
 
-/* ??? the following probably needs fixing */
 /* Irongate is consistent with a subset of the Tsunami memory map */
-/* XXX: Do we need to conditionalize on this?  */
 #ifdef USE_48_BIT_KSEG
 #define IRONGATE_BIAS 0x80000000000UL
 #else
@@ -379,8 +370,6 @@ typedef union {
 #define IRONGATE_IO		(IDENT_ADDR | IRONGATE_BIAS | 0x1FC000000UL)
 #define IRONGATE_CONF		(IDENT_ADDR | IRONGATE_BIAS | 0x1FE000000UL)
 
-
-/* ??? the following probably needs fixing */
 
 #define IRONGATE0	( (Irongate0 *) IRONGATE_CONF )
 

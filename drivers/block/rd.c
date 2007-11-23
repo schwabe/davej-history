@@ -112,7 +112,11 @@ static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
  * architecture-specific setup routine (from the stored boot sector
  * information). 
  */
+#ifdef CONFIG_ARCH_S390
+int rd_size = 8192;		/* Size of the RAM disks */
+#else
 int rd_size = 4096;		/* Size of the RAM disks */
+#endif
 
 #ifndef MODULE
 int rd_doload = 0;		/* 1 = load RAM disk, 0 = don't load */
@@ -567,10 +571,12 @@ __initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
 		}
 		infile.f_op->read(&infile, buf, BLOCK_SIZE, &infile.f_pos);
 		outfile.f_op->write(&outfile, buf, BLOCK_SIZE, &outfile.f_pos);
+#ifndef CONFIG_ARCH_S390
 		if (!(i % 16)) {
 			printk("%c\b", rotator[rotate & 0x3]);
 			rotate++;
 		}
+#endif
 	}
 	printk("done.\n");
 	kfree(buf);

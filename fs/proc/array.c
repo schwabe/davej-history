@@ -680,6 +680,9 @@ static unsigned long get_wchan(struct task_struct *p)
 #define KSTK_TOS(tsk) ((unsigned long)(tsk) + KERNEL_STACK_SIZE - 32)
 # define KSTK_EIP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(cp0_epc)))
 # define KSTK_ESP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(regs[29])))
+#elif defined(__s390__)
+#define KSTK_EIP(tsk)   ((tsk)->tss.regs->psw.addr)
+#define KSTK_ESP(tsk)   ((tsk)->tss.ksp)
 #endif
 
 /* Gcc optimizes away "strlen(x)" for constant x */
@@ -874,6 +877,9 @@ static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
 	struct task_struct *tsk;
+#ifdef  CONFIG_ARCH_S390
+	int line,len;
+#endif
 
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
@@ -885,6 +891,10 @@ static int get_status(int pid, char * buffer)
 	buffer = task_mem(tsk, buffer);
 	buffer = task_sig(tsk, buffer);
 	buffer = task_cap(tsk, buffer);
+#ifdef CONFIG_ARCH_S390
+	for(line=0;(len=sprintf_regs(line,buffer,tsk,NULL,NULL))!=0;line++)
+		buffer+=len;
+#endif
 	return buffer - orig;
 }
 
@@ -1362,10 +1372,10 @@ static long get_root_array(char * page, int type, char **start,
 
 		case PROC_FILESYSTEMS:
 			return get_filesystem_list(page);
-
+#ifndef CONFIG_ARCH_S390
 		case PROC_DMA:
 			return get_dma_list(page);
-
+#endif
 		case PROC_IOPORTS:
 			return get_ioport_list(page);
 #ifdef CONFIG_BLK_DEV_MD

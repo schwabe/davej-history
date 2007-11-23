@@ -99,8 +99,6 @@ mk_conf_addr(u8 bus, u8 device_fn, u8 where, struct linux_hose_info *hose,
 		 "pci_addr=0x%p, type1=0x%p)\n",
 		 bus, device_fn, where, pci_addr, type1));
 
-	*type1 = (bus != 0);
-
 	addr = (bus << 16) | (device_fn << 8) | where;
 	addr |= IRONGATE_CONF;
 
@@ -330,6 +328,7 @@ irongate_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	*hose_tail = hose;
 	hose_tail = &hose->next;
 
+	IRONGATE0->stat_cmd = IRONGATE0->stat_cmd & ~0x100;
 	irongate_pci_clr_err();
 }
 

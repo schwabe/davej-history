@@ -422,7 +422,6 @@ void make_request(int major, int rw, struct buffer_head * bh)
 	if (buffer_locked(bh))
 		return;
 	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
-
 	lock_buffer(bh);
 
 	if (blk_size[major]) {
@@ -512,6 +511,8 @@ void make_request(int major, int rw, struct buffer_head * bh)
 	     case IDE5_MAJOR:
 	     case ACSI_MAJOR:
 	     case MFM_ACORN_MAJOR:
+             case MDISK_MAJOR:
+             case DASD_MAJOR:
 		/*
 		 * The scsi disk and cdrom drivers completely remove the request
 		 * from the queue when they start processing an entry.  For this
@@ -657,7 +658,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		kdevname(bh[0]->b_dev), bh[0]->b_blocknr);
 		goto sorry;
 	}
-
 	/* Determine correct block size for this device.  */
 	correct_size = BLOCK_SIZE;
 	if (blksize_size[major]) {
@@ -896,6 +896,12 @@ __initfunc(int blk_dev_init(void))
 #endif
 #ifdef CONFIG_BLK_DEV_NBD
 	nbd_init();
+#endif
+#ifdef CONFIG_MDISK
+	mdisk_init();
+#endif
+#ifdef CONFIG_DASD
+	dasd_init();
 #endif
 	return 0;
 };

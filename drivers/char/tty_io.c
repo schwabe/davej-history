@@ -129,6 +129,9 @@ static int tty_fasync(int fd, struct file * filp, int on);
 extern long console_8xx_init(long, long);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
+#ifdef CONFIG_3215
+extern long con3215_init(long, long);
+#endif /* CONFIG_3215 */
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -2070,12 +2073,18 @@ long __init console_init(long kmem_start, long kmem_end)
 #ifdef CONFIG_VT
 	kmem_start = con_init(kmem_start);
 #endif
+#ifdef CONFIG_HWC
+        kmem_start = hwc_console_init(kmem_start);
+#endif
 #ifdef CONFIG_SERIAL_CONSOLE
 #ifdef CONFIG_8xx
 	kmem_start = console_8xx_init(kmem_start, kmem_end);
 #else 	
 	kmem_start = serial_console_init(kmem_start, kmem_end);
 #endif /* CONFIG_8xx */
+#endif
+#ifdef CONFIG_3215
+       kmem_start = con3215_init(kmem_start, kmem_end);
 #endif
 	return kmem_start;
 }

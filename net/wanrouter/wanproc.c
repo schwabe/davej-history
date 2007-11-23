@@ -4,21 +4,23 @@
 *		This module is completely hardware-independent and provides
 *		access to the router using Linux /proc filesystem.
 *
-* Author:	Gene Kozin	<genek@compuserve.com>
+* Author: 	Gideon Hack	
 *
-* Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
+* Copyright:	(c) 1995-1999 Sangoma Technologies Inc.
 *
 *		This program is free software; you can redistribute it and/or
 *		modify it under the terms of the GNU General Public License
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Jun 02, 1999  Gideon Hack	Updates for Linux 2.2.X kernels.
 * Jun 29, 1997	Alan Cox	Merged with 1.0.3 vendor code
 * Jan 29, 1997	Gene Kozin	v1.0.1. Implemented /proc read routines
 * Jan 30, 1997	Alan Cox	Hacked around for 2.1
 * Dec 13, 1996	Gene Kozin	Initial version (based on Sangoma's WANPIPE)
 *****************************************************************************/
 
+#include <linux/version.h>
 #include <linux/config.h>
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -27,14 +29,16 @@
 #include <linux/mm.h>		/* verify_area(), etc. */
 #include <linux/string.h>	/* inline mem*, str* functions */
 #include <linux/init.h>		/* __initfunc et al. */
+#include <asm/uaccess.h>        /* copy_to_user */
 #include <asm/segment.h>	/* kernel <-> user copy */
 #include <asm/byteorder.h>	/* htons(), etc. */
-#include <asm/uaccess.h>	/* copy_to_user */
 #include <asm/io.h>
 #include <linux/wanrouter.h>	/* WAN router API definitions */
 
 
 /****** Defines and Macros **************************************************/
+
+#define PROC_STATS_FORMAT "%30s: %12lu\n"
 
 #ifndef	min
 #define min(a,b) (((a)<(b))?(a):(b))
@@ -45,11 +49,12 @@
 
 #define	PROC_BUFSZ	4000	/* buffer size for printing proc info */
 
+
 /****** Data Types **********************************************************/
 
 typedef struct wan_stat_entry
 {
-	struct wan_stat_entry *	next;
+	struct wan_stat_entry *next;
 	char *description;		/* description string */
 	void *data;			/* -> data */
 	unsigned data_type;		/* data type */
@@ -61,13 +66,15 @@ typedef struct wan_stat_entry
 
 /* Proc filesystem interface */
 static int router_proc_perms(struct inode *, int);
-static ssize_t router_proc_read(struct file* file, char* buf, size_t count, 					loff_t *ppos);
+static ssize_t router_proc_read(struct file *file, char *buf, size_t count, 					loff_t *ppos);
 
 /* Methods for preparing data for reading proc entries */
-
-static int config_get_info(char* buf, char** start, off_t offs, int len, int dummy);
-static int status_get_info(char* buf, char** start, off_t offs, int len, int dummy);
-static int wandev_get_info(char* buf, char** start, off_t offs, int len, int dummy);
+static int config_get_info(char* buf, char** start, off_t offs, int len,
+	int dummy);
+static int status_get_info(char* buf, char** start, off_t offs, int len,
+	int dummy);
+static int wandev_get_info(char* buf, char** start, off_t offs, int len,
+	int dummy);
 
 /* Miscellaneous */
 
@@ -95,7 +102,6 @@ static char name_stat[]	= "status";
 /*
  *	Generic /proc/net/router/<file> file and inode operations 
  */
-
 static struct file_operations router_fops =
 {
 	NULL,			/* lseek   */
@@ -179,7 +185,7 @@ static struct inode_operations wandev_inode =
 /*
  *	/proc/net/router 
  */
-
+ 
 static struct proc_dir_entry proc_router =
 {
 	0,			/* .low_ino */
@@ -267,8 +273,7 @@ __initfunc(int wanrouter_proc_init (void))
 {
 	int err = proc_register(proc_net, &proc_router);
 
-	if (!err)
-	{
+	if (!err) {
 		proc_register(&proc_router, &proc_router_conf);
 		proc_register(&proc_router, &proc_router_stat);
 	}
@@ -294,7 +299,7 @@ int wanrouter_proc_add (wan_device_t* wandev)
 {
 	if (wandev->magic != ROUTER_MAGIC)
 		return -EINVAL;
-		
+	
 	memset(&wandev->dent, 0, sizeof(wandev->dent));
 	wandev->dent.namelen	= strlen(wandev->name);
 	wandev->dent.name	= wandev->name;
@@ -331,7 +336,7 @@ static int router_proc_perms (struct inode* inode, int op)
 
 /*
  *	Read router proc directory entry.
- *	This is universal routine for reading all entries in /proc/net/router
+ *	This is universal routine for reading all entries in /proc/net/wanrouter
  *	directory.  Each directory entry contains a pointer to the 'method' for
  *	preparing data for that entry.
  *	o verify arguments
@@ -365,8 +370,7 @@ static ssize_t router_proc_read(struct file* file, char* buf, size_t count,
 		
 	pos = dent->get_info(page, dent->data, 0, 0, 0);
 	offs = file->f_pos;
-	if (offs < pos)
-	{
+	if (offs < pos) {
 		len = min(pos - offs, count);
 		if(copy_to_user(buf, (page + offs), len))
 			return -EFAULT;
@@ -391,15 +395,14 @@ static int config_get_info(char* buf, char** start, off_t offs, int len,
 	strcpy(buf, conf_hdr);
 	for (wandev = router_devlist;
 	     wandev && (cnt < (PROC_BUFSZ - 120));
-	     wandev = wandev->next)
-	{
+	     wandev = wandev->next) {
 		if (wandev->state) cnt += sprintf(&buf[cnt],
 			"%-15s|0x%-4X|%3u|%3u| 0x%-8lX |0x%-6X|%7u|%7u|%7u|%7u\n",
 			wandev->name,
 			wandev->ioport,
 			wandev->irq,
 			wandev->dma,
-			virt_to_phys(wandev->maddr),
+			wandev->maddr,
 			wandev->msize,
 			wandev->hw_opt[0],
 			wandev->hw_opt[1],
@@ -418,13 +421,16 @@ static int config_get_info(char* buf, char** start, off_t offs, int len,
 static int status_get_info(char* buf, char** start, off_t offs, int len, 
 			int dummy)
 {
-	int cnt = sizeof(stat_hdr) - 1;
+	int cnt = 0;
 	wan_device_t* wandev;
-	strcpy(buf, stat_hdr);
+
+	cnt += sprintf(&buf[cnt], "\nSTATUS FOR PORT 0\n\n");
+	strcpy(&buf[cnt], stat_hdr);
+	cnt += sizeof(stat_hdr) - 1;
+
 	for (wandev = router_devlist;
 	     wandev && (cnt < (PROC_BUFSZ - 80));
-	     wandev = wandev->next)
-	{
+	     wandev = wandev->next) {
 		if (!wandev->state) continue;
 		cnt += sprintf(&buf[cnt],
 			"%-15s|%-7s|%-9s|%-8s|%9u|%5u|%3u |",
@@ -434,10 +440,10 @@ static int status_get_info(char* buf, char** start, off_t offs, int len,
 			wandev->clocking ? "internal" : "external",
 			wandev->bps,
 			wandev->mtu,
-			wandev->ndev)
-		;
-		switch (wandev->state)
-		{
+			wandev->ndev);
+
+		switch (wandev->state) {
+
 		case WAN_UNCONFIGURED:
 			cnt += sprintf(&buf[cnt], "%-12s\n", "unconfigured");
 			break;
@@ -475,68 +481,73 @@ static int wandev_get_info(char* buf, char** start, off_t offs, int len,
 {
 	wan_device_t* wandev = (void*)start;
 	int cnt = 0;
+	int rslt = 0;
 
 	if ((wandev == NULL) || (wandev->magic != ROUTER_MAGIC))
 		return 0;
 	if (!wandev->state)
-		return sprintf(&buf[cnt], "device is not configured!\n")
-	;
+		return sprintf(&buf[cnt], "Device is not configured!\n");
 
 	/* Update device statistics */
-	if (wandev->update) wandev->update(wandev);
+	if (wandev->update) {
 
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"total frames received", wandev->stats.rx_packets)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"receiver overrun errors", wandev->stats.rx_over_errors)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"CRC errors", wandev->stats.rx_crc_errors)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"frame length errors", wandev->stats.rx_length_errors)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"frame format errors", wandev->stats.rx_frame_errors)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"aborted frames received", wandev->stats.rx_missed_errors)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"reveived frames dropped", wandev->stats.rx_dropped)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"other receive errors", wandev->stats.rx_errors)
-	;
-	cnt += sprintf(&buf[cnt], "\n%30s: %12lu\n",
-		"total frames transmitted", wandev->stats.tx_packets)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"aborted frames transmitted", wandev->stats.tx_aborted_errors)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"transmit frames dropped", wandev->stats.tx_dropped)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"transmit collisions", wandev->stats.collisions)
-	;
-	cnt += sprintf(&buf[cnt], "%30s: %12lu\n",
-		"other transmit errors", wandev->stats.tx_errors)
-	;
+		rslt = wandev->update(wandev);
+		if(rslt) {
+			switch (rslt) {
+			case -EAGAIN:
+				return sprintf(&buf[cnt], "Device is busy!\n");
+
+			default:
+				return sprintf(&buf[cnt],
+					"Device is not configured!\n");
+			}
+		}
+	}
+
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "total packets received", wandev->stats.rx_packets);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "total packets transmitted", wandev->stats.tx_packets);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "total bytes received", wandev->stats.rx_bytes);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "total bytes transmitted", wandev->stats.tx_bytes);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "bad packets received", wandev->stats.rx_errors);
+       	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "packet transmit problems", wandev->stats.tx_errors);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "received frames dropped", wandev->stats.rx_dropped);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "transmit frames dropped", wandev->stats.tx_dropped);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "multicast packets received", wandev->stats.multicast);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "transmit collisions", wandev->stats.collisions);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "receive length errors", wandev->stats.rx_length_errors);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+		"receiver overrun errors", wandev->stats.rx_over_errors);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+		"CRC errors", wandev->stats.rx_crc_errors);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+		"frame format errors (aborts)", wandev->stats.rx_frame_errors);
+        cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+                "receiver fifo overrun", wandev->stats.rx_fifo_errors);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+		"receiver missed packet", wandev->stats.rx_missed_errors);
+	cnt += sprintf(&buf[cnt], PROC_STATS_FORMAT,
+		"aborted frames transmitted", wandev->stats.tx_aborted_errors);
+
 	return cnt;
 }
 
-/*
- *	End
- */
- 
 #else
 
 /*
  *	No /proc - output stubs
  */
- 
+
 __initfunc(int wanrouter_proc_init(void))
 {
 	return 0;
@@ -558,3 +569,8 @@ int wanrouter_proc_delete(wan_device_t *wandev)
 }
 
 #endif
+
+/*
+ *	End
+ */
+ 
