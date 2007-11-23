@@ -85,28 +85,37 @@ static struct sbus_mmap_map tcx_mmap_map[] = {
 	{ 0,			0,		0		    }
 };
 
-static void tcx_set_control_plane (struct fb_info_sbusfb *fb)
+static void __tcx_set_control_plane (struct fb_info_sbusfb *fb)
 {
 	u32 *p, *pend;
         
 	p = fb->s.tcx.cplane;
-	if (!p) return;
+	if (!p)
+		return;
 	for (pend = p + fb->type.fb_size; p < pend; p++)
 		*p &= 0xffffff;
 }
                                                 
 static void tcx_switch_from_graph (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
+
 	/* Reset control plane to 8bit mode if necessary */
 	if (fb->open && fb->mmaped)
-		tcx_set_control_plane (fb);
+		__tcx_set_control_plane (fb);
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = fb->s.tcx.bt;
+	unsigned long flags;
 	int i;
                 
+	spin_lock_irqsave(&fb->lock, flags);
 	bt->addr = index << 24;
 	for (i = index; count--; i++){
 		bt->color_map = fb->color_map CM(i,0) << 24;
@@ -114,21 +123,28 @@ static void tcx_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int inde
 		bt->color_map = fb->color_map CM(i,2) << 24;
 	}
 	bt->addr = 0;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_restore_palette (struct fb_info_sbusfb *fb)
 {
 	struct bt_regs *bt = fb->s.tcx.bt;
+	unsigned long flags;
                 
+	spin_lock_irqsave(&fb->lock, flags);
 	bt->addr = 0;
 	bt->color_map = 0xffffffff;
 	bt->color_map = 0xffffffff;
 	bt->color_map = 0xffffffff;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 *blue)
 {
         struct bt_regs *bt = fb->s.tcx.bt;
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 
 	/* Note the 2 << 24 is different from cg6's 1 << 24 */
 	bt->addr = 2 << 24;
@@ -140,18 +156,23 @@ static void tcx_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 
 	bt->cursor = green[1] << 24;
 	bt->cursor = blue[1] << 24;
 	bt->addr = 0;
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Set cursor shape */
 static void tcx_setcurshape (struct fb_info_sbusfb *fb)
 {
 	struct tcx_thc *thc = fb->s.tcx.thc;
+	unsigned long flags;
 	int i;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	for (i = 0; i < 32; i++){
 		thc->thc_cursmask [i] = fb->cursor.bits[0][i];
 		thc->thc_cursbits [i] = fb->cursor.bits[1][i];
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Load cursor information */
@@ -159,7 +180,9 @@ static void tcx_setcursor (struct fb_info_sbusfb *fb)
 {
 	unsigned int v;
 	struct cg_cursor *c = &fb->cursor;
+	unsigned long flags;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (c->enable)
 		v = ((c->cpos.fbx - c->chot.fbx) << 16)
 		    |((c->cpos.fby - c->chot.fby) & 0xffff);
@@ -167,27 +190,39 @@ static void tcx_setcursor (struct fb_info_sbusfb *fb)
 		/* Magic constant to turn off the cursor */
 		v = ((65536-32) << 16) | (65536-32);
 	fb->s.tcx.thc->thc_cursxy = v;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_blank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.tcx.thc->thc_misc &= ~TCX_THC_MISC_VIDEO;
 	/* This should put us in power-save */
 	fb->s.tcx.thc->thc_misc |= TCX_THC_MISC_VSYNC_DIS;
         fb->s.tcx.thc->thc_misc |= TCX_THC_MISC_HSYNC_DIS;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_unblank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.tcx.thc->thc_misc &= ~TCX_THC_MISC_VSYNC_DIS;
 	fb->s.tcx.thc->thc_misc &= ~TCX_THC_MISC_HSYNC_DIS;
 	fb->s.tcx.thc->thc_misc |= TCX_THC_MISC_VIDEO;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_reset (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	if (fb->open && fb->mmaped)
-		tcx_set_control_plane(fb);
+		__tcx_set_control_plane(fb);
 	
 	/* Turn off stuff in the Transform Engine. */
 	fb->s.tcx.tec->tec_matrix = 0;
@@ -197,6 +232,7 @@ static void tcx_reset (struct fb_info_sbusfb *fb)
 	/* Enable cursor in Brooktree DAC. */
 	fb->s.tcx.bt->addr = 0x06 << 24;
 	fb->s.tcx.bt->control |= 0x03 << 24;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)

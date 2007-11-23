@@ -1170,13 +1170,13 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, unsigned long *hwgroup_flags
 		bdev->current_request = hwgroup->rq = drive->queue;
 		spin_unlock_irqrestore(&io_request_lock, io_flags);
 
-		spin_unlock_irqrestore(&hwgroup->spinlock, *hwgroup_flags);
 		if (hwif->irq != masked_irq)
-			disable_irq(hwif->irq);
+			disable_irq_nosync(hwif->irq);
+		spin_unlock_irqrestore(&hwgroup->spinlock, *hwgroup_flags);
 		start_request(drive);
+		spin_lock_irqsave(&hwgroup->spinlock, *hwgroup_flags);
 		if (hwif->irq != masked_irq)
 			enable_irq(hwif->irq);
-		spin_lock_irqsave(&hwgroup->spinlock, *hwgroup_flags);
 	}
 }
 

@@ -231,9 +231,11 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	int x, y, w, h;
 	int i;
 	
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
@@ -262,6 +264,7 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	do {
 		i = fbc->draw;
 	} while (i < 0 && (i & 0x20000000));
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
@@ -269,7 +272,9 @@ static void cg6_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 {
 	int i;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
@@ -290,15 +295,18 @@ static void cg6_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 			i = fbc->draw;
 		} while (i < 0 && (i & 0x20000000));
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int xx)
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	int i, x, y;
 	u8 *fd;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (fontheightlog(p)) {
 		y = fb->y_margin + (yy << fontheightlog(p));
 		i = ((c & p->charmask) << fontheightlog(p));
@@ -339,6 +347,7 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 			fd += 2;
 		}
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -346,9 +355,11 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	int i, x, y;
 	u8 *fd1, *fd2, *fd3, *fd4;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
@@ -443,6 +454,7 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			}
 		}
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_revc(struct display *p, int xx, int yy)
@@ -453,24 +465,30 @@ static void cg6_revc(struct display *p, int xx, int yy)
 static void cg6_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = fb->s.cg6.bt;
+	unsigned long flags;
 	int i;
                 
+	spin_lock_irqsave(&fb->lock, flags);
 	bt->addr = index << 24;
 	for (i = index; count--; i++){
 		bt->color_map = fb->color_map CM(i,0) << 24;
 		bt->color_map = fb->color_map CM(i,1) << 24;
 		bt->color_map = fb->color_map CM(i,2) << 24;
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_restore_palette (struct fb_info_sbusfb *fb)
 {
 	struct bt_regs *bt = fb->s.cg6.bt;
+	unsigned long flags;
                 
+	spin_lock_irqsave(&fb->lock, flags);
 	bt->addr = 0;
 	bt->color_map = 0xffffffff;
 	bt->color_map = 0xffffffff;
 	bt->color_map = 0xffffffff;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static struct display_switch cg6_dispsw __initdata = {
@@ -481,7 +499,9 @@ static struct display_switch cg6_dispsw __initdata = {
 static void cg6_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 *blue)
 {
         struct bt_regs *bt = fb->s.cg6.bt;
+	unsigned long flags;
         
+	spin_lock_irqsave(&fb->lock, flags);
 	bt->addr = 1 << 24;
 	bt->cursor = red[0] << 24;
 	bt->cursor = green[0] << 24;
@@ -490,26 +510,32 @@ static void cg6_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 
 	bt->cursor = red[1] << 24;
 	bt->cursor = green[1] << 24;
 	bt->cursor = blue[1] << 24;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Set cursor shape */
 static void cg6_setcurshape (struct fb_info_sbusfb *fb)
 {
 	struct cg6_thc *thc = fb->s.cg6.thc;
+	unsigned long flags;
 	int i;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	for (i = 0; i < 32; i++) {
 		thc->thc_cursmask [i] = fb->cursor.bits[0][i];
 		thc->thc_cursbits [i] = fb->cursor.bits[1][i];
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Load cursor information */
 static void cg6_setcursor (struct fb_info_sbusfb *fb)
 {
 	unsigned int v;
+	unsigned long flags;
 	struct cg_cursor *c = &fb->cursor;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (c->enable)
 		v = ((c->cpos.fbx - c->chot.fbx) << 16)
 		    |((c->cpos.fby - c->chot.fby) & 0xffff);
@@ -517,16 +543,25 @@ static void cg6_setcursor (struct fb_info_sbusfb *fb)
 		/* Magic constant to turn off the cursor */
 		v = ((65536-32) << 16) | (65536-32);
 	fb->s.cg6.thc->thc_cursxy = v;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_blank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.cg6.thc->thc_misc &= ~CG6_THC_MISC_VIDEO;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_unblank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.cg6.thc->thc_misc |= CG6_THC_MISC_VIDEO;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_reset (struct fb_info_sbusfb *fb)
@@ -534,9 +569,12 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	unsigned int rev, conf;
 	struct cg6_tec *tec = fb->s.cg6.tec;
 	struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	u32 mode;
 	int i;
 	
+	spin_lock_irqsave(&fb->lock, flags);
+
 	/* Turn off stuff in the Transform Engine. */
 	tec->tec_matrix = 0;
 	tec->tec_clip = 0;
@@ -581,6 +619,8 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	/* Enable cursor in Brooktree DAC. */
 	fb->s.cg6.bt->addr = 0x06 << 24;
 	fb->s.cg6.bt->control |= 0x03 << 24;
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)

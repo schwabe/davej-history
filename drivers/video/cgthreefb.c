@@ -88,25 +88,38 @@ static struct sbus_mmap_map cg3_mmap_map[] = {
 static void cg3_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = &fb->s.cg3.regs->cmap;
+	unsigned long flags;
 	u32 *i;
 	int steps;
 	        
+	spin_lock_irqsave(&fb->lock, flags);
+
 	i = (((u32 *)fb->color_map) + D4M3(index));
 	steps = D4M3(index+count-1) - D4M3(index)+3;
 	                        
 	*(volatile u8 *)&bt->addr = (u8)D4M4(index);
 	while (steps--)
 		bt->color_map = *i++;
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg3_blank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.cg3.regs->control &= ~CG3_CR_ENABLE_VIDEO;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg3_unblank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.cg3.regs->control |= CG3_CR_ENABLE_VIDEO;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg3_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)

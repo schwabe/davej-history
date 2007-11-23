@@ -175,10 +175,12 @@ static void leo_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
-	register struct leo_ld *ss = fb->s.leo.ld_ss0;
+	register struct leo_ld *ss = (struct leo_ld *) fb->s.leo.ld_ss0;
+	unsigned long flags;
 	int x, y, w, h;
 	int i;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
 		i = us->csr;
 	} while (i & 0x20000000);
@@ -196,6 +198,7 @@ static void leo_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	us->extent = (w - 1) | ((h - 1) << 11);
 	us->fill = (x + fb->x_margin) | ((y + fb->y_margin) << 11) |
 		   0x80000000;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
@@ -203,8 +206,10 @@ static void leo_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 {
 	int i;
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
-	register struct leo_ld *ss = fb->s.leo.ld_ss0;
+	register struct leo_ld *ss = (struct leo_ld *) fb->s.leo.ld_ss0;
+	unsigned long flags;
 	
+	spin_lock_irqsave(&fb->lock, flags);
 	ss->fg = (attr_bgcol(p,s)<<24);
 	while (count-- > 0) {
 		do {
@@ -215,17 +220,20 @@ static void leo_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 		us->fill = boxes[0] | (boxes[1] << 11) | 0x80000000;
 		boxes += 4;
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_putc(struct vc_data *conp, struct display *p, int c, int yy, int xx)
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
-	register struct leo_ld *ss = fb->s.leo.ld_ss0;
+	register struct leo_ld *ss = (struct leo_ld *) fb->s.leo.ld_ss0;
+	unsigned long flags;
 	int i, x, y;
 	u8 *fd;
 	u32 *u;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (fontheightlog(p)) {
 		y = yy << (fontheightlog(p) + 11);
 		i = (c & p->charmask) << fontheightlog(p);
@@ -257,6 +265,7 @@ static void leo_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 			fd += 2;
 		}
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -264,11 +273,13 @@ static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
-	register struct leo_ld *ss = fb->s.leo.ld_ss0;
+	register struct leo_ld *ss = (struct leo_ld *) fb->s.leo.ld_ss0;
+	unsigned long flags;
 	int i, x, y;
 	u8 *fd1, *fd2, *fd3, *fd4;
 	u32 *u;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
 		i = us->csr;
 	} while (i & 0x20000000);
@@ -352,6 +363,7 @@ static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		}
 		u += x;
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_revc(struct display *p, int xx, int yy)
@@ -372,11 +384,14 @@ static int leo_wait (struct leo_lx_krn *lx_krn)
 static void leo_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
         struct leo_lx_krn *lx_krn = fb->s.leo.lx_krn;
+	unsigned long flags;
 	int i;
 	
+	spin_lock_irqsave(&fb->lock, flags);
 	lx_krn->krn_type = LEO_KRN_TYPE_CLUT0;
 	i = leo_wait (lx_krn);
-	if (i) return;
+	if (i)
+		goto out;
 	lx_krn->krn_type = LEO_KRN_TYPE_CLUTDATA;
 	for (i = 0; i < 256; i++)
 		lx_krn->krn_value = fb->color_map CM(i,0) |
@@ -384,11 +399,17 @@ static void leo_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int inde
 				    (fb->color_map CM(i,2) << 16); /* Throw colors there :)) */
 	lx_krn->krn_type = LEO_KRN_TYPE_CLUT0;
 	lx_krn->krn_csr |= (LEO_KRN_CSR_UNK|LEO_KRN_CSR_UNK2);
+out:
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_restore_palette (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.leo.ld_ss1->ss1_misc &= ~(LEO_SS1_MISC_ENABLE);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static struct display_switch leo_dispsw __initdata = {
@@ -400,14 +421,19 @@ static void leo_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 
 {
         struct leo_cursor *l = fb->s.leo.cursor;
 	int i;
-                
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	for (i = 0; (l->cur_misc & LEO_CUR_PROGRESS) && i < 300000; i++)
 		udelay (1); /* Busy wait at most 0.3 sec */
-	if (i == 300000) return; /* Timed out - should we print some message? */
+	if (i == 300000)
+		goto out; /* Timed out - should we print some message? */
 	l->cur_type = LEO_CUR_TYPE_CMAP;
 	l->cur_data = (red[0] | (green[0]<<8) | (blue[0]<<16));
 	l->cur_data = (red[1] | (green[1]<<8) | (blue[1]<<16));
 	l->cur_misc = LEO_CUR_UPDATECMAP;
+out:
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Set cursor shape */
@@ -416,7 +442,9 @@ static void leo_setcurshape (struct fb_info_sbusfb *fb)
 	int i, j, k;
 	u32 m, n, mask;
 	struct leo_cursor *l = fb->s.leo.cursor;
-                        
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	l->cur_misc &= ~LEO_CUR_ENABLE;
 	for (k = 0; k < 2; k ++) {
 		l->cur_type = (k * LEO_CUR_TYPE_IMAGE); /* LEO_CUR_TYPE_MASK is 0 */
@@ -431,6 +459,7 @@ static void leo_setcurshape (struct fb_info_sbusfb *fb)
 		}
 	}
 	l->cur_misc |= LEO_CUR_ENABLE;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Load cursor information */
@@ -438,26 +467,37 @@ static void leo_setcursor (struct fb_info_sbusfb *fb)
 {
 	struct cg_cursor *c = &fb->cursor;
 	struct leo_cursor *l = fb->s.leo.cursor;
+	unsigned long flags;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	l->cur_misc &= ~LEO_CUR_ENABLE;
 	l->cur_cursxy = ((c->cpos.fbx - c->chot.fbx) & 0x7ff)
 	|(((c->cpos.fby - c->chot.fby) & 0x7ff) << 11);
 	l->cur_misc |= LEO_CUR_UPDATE;
 	if (c->enable)
 		l->cur_misc |= LEO_CUR_ENABLE;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_blank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.leo.lx_krn->krn_type = LEO_KRN_TYPE_VIDEO;
 	fb->s.leo.lx_krn->krn_csr &= ~LEO_KRN_CSR_ENABLE;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void leo_unblank (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	fb->s.leo.lx_krn->krn_type = LEO_KRN_TYPE_VIDEO;
 	if (!(fb->s.leo.lx_krn->krn_csr & LEO_KRN_CSR_ENABLE))
 		fb->s.leo.lx_krn->krn_csr |= LEO_KRN_CSR_ENABLE;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static int __init
@@ -492,8 +532,10 @@ static void leo_margins (struct fb_info_sbusfb *fb, struct display *p, int x_mar
 static void leo_switch_from_graph (struct fb_info_sbusfb *fb)
 {
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
-	register struct leo_ld *ss = fb->s.leo.ld_ss0;
+	register struct leo_ld *ss = (struct leo_ld *) fb->s.leo.ld_ss0;
+	unsigned long flags;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	ss->wid = 0xffffffff;	
 	ss->wmask = 0xffff;
 	ss->vclipmin = 0;
@@ -503,12 +545,14 @@ static void leo_switch_from_graph (struct fb_info_sbusfb *fb)
 	ss->widclip = 0;
 	us->addrspace = 4;
 	us->fontt = 0;
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
-static void __init leo_rasterimg (struct fb_info_sbusfb *fb, int start)
+static int __init leo_rasterimg (struct fb_info *info, int start)
 {
+	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *) info;
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
-	register struct leo_ld *ss = fb->s.leo.ld_ss0;
+	register struct leo_ld *ss = (struct leo_ld *) fb->s.leo.ld_ss0;
 
 	if (start) {
 		ss->wid = 1;
@@ -521,6 +565,7 @@ static void __init leo_rasterimg (struct fb_info_sbusfb *fb, int start)
 		ss->rop = 0x310850;
 		us->addrspace = 4;
 	}
+	return 0;
 }
 
 static char idstring[40] __initdata = { 0 };
@@ -566,9 +611,10 @@ char * __init leofb_init(struct fb_info_sbusfb *fb)
 	us = fb->s.leo.lc_ss0_usr = (struct leo_lc_ss0_usr *)
 			sparc_alloc_io(phys + LEO_OFF_LC_SS0_USR, 0, 
 			0x1000, "leo_lc_ss0_usr", fb->iospace, 0);
-	ss = fb->s.leo.ld_ss0 = (struct leo_ld *)
+	fb->s.leo.ld_ss0 = (struct leo_ld_ss0 *)
 			sparc_alloc_io(phys + LEO_OFF_LD_SS0, 0, 
 			0x1000, "leo_ld_ss0", fb->iospace, 0);
+	ss = (struct leo_ld *) fb->s.leo.ld_ss0;
 	fb->s.leo.ld_ss1 = (struct leo_ld_ss1 *)
 			sparc_alloc_io(phys + LEO_OFF_LD_SS1, 0, 
 			0x1000, "leo_ld_ss1", fb->iospace, 0);

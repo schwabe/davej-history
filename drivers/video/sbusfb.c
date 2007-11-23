@@ -987,6 +987,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	disp = &fb->disp;
 	type = &fb->type;
 	
+	spin_lock_init(&fb->lock);
 	fb->prom_node = node;
 	fb->prom_parent = parent;
 	fb->sbdp = sbdp;

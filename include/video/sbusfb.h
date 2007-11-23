@@ -87,6 +87,7 @@ struct fb_info_sbusfb {
 	struct display_switch dispsw;
 	struct fbtype type;
 	struct linux_sbus_device *sbdp;
+	spinlock_t lock;
 	int prom_node, prom_parent;
 	union {
 		struct fb_info_creator ffb;

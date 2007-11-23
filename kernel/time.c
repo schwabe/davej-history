@@ -56,6 +56,13 @@ void get_fast_time(struct timeval * t)
 	do_get_fast_time(t);
 }
 
+/* The xtime_lock is not only serializing the xtime read/writes but it's also
+   serializing all accesses to the global NTP variables.
+   NOTE NOTE: We really need a spinlock here as the global irq locking
+   only protect us against the timer irq and not against other time-related
+   syscall running under us. */
+extern rwlock_t xtime_lock;
+
 #ifndef __alpha__
 
 /*
@@ -77,13 +84,6 @@ asmlinkage int sys_time(int * tloc)
 	}
 	return i;
 }
-
-/* The xtime_lock is not only serializing the xtime read/writes but it's also
-   serializing all accesses to the global NTP variables.
-   NOTE NOTE: We really need a spinlock here as the global irq locking
-   only protect us against the timer irq and not against other time-related
-   syscall running under us. */
-extern rwlock_t xtime_lock;
 
 /*
  * sys_stime() can be implemented in user-level using
