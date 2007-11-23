@@ -286,6 +286,7 @@ struct symbol_table symbol_table = {
 	X(slhc_remember),
 	X(slhc_compress),
 	X(slhc_uncompress),
+	X(slhc_toss),
 #endif
 #endif
 	/* Device callback registration */

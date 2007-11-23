@@ -1259,7 +1259,7 @@ static int inet_select(struct socket *sock, int sel_type, select_table *wait )
 static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk=(struct sock *)sock->data;
-	int err;
+	int err, pid;
 
 	switch(cmd) 
 	{
@@ -1268,7 +1268,11 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err=verify_area(VERIFY_READ,(int *)arg,sizeof(long));
 			if(err)
 				return err;
-			sk->proc = get_fs_long((int *) arg);
+			pid = get_fs_long((int *) arg);
+			/* see inet_fcntl */
+			if (current->pid != pid && current->pgrp != -pid && !suser())
+				return -EPERM;
+			sk->proc = pid;
 			return(0);
 		case FIOGETOWN:
 		case SIOCGPGRP:

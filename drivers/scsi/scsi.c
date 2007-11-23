@@ -457,7 +457,8 @@ void scan_scsis (struct Scsi_Host * shpnt)
 
 	      if (!strncmp(scsi_result+8,"NEC",3)) {
 		  if (!strncmp(scsi_result+16,"CD-ROM DRIVE:84 ",16) ||
-		      !strncmp(scsi_result+16,"CD-ROM DRIVE:25",15))
+		      !strncmp(scsi_result+16,"CD-ROM DRIVE:25",15) ||
+		      !strncmp(scsi_result+16,"CD-ROM DRIVE:83",15))
 		      SDpnt->manufacturer = SCSI_MAN_NEC_OLDCDR;
 		  else
 		      SDpnt->manufacturer = SCSI_MAN_NEC;

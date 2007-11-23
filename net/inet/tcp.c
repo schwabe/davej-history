@@ -135,6 +135,8 @@
  *		Alan Cox	:	tcp_data() doesn't ack illegal PSH
  *					only frames. At least one pc tcp stack
  *					generates them.
+ *		Mark Yarvis	:	In tcp_read_wakeup(), don't send an
+ *					ack if stat is TCP_CLOSED.
  *
  *
  * To Fix:
@@ -1801,6 +1803,13 @@ static void tcp_read_wakeup(struct sock *sk)
 
 	if (!sk->ack_backlog) 
 		return;
+
+	/*
+	 * If we're closed, don't send an ack, or we'll get a RST
+	 * from the closed destination.
+	 */
+	if ((sk->state == TCP_CLOSE) || (sk->state == TCP_TIME_WAIT))
+		return; 
 
 	/*
 	 * FIXME: we need to put code here to prevent this routine from

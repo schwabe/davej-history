@@ -505,6 +505,9 @@ ppp_close(struct tty_struct *tty)
     ppp_release (ppp);
 
     PRINTKN (2,(KERN_INFO "ppp: channel %s closing.\n", ppp->dev->name));
+#ifdef MODULE
+    MOD_DEC_USE_COUNT;
+#endif
   }
 }
 
@@ -613,9 +616,6 @@ ppp_dev_close(struct device *dev)
   PRINTKN (2,(KERN_INFO "ppp: channel %s going down for IP packets!\n",
 	      dev->name));
   CHECK_PPP(-ENXIO);
-#ifdef MODULE
-  MOD_DEC_USE_COUNT;
-#endif
   return 0;
 }
 
