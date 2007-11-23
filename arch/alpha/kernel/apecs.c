@@ -20,7 +20,7 @@
 
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
-extern int alpha_sys_type;
+
 /*
  * BIOS32-style PCI interface:
  */
@@ -33,13 +33,16 @@ extern int alpha_sys_type;
 # define DBG(args)
 #endif
 
-#define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int  *
 
 static volatile unsigned int apecs_mcheck_expected = 0;
 static volatile unsigned int apecs_mcheck_taken = 0;
-static unsigned long apecs_jd, apecs_jd1, apecs_jd2;
+static unsigned int apecs_jd, apecs_jd1, apecs_jd2;
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int APECS_DMA_WIN_BASE = APECS_DMA_WIN_BASE_DEFAULT;
+unsigned int APECS_DMA_WIN_SIZE = APECS_DMA_WIN_SIZE_DEFAULT;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -142,15 +145,15 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	DBG(("conf_read(addr=0x%lx, type1=%d)\n", addr, type1));
 
 	/* reset status register to avoid losing errors: */
-	stat0 = *((volatile unsigned int *)APECS_IOC_DCSR);
-	*((volatile unsigned int *)APECS_IOC_DCSR) = stat0;
+	stat0 = *((vuip)APECS_IOC_DCSR);
+	*((vuip)APECS_IOC_DCSR) = stat0;
 	mb();
 	DBG(("conf_read: APECS DCSR was 0x%x\n", stat0));
 	/* if Type1 access, must set HAE #2 */
 	if (type1) {
-		haxr2 = *((unsigned int *)APECS_IOC_HAXR2);
+		haxr2 = *((vuip)APECS_IOC_HAXR2);
 		mb();
-		*((unsigned int *)APECS_IOC_HAXR2) = haxr2 | 1;
+		*((vuip)APECS_IOC_HAXR2) = haxr2 | 1;
 		DBG(("conf_read: TYPE1 access\n"));
 	}
 
@@ -159,7 +162,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	apecs_mcheck_taken = 0;
 	mb();
 	/* access configuration space: */
-	value = *((volatile unsigned int *)addr);
+	value = *((vuip)addr);
 	mb();
 	mb();
 	if (apecs_mcheck_taken) {
@@ -179,7 +182,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	draina();
 
 	/* now look for any errors */
-	stat0 = *((unsigned int *)APECS_IOC_DCSR);
+	stat0 = *((vuip)APECS_IOC_DCSR);
 	DBG(("conf_read: APECS DCSR after read 0x%x\n", stat0));
 	if (stat0 & 0xffe0U) { /* is any error bit set? */
 		/* if not NDEV, print status */
@@ -188,7 +191,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 		}
 
 		/* reset error status: */
-		*((volatile unsigned long *)APECS_IOC_DCSR) = stat0;
+		*((vuip)APECS_IOC_DCSR) = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 		value = 0xffffffff;
@@ -197,7 +200,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 
 	/* if Type1 access, must reset HAE #2 so normal IO space ops work */
 	if (type1) {
-		*((unsigned int *)APECS_IOC_HAXR2) = haxr2 & ~1;
+		*((vuip)APECS_IOC_HAXR2) = haxr2 & ~1;
 		mb();
 	}
 	restore_flags(flags);
@@ -224,22 +227,22 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 	cli();
 
 	/* reset status register to avoid losing errors: */
-	stat0 = *((volatile unsigned int *)APECS_IOC_DCSR);
-	*((volatile unsigned int *)APECS_IOC_DCSR) = stat0;
+	stat0 = *((vuip)APECS_IOC_DCSR);
+	*((vuip)APECS_IOC_DCSR) = stat0;
 	mb();
 
 	/* if Type1 access, must set HAE #2 */
 	if (type1) {
-		haxr2 = *((unsigned int *)APECS_IOC_HAXR2);
+		haxr2 = *((vuip)APECS_IOC_HAXR2);
 		mb();
-		*((unsigned int *)APECS_IOC_HAXR2) = haxr2 | 1;
+		*((vuip)APECS_IOC_HAXR2) = haxr2 | 1;
 	}
 
 	draina();
 	apecs_mcheck_expected = 1;
 	mb();
 	/* access configuration space: */
-	*((volatile unsigned int *)addr) = value;
+	*((vuip)addr) = value;
 	mb();
 	mb();
 	apecs_mcheck_expected = 0;
@@ -254,7 +257,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 	draina();
 
 	/* now look for any errors */
-	stat0 = *((unsigned int *)APECS_IOC_DCSR);
+	stat0 = *((vuip)APECS_IOC_DCSR);
 	if (stat0 & 0xffe0U) { /* is any error bit set? */
 		/* if not NDEV, print status */
 		if (!(stat0 & 0x0800)) {
@@ -262,7 +265,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 		}
 
 		/* reset error status: */
-		*((volatile unsigned long *)APECS_IOC_DCSR) = stat0;
+		*((vuip)APECS_IOC_DCSR) = stat0;
 		mb();
 		wrmces(0x7);			/* reset machine check */
 	}
@@ -270,7 +273,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 
 	/* if Type1 access, must reset HAE #2 so normal IO space ops work */
 	if (type1) {
-		*((unsigned int *)APECS_IOC_HAXR2) = haxr2 & ~1;
+		*((vuip)APECS_IOC_HAXR2) = haxr2 & ~1;
 		mb();
 	}
 	restore_flags(flags);
@@ -417,6 +420,38 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)APECS_IOC_TB2R = 0;
 
 #else  /* CONFIG_ALPHA_XL */
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 1 for enabled and mapped to 0 */
+	if ((*(vuip)APECS_IOC_PB1R & (1U<<19)) && (*(vuip)APECS_IOC_TB1R == 0))
+	{
+	  APECS_DMA_WIN_BASE = *(vuip)APECS_IOC_PB1R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE = *(vuip)APECS_IOC_PM1R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE += 0x00100000U;
+#if 0
+	  printk("apecs_init: using Window 1 settings\n");
+	  printk("apecs_init: PB1R 0x%x PM1R 0x%x TB1R 0x%x\n",
+     		 *(vuip)APECS_IOC_PB1R,
+		 *(vuip)APECS_IOC_PM1R,
+		 *(vuip)APECS_IOC_TB1R);
+#endif
+     	}
+	else	/* check window 2 for enabled and mapped to 0 */
+	if ((*(vuip)APECS_IOC_PB2R & (1U<<19)) && (*(vuip)APECS_IOC_TB2R == 0))
+	{
+	  APECS_DMA_WIN_BASE = *(vuip)APECS_IOC_PB2R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE = *(vuip)APECS_IOC_PM2R & 0xfff00000U;
+	  APECS_DMA_WIN_SIZE += 0x00100000U;
+#if 0
+     	  printk("apecs_init: using Window 2 settings\n");
+	  printk("apecs_init: PB2R 0x%x PM2R 0x%x TB2R 0x%x\n",
+		 *(vuip)APECS_IOC_PB2R,
+		 *(vuip)APECS_IOC_PM2R,
+		 *(vuip)APECS_IOC_TB2R);
+#endif
+     	}
+	else /* we must use our defaults... */
+#endif /* SRM_SETUP */
+	{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, window 2 is disabled.  In the future, we may
@@ -428,9 +463,11 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	*(vuip)APECS_IOC_PB1R  = 1U<<19 | (APECS_DMA_WIN_BASE & 0xfff00000U);
 	*(vuip)APECS_IOC_PM1R  = (APECS_DMA_WIN_SIZE - 1) & 0xfff00000U;
 	*(vuip)APECS_IOC_TB1R  = 0;
+	}
 #endif /* CONFIG_ALPHA_XL */
 
 #ifdef CONFIG_ALPHA_CABRIOLET
+#if 0
 	/*
 	 * JAE: HACK!!! for now, hardwire if configured...
 	 * davidm: Older miniloader versions don't set the clockfrequency
@@ -448,10 +485,13 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 	    unsigned long *l, sum;
 
 	    sum = 0;
-	    for (l = (unsigned long *) hwrpb; l < (unsigned long *) &hwrpb->chksum; ++l)
+	    for (l = (unsigned long *) hwrpb;
+		 l < (unsigned long *) &hwrpb->chksum;
+		 ++l)
 	      sum += *l;
 	    hwrpb->chksum = sum;
 	}
+#endif
 #endif /* CONFIG_ALPHA_CABRIOLET */
 
        /*
@@ -462,10 +502,10 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
         */
        {
 #if 0
-         unsigned int haxr2 = *((unsigned int *)APECS_IOC_HAXR2); mb();
+         unsigned int haxr2 = *((vuip)APECS_IOC_HAXR2); mb();
          if (haxr2) printk("apecs_init: HAXR2 was 0x%x\n", haxr2);
 #endif
-         *((unsigned int *)APECS_IOC_HAXR2) = 0; mb();
+         *((vuip)APECS_IOC_HAXR2) = 0; mb();
        }
 
 
@@ -474,15 +514,15 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 
 int apecs_pci_clr_err(void)
 {
-	apecs_jd = *((unsigned long *)APECS_IOC_DCSR);
+	apecs_jd = *((vuip)APECS_IOC_DCSR);
 	if (apecs_jd & 0xffe0L) {
-		apecs_jd1 = *((unsigned long *)APECS_IOC_SEAR);
-		*((unsigned long *)APECS_IOC_DCSR) = apecs_jd | 0xffe1L;
-		apecs_jd = *((unsigned long *)APECS_IOC_DCSR);
+		apecs_jd1 = *((vuip)APECS_IOC_SEAR);
+		*((vuip)APECS_IOC_DCSR) = apecs_jd | 0xffe1L;
+		apecs_jd = *((vuip)APECS_IOC_DCSR);
 		mb();
 	}
-	*((unsigned long *)APECS_IOC_TBIA) = APECS_IOC_TBIA;
-	apecs_jd2 = *((unsigned long *)APECS_IOC_TBIA);
+	*((vuip)APECS_IOC_TBIA) = APECS_IOC_TBIA;
+	apecs_jd2 = *((vuip)APECS_IOC_TBIA);
 	mb();
 	return 0;
 }
@@ -526,8 +566,8 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 #define MCHK_NO_DEVSEL 0x205L
 #define MCHK_NO_TABT 0x204L
 	if (apecs_mcheck_expected &&
-	    (((unsigned int)mchk_procdata->paltemp[0] == MCHK_NO_DEVSEL) ||
-	     ((unsigned int)mchk_procdata->paltemp[0] == MCHK_NO_TABT))
+	    (((unsigned int)mchk_header->code == MCHK_NO_DEVSEL) ||
+	     ((unsigned int)mchk_header->code == MCHK_NO_TABT))
 	    )
 	{
 #else
@@ -550,19 +590,21 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 		printk("apecs_machine_check: HW correctable (0x%lx)\n", vector);
 	}
 	else {
-		printk("APECS machine check:\n");
-		printk("  vector=0x%lx la_ptr=0x%lx\n",
+		printk(KERN_CRIT "APECS machine check:\n");
+		printk(KERN_CRIT "  vector=0x%lx la_ptr=0x%lx\n",
 		       vector, la_ptr);
-		printk("  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+		printk(KERN_CRIT
+		       "  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
 		       regs->pc, mchk_header->size, mchk_header->proc_offset,
 		       mchk_header->sys_offset);
-		printk("  expected %d DCSR 0x%lx PEAR 0x%lx\n",
+		printk(KERN_CRIT "  expected %d DCSR 0x%lx PEAR 0x%lx\n",
 		       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
 		       mchk_sysdata->epic_pear);
 
 		ptr = (unsigned long *)la_ptr;
 		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		    printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
+		    printk(KERN_CRIT " +%lx %lx %lx\n",
+			   i*sizeof(long), ptr[i], ptr[i+1]);
 		}
 #if 0
 		/* doesn't work with MILO */

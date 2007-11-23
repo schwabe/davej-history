@@ -689,13 +689,13 @@ el3_rx(struct device *dev)
 				lp->stats.rx_packets++;
 				continue;
 			} else if (el3_debug)
-				printk("%s: Couldn't allocate a sk_buff of size %d.\n",
+				printk(KERN_WARNING "%s: Couldn't allocate a sk_buff of size %d.\n",
 					   dev->name, pkt_len);
 		}
 		lp->stats.rx_dropped++;
 		outw(RxDiscard, ioaddr + EL3_CMD);
 		while (inw(ioaddr + EL3_STATUS) & 0x1000)
-			printk("	Waiting for 3c509 to discard packet, status %x.\n",
+			printk(KERN_DEBUG "        Waiting for 3c509 to discard packet, status %x.\n",
 				   inw(ioaddr + EL3_STATUS) );
 	}
 

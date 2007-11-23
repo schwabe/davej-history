@@ -24,7 +24,7 @@ extern int get_ioport_list(char *);
 
 
 #define HAVE_AUTOIRQ
-extern void *irq2dev_map[16];		/* Use only if you own the IRQ. */
+extern void *irq2dev_map[];		/* Use only if you own the IRQ. */
 extern int autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 

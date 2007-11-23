@@ -5,8 +5,9 @@
  *
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
+ *  Fixed (I hope) the wait_queue trashing bug. Alan Cox <alan@redhat.com>
  *
- *  ==FILEVERSION 970703==
+ *  ==FILEVERSION 980512==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -448,8 +449,13 @@ ppp_init_ctrl_blk (register struct ppp *ppp)
 	ppp->ubuf	= NULL;
 	ppp->cbuf	= NULL;
 	ppp->slcomp	= NULL;
+#if 0
+	/* AC - We don't want to initialise this as the wait queue may still
+	   be live. Having someone waiting on the old and the new queue is fine
+	   the old people will unhook themselves so just set this up in ppp_alloc */
 	ppp->read_wait	= NULL;
 	ppp->write_wait = NULL;
+#endif	
 	ppp->last_xmit	= jiffies - flag_time;
 
 	/* clear statistics */
@@ -798,9 +804,7 @@ ppp_tty_open (struct tty_struct *tty)
         }
 
 	if (ppp == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-			"ppp_tty_open: couldn't allocate ppp channel\n");
+		printk (KERN_WARNING "ppp_tty_open: couldn't allocate ppp channel\n");
 		return -ENFILE;
 	}
 /*

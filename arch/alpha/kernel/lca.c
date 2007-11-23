@@ -22,6 +22,7 @@
 #ifdef CONFIG_ALPHA_LCA
 
 #define vulp	volatile unsigned long *
+#define vuip	volatile unsigned int  *
 
 /*
  * Machine check reasons.  Defined according to PALcode sources
@@ -45,6 +46,11 @@
 #define MCHK_K_SIO_SERR		0x204	/* all platforms so far */
 #define MCHK_K_SIO_IOCHK	0x206	/* all platforms so far */
 #define MCHK_K_DCSR		0x208	/* all but Noname */
+
+#ifdef CONFIG_ALPHA_SRM_SETUP
+unsigned int LCA_DMA_WIN_BASE = LCA_DMA_WIN_BASE_DEFAULT;
+unsigned int LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
+#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -289,6 +295,40 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 
 unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 {
+#ifdef CONFIG_ALPHA_SRM_SETUP
+	/* check window 0 for enabled and mapped to 0 */
+	if ((*(vulp)LCA_IOC_W_BASE0 & (1UL<<33)) &&
+	    (*(vulp)LCA_IOC_T_BASE0 == 0))
+	{
+	  LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE0 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK0 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE += 1;
+#if 1
+	  printk("lca_init: using Window 0 settings\n");
+	  printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+		 *(vulp)LCA_IOC_W_BASE0,
+		 *(vulp)LCA_IOC_W_MASK0,
+		 *(vulp)LCA_IOC_T_BASE0);
+#endif
+	}
+	else	/* check window 2 for enabled and mapped to 0 */
+	if ((*(vulp)LCA_IOC_W_BASE1 & (1UL<<33)) &&
+	    (*(vulp)LCA_IOC_T_BASE1 == 0))
+	{
+	  LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE1 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK1 & 0xffffffffUL;
+	  LCA_DMA_WIN_SIZE += 1;
+#if 1
+	  printk("lca_init: using Window 1 settings\n");
+	  printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+		 *(vulp)LCA_IOC_W_BASE1,
+		 *(vulp)LCA_IOC_W_MASK1,
+		 *(vulp)LCA_IOC_T_BASE1);
+#endif
+	}
+	else /* we must use our defaults... */
+#endif /* SRM_SETUP */
+	{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, window 1 is disabled.  In the future, we may
@@ -296,9 +336,11 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 	 * goes at 1 GB and is 1 GB large.
 	 */
 	*(vulp)LCA_IOC_W_BASE1 = 0UL<<33;
+
 	*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE;
 	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
 	*(vulp)LCA_IOC_T_BASE0 = 0;
+	}
 
 	/*
 	 * Disable PCI parity for now.  The NCR53c810 chip has
@@ -386,11 +428,14 @@ void ioc_error (__u32 stat0, __u32 stat1)
 
 void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
 {
+	unsigned long * ptr;
 	const char * reason;
 	union el_lca el;
 	char buf[128];
+	long i;
 
-	printk("lca: machine check (la=0x%lx,pc=0x%lx)\n", la, regs->pc);
+	printk(KERN_CRIT "lca: machine check (la=0x%lx,pc=0x%lx)\n",
+	       la, regs->pc);
 	el.c = (struct el_common *) la;
 	/*
 	 * The first quadword after the common header always seems to
@@ -399,9 +444,9 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	 * logout frame, the upper 32 bits is the machine check
 	 * revision level, which we ignore for now.
 	 */
-	switch (el.s->reason & 0xffffffff) {
+	switch (el.c->code & 0xffffffff) {
 	      case MCHK_K_TPERR:	reason = "tag parity error"; break;
-	      case MCHK_K_TCPERR:	reason = "tag something parity error"; break;
+	      case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
 	      case MCHK_K_HERR:		reason = "access to non-existent memory"; break;
 	      case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
 	      case MCHK_K_ECC_NC:	reason = "non-correctable ECC error"; break;
@@ -416,7 +461,7 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	      case MCHK_K_UNKNOWN:
 	      default:
 		sprintf(buf, "reason for machine-check unknown (0x%lx)",
-			el.s->reason & 0xffffffff);
+			el.c->code & 0xffffffff);
 		reason = buf;
 		break;
 	}
@@ -425,7 +470,8 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 
 	switch (el.c->size) {
 	      case sizeof(struct el_lca_mcheck_short):
-		printk("  Reason: %s (short frame%s, dc_stat=%lx):\n",
+		printk(KERN_CRIT
+		       "  Reason: %s (short frame%s, dc_stat=%lx):\pn",
 		       reason, el.c->retry ? ", retryable" : "", el.s->dc_stat);
 		if (el.s->esr & ESR_EAV) {
 		    mem_error(el.s->esr, el.s->ear);
@@ -436,11 +482,12 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		break;
 
 	      case sizeof(struct el_lca_mcheck_long):
-		printk("  Reason: %s (long frame%s):\n",
+		printk(KERN_CRIT "  Reason: %s (long frame%s):\n",
 		       reason, el.c->retry ? ", retryable" : "");
-		printk("    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
+		printk(KERN_CRIT
+		       "    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
 		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
-		printk("    car: %lx\n", el.l->car);
+		printk(KERN_CRIT "    car: %lx\n", el.l->car);
 		if (el.l->esr & ESR_EAV) {
 		    mem_error(el.l->esr, el.l->ear);
 		}
@@ -450,8 +497,55 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		break;
 
 	      default:
-		printk("  Unknown errorlog size %d\n", el.c->size);
+		printk(KERN_CRIT "  Unknown errorlog size %d\n", el.c->size);
 	}
+
+	/* dump the the logout area to give all info: */
+
+	ptr = (unsigned long *) la;
+	for (i = 0; i < el.c->size / sizeof(long); i += 2) {
+	    printk(KERN_CRIT " +%8lx %016lx %016lx\n",
+		   i*sizeof(long), ptr[i], ptr[i+1]);
+	}
+}
+
+void
+lca_clock_print(void)
+{
+        long    pmr_reg;
+
+        pmr_reg = READ_PMR;
+
+        printk("Status of clock control:\n");
+        printk("\tPrimary clock divisor\t0x%x\n", GET_PRIMARY(pmr_reg));
+        printk("\tOverride clock divisor\t0x%x\n", GET_OVERRIDE(pmr_reg));
+        printk("\tInterrupt override is %s\n",
+	       (pmr_reg & LCA_PMR_INTO) ? "on" : "off"); 
+        printk("\tDMA override is %s\n",
+	       (pmr_reg & LCA_PMR_DMAO) ? "on" : "off"); 
+
+}
+
+int
+lca_get_clock(void)
+{
+        long    pmr_reg;
+
+        pmr_reg = READ_PMR;
+        return(GET_PRIMARY(pmr_reg));
+
+	}
+
+void
+lca_clock_fiddle(int divisor)
+{
+        long    pmr_reg;
+
+        pmr_reg = READ_PMR;
+        SET_PRIMARY_CLOCK(pmr_reg, divisor);
+/*        lca_norm_clock = divisor; */
+        WRITE_PMR(pmr_reg);
+        mb();
 }
 
 #endif /* CONFIG_ALPHA_LCA */

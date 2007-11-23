@@ -8,9 +8,17 @@
 #define __ASM_ALPHA_PROCESSOR_H
 
 /*
- * We have a 41-bit user address space: 2TB user VM...
+ * We have a 41-bit user address space: 2TB user VM.
+ * Under certain circumstances (e.g. when emulating 32-bit code)
+ * we may want to voluntarily limit this...
  */
 #define TASK_SIZE (0x40000000000UL)
+#define MAX_USER_ADDR ((current->personality&ADDR_MAX_32BIT) ? 0x100000000UL : \
+	((current->personality & ADDR_MAX_31BIT) ? 0x80000000UL : \
+							0x40000000000UL))
+#define MMAP_SEARCH_START ((current->personality & ADDR_MAX_31BIT) ? \
+			(MAX_USER_ADDR/2) : (MAX_USER_ADDR/3))
+
 
 /*
  * Bus types

@@ -30,6 +30,8 @@
  *		Alan Cox	: Protect against forwarding explosions with
  *				  older network drivers and IFF_ALLMULTI.
  *	Christer Weinigel	: Better rebuild header message.
+ *		Russell King	: eth_header_cache_bind and eth_header_cache_update
+ *				  only compiled if CONFIG_INET is selected
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -218,6 +220,7 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	return htons(ETH_P_802_2);
 }
 
+#ifdef CONFIG_INET
 /*
  * Upper level calls this function to bind hardware header cache entry.
  * If the call is successful, then corresponding Address Resolution Protocol
@@ -258,6 +261,7 @@ void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned c
 	memcpy(hh->hh_data, haddr, ETH_ALEN);
 	hh->hh_uptodate = 1;
 }
+#endif
 
 /*
  *	Copy from an ethernet device memory space to an sk_buff while checksumming if IP

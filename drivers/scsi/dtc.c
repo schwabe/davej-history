@@ -94,23 +94,23 @@ struct proc_dir_entry proc_scsi_dtc = {
 
 
 static struct override {
-   unsigned char *address;
+   __u32 address;
    int irq;
 } overrides
 #ifdef OVERRIDE
 [] = OVERRIDE;
 #else
-[4] = {{NULL, IRQ_AUTO}, {NULL, IRQ_AUTO}, {NULL, IRQ_AUTO},
-     {NULL, IRQ_AUTO}};
+[4] = {{0, IRQ_AUTO}, {0, IRQ_AUTO}, {0, IRQ_AUTO},
+       {0, IRQ_AUTO}};
 #endif
 
 #define NO_OVERRIDES (sizeof(overrides) / sizeof(struct override))
 
 static struct base {
-   unsigned char *address;
+   __u32 address;
    int noauto;
-} bases[] = {{(unsigned char *) 0xcc000, 0}, {(unsigned char *) 0xc8000, 0},
-{(unsigned char *) 0xdc000, 0}, {(unsigned char *) 0xd8000, 0}};
+} bases[] = {{0xcc000, 0}, {0xc8000, 0},
+{0xdc000, 0}, {0xd8000, 0}};
 
 #define NO_BASES (sizeof (bases) / sizeof (struct base))
 
@@ -138,10 +138,10 @@ void dtc_setup(char *str, int *ints) {
       printk("dtc_setup: usage dtc=address,irq\n");
    else
       if (commandline_current < NO_OVERRIDES) {
-      overrides[commandline_current].address = (unsigned char *) ints[1];
+      overrides[commandline_current].address = ints[1];
       overrides[commandline_current].irq = ints[2];
       for (i = 0; i < NO_BASES; ++i)
-	 if (bases[i].address == (unsigned char *) ints[1]) {
+	 if (bases[i].address == ints[1]) {
 	 bases[i].noauto = 1;
 	 break;
       }

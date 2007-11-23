@@ -201,7 +201,7 @@ void tga_init_video(void);
 void tga_clear_screen(void);
 
 void
-set_palette (void)
+tga_set_palette (void)
 {
   int i, j;
 
@@ -233,7 +233,7 @@ set_palette (void)
 }
 
 void
-__set_origin(unsigned short offset)
+tga_set_origin(unsigned short offset)
 {
   /*
    * should not be called, but if so, do nothing...
@@ -244,7 +244,7 @@ __set_origin(unsigned short offset)
  * Hide the cursor from view, during blanking, usually...
  */
 void
-hide_cursor(void)
+tga_hide_cursor(void)
 {
 	unsigned long flags;
 	save_flags(flags); cli();
@@ -259,7 +259,7 @@ hide_cursor(void)
 }
 
 void
-set_cursor(int currcons)
+tga_set_cursor(int currcons)
 {
   unsigned int idx, xt, yt, row, col;
   unsigned long flags;
@@ -267,8 +267,10 @@ set_cursor(int currcons)
   if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
     return;
 
+#if 0
   if (__real_origin != __origin)
-    __set_origin(__real_origin);
+    tga_set_origin(__real_origin);
+#endif
 
   save_flags(flags); cli();
 
@@ -300,12 +302,12 @@ set_cursor(int currcons)
     }
 
   } else
-    hide_cursor();
+    tga_hide_cursor();
   restore_flags(flags);
 }
 
 unsigned long
-con_type_init(unsigned long kmem_start, const char **display_desc)
+tga_init(unsigned long kmem_start, const char **display_desc)
 {
         can_do_color = 1;
 
@@ -328,7 +330,7 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
  * the VGA version of set_scrmem() has some direct VGA references.
  */
 void
-get_scrmem(int currcons)
+tga_get_scrmem(int currcons)
 {
 	memcpyw((unsigned short *)vc_scrbuf[currcons],
 		(unsigned short *)origin, video_screen_size);
@@ -338,7 +340,7 @@ get_scrmem(int currcons)
 }
 
 void
-set_scrmem(int currcons, long offset)
+tga_set_scrmem(int currcons, long offset)
 {
 	if (video_mem_term - video_mem_base < offset + video_screen_size)
 	  offset = 0;	/* strange ... */
@@ -357,7 +359,7 @@ set_scrmem(int currcons, long offset)
  * for now, we will use/allow *only* our built-in font...
  */
 int
-set_get_font(char * arg, int set, int ch512)
+tga_set_get_font(char * arg, int set, int ch512)
 {
 	return -EINVAL;
 }
@@ -371,7 +373,7 @@ set_get_font(char * arg, int set, int ch512)
  * for now, we only support the built-in font...
  */
 int
-con_adjust_height(unsigned long fontheight)
+tga_adjust_height(unsigned long fontheight)
 {
 	return -EINVAL;
 }
@@ -386,7 +388,7 @@ con_adjust_height(unsigned long fontheight)
  */
 
 int
-set_get_cmap(unsigned char * arg, int set) {
+tga_set_get_cmap(unsigned char * arg, int set) {
 	int i;
 
 	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, 16*3);
@@ -424,16 +426,16 @@ set_get_cmap(unsigned char * arg, int set) {
  * dummy routines for the VESA blanking code, which is VGA only,
  * so we don't have to carry that stuff around for the TGA...
  */
-void vesa_powerdown(void)
+void tga_vesa_powerdown(void)
 {
 }
-void vesa_blank(void)
+void tga_vesa_blank(void)
 {
 }
-void vesa_unblank(void)
+void tga_vesa_unblank(void)
 {
 }
-void set_vesa_blanking(const unsigned long arg)
+void tga_set_vesa_blanking(const unsigned long arg)
 {
 }
 
@@ -441,9 +443,13 @@ void set_vesa_blanking(const unsigned long arg)
  * video init code, called from within the PCI bus probing code;
  * when TGA console is configured, at the end of the probing code,
  * we call here to look for a TGA device, and proceed...
+ *
+ * note that this code MUST be called BEFORE console_init/con_init,
+ * so that either VGA or TGA are set up but not both. we had to move
+ * console_init to after pci_init in start_kernel to assure this.
  */
 void
-tga_console_init(void)
+tga_console_find(void)
 {
 	unsigned char pci_bus, pci_devfn;
 	int status;
@@ -477,10 +483,11 @@ tga_console_init(void)
 	tga_init_video();
 	tga_clear_screen();
 
-	/*
-	 * FINALLY, we can register TGA as console (whew!)
-	 */
-	register_console(console_print);
+#ifdef CONFIG_VGA_CONSOLE
+	/* if both are configured, we are using a dispatch table,
+	   so we must set the index */
+	curr_cons = 1;
+#endif
 }
 
 unsigned char PLLbits[7] = { 0x80, 0x04, 0x00, 0x24, 0x44, 0x80, 0xb8 };

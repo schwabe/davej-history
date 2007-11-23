@@ -14,6 +14,8 @@
  * so don't change it unless you know what you are doing.
  */
 #define TASK_SIZE	(0xF0000000UL)
+#define MAX_USER_ADDR	TASK_SIZE
+#define MMAP_SEARCH_START (TASK_SIZE/3)
 
 /*
  * Bus types

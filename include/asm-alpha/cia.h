@@ -74,11 +74,23 @@
 
 #define BYTE_ENABLE_SHIFT 5
 #define TRANSFER_LENGTH_SHIFT 3
-#define MEM_SP1_MASK 0x1fffffff  /* Mem sparse space 1 mask is 29 bits */
 
+#define MEM_R1_MASK 0x1fffffff  /* SPARSE Mem region 1 mask is 29 bits */
+#define MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
+#define MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define CIA_DMA_WIN_BASE	(1024UL*1024UL*1024UL)
+#ifdef CONFIG_ALPHA_SRM_SETUP
+/* if we are using the SRM PCI setup, we'll need to use variables instead */
+#define CIA_DMA_WIN_BASE_DEFAULT    (1024*1024*1024)
+#define CIA_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024)
+
+extern unsigned int CIA_DMA_WIN_BASE;
+extern unsigned int CIA_DMA_WIN_SIZE;
+
+#else /* SRM_SETUP */
+#define CIA_DMA_WIN_BASE            (1024*1024*1024)
 #define CIA_DMA_WIN_SIZE	(1024*1024*1024)
+#endif /* SRM_SETUP */
 
 /*
  * 21171-CA Control and Status Registers (p4-1)
@@ -86,6 +98,7 @@
 #define CIA_IOC_CIA_REV               (IDENT_ADDR + 0x8740000080UL)
 #define CIA_IOC_PCI_LAT               (IDENT_ADDR + 0x87400000C0UL)
 #define CIA_IOC_CIA_CTRL              (IDENT_ADDR + 0x8740000100UL)
+#define CIA_IOC_CIA_CNFG              (IDENT_ADDR + 0x8740000140UL)
 #define CIA_IOC_HAE_MEM               (IDENT_ADDR + 0x8740000400UL)
 #define CIA_IOC_HAE_IO                (IDENT_ADDR + 0x8740000440UL)
 #define CIA_IOC_CFG                   (IDENT_ADDR + 0x8740000480UL)
@@ -119,18 +132,25 @@
 #define CIA_IOC_PCI_ERR3              (IDENT_ADDR + 0x8740008880UL)
 
 /*
- * 2117A-CA PCI Address Translation Registers.   I've only defined
- * the first window fully as that's the only one that we're currently using.
- * The other window bases are needed to disable the windows.
+ * 2117A-CA PCI Address Translation Registers.
  */
 #define CIA_IOC_PCI_TBIA              (IDENT_ADDR + 0x8760000100UL)
+
 #define CIA_IOC_PCI_W0_BASE           (IDENT_ADDR + 0x8760000400UL)
 #define CIA_IOC_PCI_W0_MASK           (IDENT_ADDR + 0x8760000440UL)
 #define CIA_IOC_PCI_T0_BASE           (IDENT_ADDR + 0x8760000480UL)
 
 #define CIA_IOC_PCI_W1_BASE           (IDENT_ADDR + 0x8760000500UL)
+#define CIA_IOC_PCI_W1_MASK           (IDENT_ADDR + 0x8760000540UL)
+#define CIA_IOC_PCI_T1_BASE           (IDENT_ADDR + 0x8760000580UL)
+
 #define CIA_IOC_PCI_W2_BASE           (IDENT_ADDR + 0x8760000600UL)
+#define CIA_IOC_PCI_W2_MASK           (IDENT_ADDR + 0x8760000640UL)
+#define CIA_IOC_PCI_T2_BASE           (IDENT_ADDR + 0x8760000680UL)
+
 #define CIA_IOC_PCI_W3_BASE           (IDENT_ADDR + 0x8760000700UL)
+#define CIA_IOC_PCI_W3_MASK           (IDENT_ADDR + 0x8760000740UL)
+#define CIA_IOC_PCI_T3_BASE           (IDENT_ADDR + 0x8760000780UL)
 
 /*
  * 21171-CA System configuration registers (p4-3)
@@ -155,6 +175,8 @@
 #define CIA_CONF		        (IDENT_ADDR + 0x8700000000UL)
 #define CIA_IO				(IDENT_ADDR + 0x8580000000UL)
 #define CIA_SPARSE_MEM			(IDENT_ADDR + 0x8000000000UL)
+#define CIA_SPARSE_MEM_R2		(IDENT_ADDR + 0x8400000000UL)
+#define CIA_SPARSE_MEM_R3		(IDENT_ADDR + 0x8500000000UL)
 #define CIA_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
 
 /*
@@ -296,13 +318,125 @@ extern inline void __outl(unsigned int b, unsigned long addr)
  * 
  */
 
+#ifdef CONFIG_ALPHA_SRM_SETUP
+
+extern unsigned long cia_sm_base_r1, cia_sm_base_r2, cia_sm_base_r3;
+
+extern inline unsigned long __readb(unsigned long addr)
+{
+	unsigned long result, shift, work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	else
+	{
+#if 0
+	  printk("__readb: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffUL;
+	}
+	shift = (addr & 0x3) << 3;
+	result = *(vuip) work;
+	result >>= shift;
+	return 0x0ffUL & result;
+}
+
+extern inline unsigned long __readw(unsigned long addr)
+{
+	unsigned long result, shift, work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x08);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x08);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x08);
+	else
+	{
+#if 0
+	  printk("__readw: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return 0x0ffUL;
+	}
+	shift = (addr & 0x3) << 3;
+	result = *(vuip) work;
+	result >>= shift;
+	return 0x0ffffUL & result;
+}
+
+extern inline void __writeb(unsigned char b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	else
+	{
+#if 0
+	  printk("__writeb: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b * 0x01010101;
+}
+
+extern inline void __writew(unsigned short b, unsigned long addr)
+{
+	unsigned long work;
+
+	if ((addr >= cia_sm_base_r1) &&
+	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
+	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
+	else
+	if ((addr >= cia_sm_base_r2) &&
+	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
+	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
+	else
+	if ((addr >= cia_sm_base_r3) &&
+	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
+	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	else
+	{
+#if 0
+	  printk("__writew: address 0x%lx not covered by HAE\n", addr);
+#endif
+	  return;
+	}
+	*(vuip) work = b * 0x00010001;
+}
+
+#else /* SRM_SETUP */
+
 extern inline unsigned long __readb(unsigned long addr)
 {
 	unsigned long result, shift, msb;
 
 	shift = (addr & 0x3) * 8 ;
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -317,7 +451,7 @@ extern inline unsigned long __readw(unsigned long addr)
 
 	shift = (addr & 0x3) * 8;
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -326,17 +460,12 @@ extern inline unsigned long __readw(unsigned long addr)
 	return 0xffffUL & result;
 }
 
-extern inline unsigned long __readl(unsigned long addr)
-{
-	return *(vuip) (addr + CIA_DENSE_MEM);
-}
-
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
@@ -348,11 +477,18 @@ extern inline void __writew(unsigned short b, unsigned long addr)
         unsigned long msb ; 
 
 	msb = addr & 0xE0000000 ;
-	addr &= MEM_SP1_MASK ;
+	addr &= MEM_R1_MASK ;
 	if (msb != hae.cache) {
 	  set_hae(msb);
 	}
 	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08) = b * 0x00010001;
+}
+
+#endif /* SRM_SETUP */
+
+extern inline unsigned long __readl(unsigned long addr)
+{
+	return *(vuip) (addr + CIA_DENSE_MEM);
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)
@@ -379,48 +515,73 @@ extern unsigned long cia_init (unsigned long mem_start,
 /*
  * Data structure for handling CIA machine checks:
  */
+/* ev5-specific info: */
+struct el_procdata {
+	unsigned long shadow[8];	/* PALmode shadow registers */
+	unsigned long paltemp[24];	/* PAL temporary registers */
+	/* EV5-specific fields */
+	unsigned long exc_addr;		/* Address of excepting instruction. */
+	unsigned long exc_sum;		/* Summary of arithmetic traps. */
+	unsigned long exc_mask;		/* Exception mask (from exc_sum). */
+	unsigned long exc_base;		/* PALbase at time of exception. */
+	unsigned long isr;		/* Interrupt summary register. */
+	unsigned long icsr;		/* Ibox control register. */
+	unsigned long ic_perr_stat;
+	unsigned long dc_perr_stat;
+	unsigned long va;		/* Effective VA of fault or miss. */
+	unsigned long mm_stat;
+	unsigned long sc_addr;
+	unsigned long sc_stat;
+	unsigned long bc_tag_addr;
+	unsigned long ei_addr;
+	unsigned long fill_syn;
+	unsigned long ei_stat;
+	unsigned long ld_lock;
+};
+
+/* system-specific info: */
 struct el_CIA_sysdata_mcheck {
-    u_long      coma_gcr;                       
-    u_long      coma_edsr;                      
-    u_long      coma_ter;                       
-    u_long      coma_elar;                      
-    u_long      coma_ehar;                      
-    u_long      coma_ldlr;                      
-    u_long      coma_ldhr;                      
-    u_long      coma_base0;                     
-    u_long      coma_base1;                     
-    u_long      coma_base2;                     
-    u_long      coma_cnfg0;                     
-    u_long      coma_cnfg1;                     
-    u_long      coma_cnfg2;                     
-    u_long      epic_dcsr;                      
-    u_long      epic_pear;                      
-    u_long      epic_sear;                      
-    u_long      epic_tbr1;                      
-    u_long      epic_tbr2;                      
-    u_long      epic_pbr1;                      
-    u_long      epic_pbr2;                      
-    u_long      epic_pmr1;                      
-    u_long      epic_pmr2;                      
-    u_long      epic_harx1;                     
-    u_long      epic_harx2;                     
-    u_long      epic_pmlt;                      
-    u_long      epic_tag0;                      
-    u_long      epic_tag1;                      
-    u_long      epic_tag2;                      
-    u_long      epic_tag3;                      
-    u_long      epic_tag4;                      
-    u_long      epic_tag5;                      
-    u_long      epic_tag6;                      
-    u_long      epic_tag7;                      
-    u_long      epic_data0;                     
-    u_long      epic_data1;                     
-    u_long      epic_data2;                     
-    u_long      epic_data3;                     
-    u_long      epic_data4;                     
-    u_long      epic_data5;                     
-    u_long      epic_data6;                     
-    u_long      epic_data7;                     
+    unsigned long      coma_gcr;                       
+    unsigned long      coma_edsr;                      
+    unsigned long      coma_ter;                       
+    unsigned long      coma_elar;                      
+    unsigned long      coma_ehar;                      
+    unsigned long      coma_ldlr;                      
+    unsigned long      coma_ldhr;                      
+    unsigned long      coma_base0;                     
+    unsigned long      coma_base1;                     
+    unsigned long      coma_base2;                     
+    unsigned long      coma_cnfg0;                     
+    unsigned long      coma_cnfg1;                     
+    unsigned long      coma_cnfg2;                     
+    unsigned long      epic_dcsr;                      
+    unsigned long      epic_pear;                      
+    unsigned long      epic_sear;                      
+    unsigned long      epic_tbr1;                      
+    unsigned long      epic_tbr2;                      
+    unsigned long      epic_pbr1;                      
+    unsigned long      epic_pbr2;                      
+    unsigned long      epic_pmr1;                      
+    unsigned long      epic_pmr2;                      
+    unsigned long      epic_harx1;                     
+    unsigned long      epic_harx2;                     
+    unsigned long      epic_pmlt;                      
+    unsigned long      epic_tag0;                      
+    unsigned long      epic_tag1;                      
+    unsigned long      epic_tag2;                      
+    unsigned long      epic_tag3;                      
+    unsigned long      epic_tag4;                      
+    unsigned long      epic_tag5;                      
+    unsigned long      epic_tag6;                      
+    unsigned long      epic_tag7;                      
+    unsigned long      epic_data0;                     
+    unsigned long      epic_data1;                     
+    unsigned long      epic_data2;                     
+    unsigned long      epic_data3;                     
+    unsigned long      epic_data4;                     
+    unsigned long      epic_data5;                     
+    unsigned long      epic_data6;                     
+    unsigned long      epic_data7;                     
 };
 
 #define RTC_PORT(x)	(0x70 + (x))

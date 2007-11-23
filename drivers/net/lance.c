@@ -76,7 +76,7 @@ static const char *version = "lance.c:v1.14 2/3/1998 dplatt@3do.com, becker@cesd
 
 static unsigned int lance_portlist[] = { 0x300, 0x320, 0x340, 0x360, 0};
 int lance_probe(struct device *dev);
-void lance_probe1(struct device *dev, int ioaddr, int irq, int options);
+int lance_probe1(struct device *dev, int ioaddr, int irq, int options);
 
 #ifdef HAVE_DEVLIST
 struct netdev_entry lance_drv =
@@ -374,7 +374,7 @@ cleanup_module(void)
    */
 int lance_probe(struct device *dev)
 {
-	int *port;
+	int *port, result;
 
 	if (high_memory <= 16*1024*1024)
 		lance_need_isa_bounce_buffers = 0;
@@ -413,8 +413,9 @@ int lance_probe(struct device *dev)
 			}
 			printk("Found PCnet/PCI at %#x, irq %d.\n",
 				   pci_ioaddr, pci_irq_line);
-			lance_probe1(dev, pci_ioaddr, pci_irq_line, 0);
+			result = lance_probe1(dev, pci_ioaddr, pci_irq_line, 0);
 			pci_irq_line = 0;
+			if (!result) return 0;
 		}
 	}
 #endif  /* defined(CONFIG_PCI) */
@@ -428,14 +429,16 @@ int lance_probe(struct device *dev)
 			char offset15, offset14 = inb(ioaddr + 14);
 			
 			if ((offset14 == 0x52 || offset14 == 0x57) &&
-				((offset15 = inb(ioaddr + 15)) == 0x57 || offset15 == 0x44))
-				lance_probe1(dev, ioaddr, 0, 0);
+				((offset15 = inb(ioaddr + 15)) == 0x57 || offset15 == 0x44)) {
+				result = lance_probe1(dev, ioaddr, 0, 0);
+				if ( !result ) return 0;
+			}
 		}
 	}
-	return 0;
+	return -ENODEV;
 }
 
-void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
+int lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 {
 	struct lance_private *lp;
 	short dma_channels;					/* Mark spuriously-busy DMA channels */
@@ -473,7 +476,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 
 	outw(0x0000, ioaddr+LANCE_ADDR); /* Switch to window 0 */
 	if (inw(ioaddr+LANCE_DATA) != 0x0004)
-		return;
+		return -ENODEV;
 
 	/* Get the version of the chip. */
 	outw(88, ioaddr+LANCE_ADDR);
@@ -486,7 +489,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 		if (lance_debug > 2)
 			printk("  LANCE chip version is %#x.\n", chip_version);
 		if ((chip_version & 0xfff) != 0x003)
-			return;
+			return -ENODEV;
 		chip_version = (chip_version >> 12) & 0xffff;
 		for (lance_version = 1; chip_table[lance_version].id_number; lance_version++) {
 			if (chip_table[lance_version].id_number == chip_version)
@@ -512,10 +515,9 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 #ifdef CONFIG_LANCE32
 	/* look if it's a PCI or VLB chip */
 	if (lance_version == PCNET_PCI || lance_version == PCNET_VLB || lance_version == PCNET_PCI_II) {
-	    extern void lance32_probe1 (struct device *dev, const char *chipname, int pci_irq_line);
+	    extern int lance32_probe1 (struct device *dev, const char *chipname, int pci_irq_line);
 	    
-	    lance32_probe1 (dev, chipname, pci_irq_line);
-	    return;
+	    return lance32_probe1 (dev, chipname, pci_irq_line);
 	}
 #endif    
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
@@ -604,7 +606,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 			printk(", probed IRQ %d", dev->irq);
 		else {
 			printk(", failed to detect IRQ line.\n");
-			return;
+			return -ENODEV;
 		}
 
 		/* Check for the initialization done bit, 0x0100, which means
@@ -618,7 +620,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 	} else if (dev->dma) {
 		if (request_dma(dev->dma, chipname)) {
 			printk("DMA %d allocation failed.\n", dev->dma);
-			return;
+			return -ENODEV;
 		} else
 			printk(", assigned DMA %d.\n", dev->dma);
 	} else {			/* OK, we have to auto-DMA. */
@@ -653,7 +655,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 		}
 		if (i == 4) {			/* Failure: bail. */
 			printk("DMA detection failed.\n");
-			return;
+			return -ENODEV;
 		}
 	}
 
@@ -666,7 +668,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 		dev->irq = autoirq_report(4);
 		if (dev->irq == 0) {
 			printk("  Failed to detect the 7990 IRQ line.\n");
-			return;
+			return -ENODEV;
 		}
 		printk("  Auto-IRQ detected IRQ%d.\n", dev->irq);
 	}
@@ -689,7 +691,7 @@ void lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 	dev->get_stats = lance_get_stats;
 	dev->set_multicast_list = set_multicast_list;
 
-	return;
+	return 0;
 }
 
 static int

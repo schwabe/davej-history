@@ -73,13 +73,20 @@ static int sg_ioctl(struct inode * inode,struct file * file,
     switch(cmd_in)
     {
     case SG_SET_TIMEOUT:
-        result = verify_area(VERIFY_READ, (const void *)arg, sizeof(long));
+        result = verify_area(VERIFY_READ, (const void *)arg, sizeof(int));
         if (result) return result;
 
 	scsi_generics[dev].timeout=get_user((int *) arg);
 	return 0;
     case SG_GET_TIMEOUT:
 	return scsi_generics[dev].timeout;
+    case SCSI_IOCTL_SEND_COMMAND:
+	/*
+	  Allow SCSI_IOCTL_SEND_COMMAND without checking suser() since the
+	  user already has read/write access to the generic device and so
+	  can execute arbitrary SCSI commands.
+	*/
+	return scsi_ioctl_send_command(scsi_generics[dev].device, (void *) arg);
     default:
 	return scsi_ioctl(scsi_generics[dev].device, cmd_in, (void *) arg);
     }

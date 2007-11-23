@@ -10,14 +10,41 @@
 #include <linux/linkage.h>
 #include <linux/config.h>
 
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P) || defined(CONFIG_ALPHA_EB164) || defined(CONFIG_ALPHA_PC164)
-# define NR_IRQS	33
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P) || defined(CONFIG_ALPHA_MIKASA)
+#if   defined(CONFIG_ALPHA_CABRIOLET) || \
+      defined(CONFIG_ALPHA_EB66P)     || \
+      defined(CONFIG_ALPHA_EB164)     || \
+      defined(CONFIG_ALPHA_PC164)     || \
+      defined(CONFIG_ALPHA_LX164)
+
+# define NR_IRQS	35
+
+#elif defined(CONFIG_ALPHA_EB66)      || \
+      defined(CONFIG_ALPHA_EB64P)     || \
+      defined(CONFIG_ALPHA_MIKASA)
+
 # define NR_IRQS	32
-#elif defined(CONFIG_ALPHA_ALCOR) || defined(CONFIG_ALPHA_XLT)
+
+#elif defined(CONFIG_ALPHA_ALCOR)     || \
+      defined(CONFIG_ALPHA_XLT)       || \
+      defined(CONFIG_ALPHA_MIATA)     || \
+      defined(CONFIG_ALPHA_RUFFIAN)   || \
+      defined(CONFIG_ALPHA_NORITAKE)
+
 # define NR_IRQS	48
-#else
+
+#elif defined(CONFIG_ALPHA_SABLE)     || \
+      defined(CONFIG_ALPHA_SX164)
+
+# define NR_IRQS	40
+
+#elif defined(CONFIG_ALPHA_TAKARA)
+
+# define NR_IRQS	20
+
+#else /* everyone else */
+
 # define NR_IRQS	16
+
 #endif
 
 

@@ -112,18 +112,6 @@ uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
 }
 
 
-static void dump_de(struct msdos_dir_entry *de)
-{
-	int i;
-	unsigned char *p = (unsigned char *) de;
-	printk("[");
-
-	for (i = 0; i < 32; i++, p++) {
-		printk("%02x ", *p);
-	}
-	printk("]\n");
-}
-
 int fat_readdirx(
 	struct inode *inode,
 	struct file *filp,
@@ -172,9 +160,6 @@ int fat_readdirx(
 	is_long = 0;
 	ino = fat_get_entry(inode,&filp->f_pos,&bh,&de);
 	while (ino > -1) {
-#if 0
-		dump_de(de);
-#endif
 		/* Check for long filename entry */
 		if (MSDOS_SB(sb)->options.isvfat && (de->name[0] == (__s8) DELETED_FLAG)) {
 			is_long = 0;

@@ -494,10 +494,10 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 			return -EINVAL;
 	}
 	/*
-	 * Check if addr exceeds TASK_SIZE (from do_mmap)
+	 * Check if addr exceeds MAX_USER_ADDR (from do_mmap)
 	 */
 	len = PAGE_SIZE*shp->shm_npages;
-       if (addr >= TASK_SIZE || len > TASK_SIZE  || addr > TASK_SIZE - len)
+       if (addr >= MAX_USER_ADDR || len > MAX_USER_ADDR  || addr > MAX_USER_ADDR - len)
 		return -EINVAL;
 	/*
 	 * If shm segment goes below stack, make sure there is some

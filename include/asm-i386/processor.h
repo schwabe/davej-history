@@ -40,6 +40,8 @@ extern int EISA_bus;
  * so don't change it unless you know what you are doing.
  */
 #define TASK_SIZE	(0xC0000000UL)
+#define MAX_USER_ADDR	TASK_SIZE
+#define MMAP_SEARCH_START (TASK_SIZE/3)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.

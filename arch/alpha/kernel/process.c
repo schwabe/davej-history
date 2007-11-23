@@ -32,8 +32,9 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
-	unsigned long a3, unsigned long a4, unsigned long a5,
+asmlinkage int sys_sethae(unsigned long hae, unsigned long a1,
+			  unsigned long a2, unsigned long a3,
+			  unsigned long a4, unsigned long a5,
 	struct pt_regs regs)
 {
 	(&regs)->hae = hae;
@@ -52,8 +53,42 @@ asmlinkage int sys_idle(void)
 	}
 }
 
+#include <asm/hwrpb.h>
+
+static void swap_context(struct thread_struct * pcb)
+{
+        __asm__ __volatile__(
+                "bis %0,%0,$16\n\t"
+                "call_pal %1\n\t"
+                : /* no outputs */
+                : "r" (pcb), "i" (PAL_swpctx)
+                : "$0", "$1", "$16", "$22", "$23", "$24", "$25");
+}
+
 void hard_reset_now(void)
 {
+#if defined(CONFIG_ALPHA_SRM_SETUP)
+	extern void reset_for_srm(void);	
+	extern struct hwrpb_struct *hwrpb;
+	extern struct thread_struct *original_pcb_ptr;
+	struct percpu_struct *cpup;
+	unsigned long flags;
+
+	cpup = (struct percpu_struct *)
+	  ((unsigned long)hwrpb + hwrpb->processor_offset);
+	flags = cpup->flags;
+#if 1
+	printk("hard_reset_now: flags 0x%lx\n", flags);
+#endif
+	flags &= ~0x0000000000ff0001UL; /* clear reason to "default" */
+	flags |=  0x0000000000020000UL; /* this is "cold bootstrap" */
+/*	flags |=  0x0000000000030000UL; *//* this is "warm bootstrap" */
+/*	flags |=  0x0000000000040000UL; *//* this is "remain halted" */
+	cpup->flags = flags;
+	mb();
+	reset_for_srm();
+	swap_context(original_pcb_ptr);
+#endif
 #if defined(CONFIG_ALPHA_SRM) && defined(CONFIG_ALPHA_ALCOR)
 	/* who said DEC engineer's have no sense of humor? ;-)) */
 	*(int *) GRU_RESET = 0x0000dead;

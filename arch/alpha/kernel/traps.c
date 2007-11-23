@@ -286,7 +286,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
 	extern unsigned long alpha_read_fp_reg (unsigned long reg);
 
-	pc_addr = frame + 7 + 20 + 1;			/* pc in PAL frame */
+	pc_addr = frame + 7 + 20 + 3 /* em86 */ + 1;	/* pc in PAL frame */
 
 	if (cnt >= 5 && jiffies - last_time > 5*HZ) {
 		cnt = 0;
@@ -336,7 +336,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 
 		      case 16: case 17: case 18: 
 			/* a0-a2 in PAL frame */
-			reg_addr += 7 + 20 + 3 + (reg - 16);
+			reg_addr += 7 + 20 + 3 /* em86 */ + 3 + (reg - 16);
 			break;
 
 		      case 19: case 20: case 21: case 22: case 23: 
@@ -347,7 +347,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 
 		      case 29:
 			/* gp in PAL frame */
-			reg_addr += 7 + 20 + 2;
+			reg_addr += 7 + 20 + 3 /* em86 */ + 2;
 			break;
 
 		      case 30:

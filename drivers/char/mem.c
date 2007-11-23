@@ -400,7 +400,7 @@ int chr_dev_init(void)
 #if defined (CONFIG_BUSMOUSE) || defined(CONFIG_UMISC) || \
     defined (CONFIG_PSMOUSE) || defined (CONFIG_MS_BUSMOUSE) || \
     defined (CONFIG_ATIXL_BUSMOUSE) || defined(CONFIG_SOFT_WATCHDOG) || \
-    defined (CONFIG_PCWATCHDOG) || \
+    defined (CONFIG_PCWATCHDOG) || defined (CONFIG_H8) || \
     defined (CONFIG_APM) || defined (CONFIG_RTC) || defined (CONFIG_SUN_MOUSE)
 	misc_init();
 #endif

@@ -660,9 +660,14 @@ repeat:
 			if (p->pgrp != -pid)
 				continue;
 		}
-		/* wait for cloned processes iff the __WCLONE flag is set */
-		if ((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
-			continue;
+		/* If you are tracing a process, then you don't need to get the
+		 * WCLONE bit right -- useful for strace and gdb
+		 */
+		if (!(p->flags & (PF_PTRACED|PF_TRACESYS))) {
+			/* wait for cloned processes iff the __WCLONE flag is set */
+			if ((p->exit_signal != SIGCHLD) ^ ((options & __WCLONE) != 0))
+				continue;
+		}
 		flag = 1;
 		switch (p->state) {
 			case TASK_STOPPED:

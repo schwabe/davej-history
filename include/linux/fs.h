@@ -313,7 +313,7 @@ struct inode {
 	unsigned char i_sock;
 	unsigned char i_seek;
 	unsigned char i_update;
-	unsigned char i_condemned;
+ 	unsigned char i_condemned;
 	union {
 		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;

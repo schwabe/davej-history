@@ -793,7 +793,7 @@ cleanup_module(void)
 		if (dev->priv != NULL) {
 			kfree(dev->priv);
 			dev->priv = NULL;
-			free_irq(dev->irq, NULL);
+			free_irq(dev->irq, dev);
 			irq2dev_map[dev->irq] = NULL;
 			release_region(dev->base_addr, NE_IO_EXTENT);
 			unregister_netdev(dev);

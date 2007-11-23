@@ -26,6 +26,8 @@
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
+struct thread_struct * original_pcb_ptr;
+
 /*
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a
@@ -81,15 +83,19 @@ void show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
-static void load_PCB(struct thread_struct * pcb)
+static struct thread_struct * load_PCB(struct thread_struct * pcb)
 {
+	struct thread_struct *old_pcb;
+
 	__asm__ __volatile__(
-		"stq $30,0(%0)\n\t"
-		"bis %0,%0,$16\n\t"
-		"call_pal %1"
-		: /* no outputs */
+		"stq $30,0(%1)\n\t"
+		"bis %1,%1,$16\n\t"
+		"call_pal %2\n\t"
+		"bis $0,$0,%0"
+		: "=r" (old_pcb)
 		: "r" (pcb), "i" (PAL_swpctx)
 		: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
+	return old_pcb;
 }
 
 /*
@@ -107,10 +113,15 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = free_area_init(start_mem, end_mem);
 
 	/* find free clusters, update mem_map[] accordingly */
-	memdesc = (struct memdesc_struct *) (INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
+	memdesc = (struct memdesc_struct *)
+		(INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
 	cluster = memdesc->cluster;
 	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
 		unsigned long pfn, nr;
+#if 0
+printk("paging_init: cluster %d usage %ld start %ld size %ld\n",
+       i, cluster->usage, cluster->start_pfn, cluster->numpages);
+#endif
 		if (cluster->usage & 1)
 			continue;
 		pfn = cluster->start_pfn;
@@ -134,7 +145,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	init_task.tss.pal_flags = 1;	/* set FEN, clear everything else */
 	init_task.tss.flags = 0;
 	init_task.kernel_stack_page = INIT_STACK;
-	load_PCB(&init_task.tss);
+	original_pcb_ptr = load_PCB(&init_task.tss);
 
 	flush_tlb_all();
 	return start_mem;

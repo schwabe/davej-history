@@ -2067,9 +2067,11 @@ static struct sk_buff * wait_for_connect(struct sock * sk)
 	add_wait_queue(sk->sleep, &wait);
 	for (;;) {
 		current->state = TASK_INTERRUPTIBLE;
+		end_bh_atomic();
 		release_sock(sk);
 		schedule();
 		lock_sock(sk);
+		start_bh_atomic();
 		skb = tcp_find_established(sk);
 		if (skb)
 			break;
@@ -2101,7 +2103,7 @@ static struct sock *tcp_accept(struct sock *sk, int flags)
 	if (sk->state != TCP_LISTEN)
 		goto no_listen;
 
-	lock_sock(sk);
+	lock_sock(sk);start_bh_atomic();
 
 	skb = tcp_find_established(sk);
 	if (skb) {
@@ -2112,6 +2114,7 @@ got_new_connect:
 		sk->ack_backlog--;
 		error = 0;
 out:
+		end_bh_atomic();
 		release_sock(sk);
 no_listen:
 		sk->err = error;

@@ -22,6 +22,7 @@
 #include <linux/tty.h>
 #include <linux/delay.h>
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
+#include <linux/mc146818rtc.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
@@ -58,13 +59,26 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
  * code think we're on a VGA color display.
  */
 struct screen_info screen_info = {
+#if defined(CONFIG_ALPHA_BOOK1)
+  /* the AlphaBook1 has LCD video fixed at 800x600, 37 rows and 100 cols */
+	0, 37,			/* orig-x, orig-y */
+#else
 	0, 25,			/* orig-x, orig-y */
+#endif
 	{ 0, 0 },		/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
+#if defined(CONFIG_ALPHA_BOOK1)
+        100,			/* orig-video-cols */
+#else
 	80,			/* orig-video-cols */
+#endif
 	0,0,0,			/* ega_ax, ega_bx, ega_cx */
+#if defined(CONFIG_ALPHA_BOOK1)
+        37,			/* orig-video-lines */
+#else
 	25,			/* orig-video-lines */
+#endif
 	1,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
@@ -84,9 +98,12 @@ static void init_pit (void)
     outb(0x18, 0x41);
 #endif
 
+#if !defined(CONFIG_ALPHA_RUFFIAN)
+    /* Ruffian depends on the system timer established in MILO!! */
     outb(0x36, 0x43);	/* counter 0: system timer */
     outb(0x00, 0x40);
     outb(0x00, 0x40);
+#endif /* RUFFIAN */
 
     outb(0xb6, 0x43);	/* counter 2: speaker */
     outb(0x31, 0x42);
@@ -121,9 +138,19 @@ void setup_arch(char **cmdline_p,
 
 	init_pit();
 
+	if ((CMOS_READ(RTC_FREQ_SELECT) & 0x3f) != 0x26) {
+#if 1
+	  printk("init_timers: setting RTC_FREQ to 1024/sec\n");
+#endif
+	  CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+	}
+
 	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
 
+#ifndef CONFIG_ALPHA_SRM_SETUP
 	set_hae(hae.cache);	/* sync HAE register w/hae_cache */
+#endif /* !SRM_SETUP */
+
 	wrmces(0x7);		/* reset enable correctable error reports */
 
 	ROOT_DEV = to_kdev_t(0x0802);		/* sda2 */
@@ -154,39 +181,161 @@ void setup_arch(char **cmdline_p,
 	*memory_start_p = apecs_init(*memory_start_p, *memory_end_p);
 #elif defined(CONFIG_ALPHA_CIA)
 	*memory_start_p = cia_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_PYXIS)
+	*memory_start_p = pyxis_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_T2)
+	*memory_start_p = t2_init(*memory_start_p, *memory_end_p);
 #endif
 }
 
-/*
- * BUFFER is PAGE_SIZE bytes long.
+#	define N(a)	(sizeof(a)/sizeof(a[0]))
+
+/* A change was made to the HWRPB via an ECO and the following code tracks
+ * a part of the ECO.  The HWRPB version must be 5 or higher or the ECO
+ * was not implemented in the console firmware.  If its at rev 5 or greater
+ * we can get the platform ascii string name from the HWRPB.  Thats what this
+ * function does.  It checks the rev level and if the string is in the HWRPB
+ * it returns the addtess of the string ... a pointer to the platform name.
+ *
+ * Returns:
+ *      - Pointer to a ascii string if its in the HWRPB
+ *      - Pointer to a blank string if the data is not in the HWRPB.
  */
+static char *
+platform_string(void)
+{
+	struct dsr_struct *dsr;
+	static char unk_system_string[] = "N/A";
+
+        /* Go to the console for the string pointer.
+         * If the rpb_vers is not 5 or greater the rpb
+	 * is old and does not have this data in it.
+	 */
+        if (hwrpb->revision < 5)
+		return (unk_system_string);
+	else {
+		/* The Dynamic System Recognition struct
+		 * has the system platform name starting
+		 * after the character count of the string.
+		 */
+		dsr =  ((struct dsr_struct *)
+			  ((char *)hwrpb + hwrpb->dsr_offset));
+		return ((char *)dsr + (dsr->sysname_off +
+						 sizeof(long)));
+        }
+}
+
+static void
+get_sysnames(long type, long variation,
+	     char **type_name, char **variation_name)
+{
+	static char *sys_unknown = "Unknown";
+	static char *systype_names[] = {
+		"0",
+		"ADU", "Cobra", "Ruby", "Flamingo", "Mannequin", "Jensen",
+		"Pelican", "Morgan", "Sable", "Medulla", "Noname",
+		"Turbolaser", "Avanti", "14", "Alcor", "Tradewind",
+		"Mikasa", "EB64", "EB66", "EB64+", "AlphaBook1",
+		"Rawhide", "K2", "Lynx", "XL", "EB164", "Noritake",
+		"Cortex", "29", "Miata", "XXM", "Takara", "Yukon",
+		"Tsunami", "Wildfire", "CUSCO"
+	};
+
+	static char *unofficial_names[] = {
+		"100",
+		"Ruffian"
+	};
+
+	static char * eb164_names[] = {"EB164", "PC164", "LX164", "SX164"};
+	static int eb164_indices[] = {0,0,0,1,1,1,1,1,2,2,2,2,3,3,3,3};
+
+	static char * alcor_names[] = {"Alcor", "Maverick", "Bret"};
+	static int alcor_indices[] = {0,0,0,1,1,1,0,0,0,0,0,0,2,2,2,2,2,2};
+
+	static char * eb64p_names[] = {"EB64+", "Cabriolet", "AlphaPCI64"};
+	static int eb64p_indices[] = {0,0,1.2};
+
+	static char * eb66_names[] = {"EB66", "EB66+"};
+	static int eb66_indices[] = {0,0,1};
+
+	static char * rawhide_names[] = {"Dodge", "Wrangler", "Durango",
+					 "Tincup", "DaVinci"};
+	static int rawhide_indices[] = {0,0,0,1,1,2,2,3,3,4,4};
+
+	long member;
+	
+
+	/* restore real CABRIO and EB66+ family names, ie EB64+ and EB66 */
+	if (type < 0) type = -type;
+
+	/* if not in the tables, make it UNKNOWN */
+	/* else set type name to family */
+	if (type < N(systype_names)) {
+	    *type_name = systype_names[type];
+	} else
+	if ((type > ST_UNOFFICIAL_BIAS) &&
+	    (type - ST_UNOFFICIAL_BIAS) < N(unofficial_names)) {
+	    *type_name = unofficial_names[type - ST_UNOFFICIAL_BIAS];
+	} else {
+	    *type_name = sys_unknown;
+	    *variation_name = sys_unknown;
+	    return;
+	}
+
+	/* set variation to "0"; if variation is zero, done */
+	*variation_name = systype_names[0];
+	if (variation == 0) {
+		return;
+	}
+
+	member = (variation >> 10) & 0x3f; /* member ID is a bit-field */
+
+	switch (type) { /* select by family */
+	default: /* default to variation "0" ????FIXME???? */
+		break;
+	case ST_DEC_EB164:
+		if (member < N(eb164_indices))
+		  *variation_name = eb164_names[eb164_indices[member]];
+		break;
+	case ST_DEC_ALCOR:
+		if (member < N(alcor_indices))
+		  *variation_name = alcor_names[alcor_indices[member]];
+		break;
+	case ST_DEC_EB64P:
+		if (member < N(eb64p_indices))
+		  *variation_name = eb64p_names[eb64p_indices[member]];
+		break;
+	case ST_DEC_EB66:
+		if (member < N(eb66_indices))
+		  *variation_name = eb66_names[eb66_indices[member]];
+		break;
+	case ST_DEC_RAWHIDE:
+		if (member < N(rawhide_indices))
+		  *variation_name = rawhide_names[rawhide_indices[member]];
+		break;
+	} /* end family switch */
+	return;
+}
+
 int get_cpuinfo(char *buffer)
+/* BUFFER is PAGE_SIZE bytes long. */
 {
 	const char *cpu_name[] = {
-		"EV3", "EV4", "Unknown 1", "LCA4", "EV5", "EV45"
-	};
-#	define SYSTYPE_NAME_BIAS	20
-	const char *systype_name[] = {
-		"Cabriolet", "EB66P", "-18", "-17", "-16", "-15",
-		"-14", "-13", "-12", "-11", "-10", "-9", "-8",
-		"-7", "-6", "-5", "-4", "-3", "-2", "-1", "0",
-		"ADU", "Cobra", "Ruby", "Flamingo", "5", "Jensen",
-		"Pelican", "8", "Sable", "AXPvme", "Noname",
-		"Turbolaser", "Avanti", "Mustang", "Alcor", "16",
-		"Mikasa", "18", "EB66", "EB64+", "21", "22", "23",
-		"24", "25", "EB164"
+		"EV3", "EV4", "Unknown 1", "LCA4", "EV5", "EV45", "EV56",
+		"EV6", "PCA56"
 	};
 	struct percpu_struct *cpu;
 	unsigned int cpu_index;
-	long sysname_index;
+	char *systype_name;
+	char *sysvariation_name;
 	extern struct unaligned_stat {
 		unsigned long count, va, pc;
 	} unaligned[2];
-#	define N(a)	(sizeof(a)/sizeof(a[0]))
 
 	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
 	cpu_index = (unsigned) (cpu->type - 1);
-	sysname_index = hwrpb->sys_type + SYSTYPE_NAME_BIAS;
+	get_sysnames(hwrpb->sys_type, hwrpb->sys_variation,
+		     &systype_name, &sysvariation_name);
 
 	return sprintf(buffer,
 		       "cpu\t\t\t: Alpha\n"
@@ -195,7 +344,7 @@ int get_cpuinfo(char *buffer)
 		       "cpu revision\t\t: %ld\n"
 		       "cpu serial number\t: %s\n"
 		       "system type\t\t: %s\n"
-		       "system variation\t: %ld\n"
+		       "system variation\t: %s\n"
 		       "system revision\t\t: %ld\n"
 		       "system serial number\t: %s\n"
 		       "cycle frequency [Hz]\t: %lu\n"
@@ -205,14 +354,13 @@ int get_cpuinfo(char *buffer)
 		       "max. addr. space #\t: %ld\n"
 		       "BogoMIPS\t\t: %lu.%02lu\n"
 		       "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
-		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n",
+		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
+		       "platform string\t\t: %s\n",
 
 		       (cpu_index < N(cpu_name)
 			? cpu_name[cpu_index] : "Unknown"),
 		       cpu->variation, cpu->revision, (char*)cpu->serial_no,
-		       (sysname_index < N(systype_name)
-			? systype_name[sysname_index] : "Unknown"),
-		       hwrpb->sys_variation, hwrpb->sys_revision,
+		       systype_name, sysvariation_name, hwrpb->sys_revision,
 		       (char*)hwrpb->ssn,
 		       hwrpb->cycle_freq,
 		       hwrpb->intr_freq / 4096,
@@ -222,6 +370,7 @@ int get_cpuinfo(char *buffer)
 		       hwrpb->max_asn,
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
-		       unaligned[1].count, unaligned[1].pc, unaligned[1].va);
-#       undef N
+		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
+		       platform_string());
 }
+#       undef N

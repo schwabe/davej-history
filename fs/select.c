@@ -21,6 +21,7 @@
 #include <linux/errno.h>
 #include <linux/personality.h>
 #include <linux/mm.h>
+#include <linux/file.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -57,6 +58,34 @@ static void free_wait(select_table * p)
 }
 
 /*
+ *	File handle locking
+ */
+ 
+static void lock_fd_bits(int n, int x)
+{
+	int i;
+	for(i=0;i<__NFDBITS;i++)
+	{
+		if(x&(1<<i))
+			fget(n+i);
+	}
+}
+
+static void unlock_fd_bits(int n, int x)
+{
+	int i;
+	for(i=0;i<__NFDBITS;i++)
+	{
+		if(x&(1<<i))
+		{
+			/* ick */
+			struct file *f=current->files->fd[n+i];
+			fput(f, f->f_inode);
+		}
+	}
+}
+
+/*
  * The check function checks the ready status of a file using the vfs layer.
  *
  * If the file was not ready we were added to its wait queue.  But in
@@ -83,7 +112,7 @@ static int check(int flag, select_table * wait, struct file * file)
 }
 
 static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
-	fd_set *res_in, fd_set *res_out, fd_set *res_ex)
+	fd_set *res_in, fd_set *res_out, fd_set *res_ex, fd_set *locked)
 {
 	int count;
 	select_table wait_table, *wait;
@@ -91,7 +120,7 @@ static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	unsigned long set;
 	int i,j;
 	int max = -1;
-
+	int threaded = 0;
 	j = 0;
 	for (;;) {
 		i = j * __NFDBITS;
@@ -113,8 +142,34 @@ static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	}
 end_check:
 	n = max + 1;
+	
+	/* Now we _must_ lock the handles before we get the page otherwise
+	   they may get closed on us during the kmalloc causing explosions.. */
+	
+	if(current->files->count>1)
+	{	
+	
+		/*
+		 *	Only for the threaded cases must we do work.
+		 */
+		j = 0;
+		for (;;) {
+			i = j * __NFDBITS;
+			if (i >= n)
+				break;
+			lock_fd_bits(i,in->fds_bits[j]);
+			lock_fd_bits(i,out->fds_bits[j]);
+			lock_fd_bits(i,ex->fds_bits[j]);
+			j++;
+		}
+		threaded=1;
+	}
+		
 	if(!(entry = (struct select_table_entry*) __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
+	{
+		count = -ENOMEM; 
+		goto bale;
+	}
 	count = 0;
 	wait_table.nr = 0;
 	wait_table.entry = entry;
@@ -149,6 +204,22 @@ repeat:
 	free_wait(&wait_table);
 	free_page((unsigned long) entry);
 	current->state = TASK_RUNNING;
+bale:
+
+	if(threaded)
+	{
+		/* Unlock handles now */	
+		j = 0;
+		for (;;) {
+			i = j * __NFDBITS;
+			if (i >= n)
+				break;
+			unlock_fd_bits(i,in->fds_bits[j]);
+			unlock_fd_bits(i,out->fds_bits[j]);
+			unlock_fd_bits(i,ex->fds_bits[j]);
+			j++;
+		}
+	}
 	return count;
 }
 
@@ -243,6 +314,7 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	limited_fd_set res_in, in;
 	limited_fd_set res_out, out;
 	limited_fd_set res_ex, ex;
+	limited_fd_set locked;
 	unsigned long timeout;
 
 	error = -EINVAL;
@@ -273,7 +345,8 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		(fd_set *) &ex,
 		(fd_set *) &res_in,
 		(fd_set *) &res_out,
-		(fd_set *) &res_ex);
+		(fd_set *) &res_ex,
+		(fd_set *) &locked);
 	timeout = current->timeout - jiffies - 1;
 	current->timeout = 0;
 	if ((long) timeout < 0)

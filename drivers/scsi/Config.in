@@ -77,6 +77,9 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   fi
 fi
 dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI
+if [ "$CONFIG_SCSI_PPA" != "n" ]; then
+    bool '  Buggy EPP chipset support' CONFIG_SCSI_PPA_HAVE_PEDANTIC
+fi
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI
 dep_tristate 'Qlogic FAS SCSI support' CONFIG_SCSI_QLOGIC_FAS $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then

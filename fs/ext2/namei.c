@@ -573,6 +573,7 @@ static int empty_dir (struct inode * inode)
 	    	ext2_warning (inode->i_sb, "empty_dir",
 			      "bad directory (dir #%lu) - no `.' or `..'",
 			      inode->i_ino);
+		brelse (bh);
 		return 1;
 	}
 	offset = de->rec_len + de1->rec_len;

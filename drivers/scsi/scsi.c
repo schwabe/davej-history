@@ -229,6 +229,7 @@ struct dev_info{
  */
 static struct dev_info device_list[] =
 {
+{"TEAC","CD-R55S","1.0H", BLIST_NOLUN},         /* Locks up if polled for lun != 0 */
 {"CHINON","CD-ROM CDS-431","H42", BLIST_NOLUN}, /* Locks up if polled for lun != 0 */
 {"CHINON","CD-ROM CDS-535","Q14", BLIST_NOLUN}, /* Locks up if polled for lun != 0 */
 {"DENON","DRD-25X","V", BLIST_NOLUN},           /* Locks up if probed for lun != 0 */

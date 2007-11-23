@@ -72,6 +72,7 @@
  *					easier (suggested by Craig Metz).
  *		Michael Pall	:	SO_ERROR returns positive errno again
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
+ *		Russell King	:	Add #ifdef CONFIG_INET to SO_BINDTODEVICE
  *
  * To Fix:
  *
@@ -247,13 +248,13 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
  				if(err)
  					return err;
  				memcpy_fromfs(&req,optval,sizeof(req));
-
+#ifdef CONFIG_INET
 				/* Remove any cached route for this socket. */
 				if (sk->ip_route_cache) {
 					ip_rt_put(sk->ip_route_cache);
 					sk->ip_route_cache=NULL;
 				}
-
+#endif
  				if (*(req.ifr_name) == '\0') {
  					sk->bound_device = NULL;
  				} else {

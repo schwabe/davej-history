@@ -190,6 +190,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BINFMT_EM86),y)
+BINFMTS += binfmt_em86.o
+else
+  ifeq ($(CONFIG_BINFMT_EM86),m)
+  M_OBJS += binfmt_em86.o
+  endif
+endif
+
 # binfmt_script is always there
 BINFMTS += binfmt_script.o
 

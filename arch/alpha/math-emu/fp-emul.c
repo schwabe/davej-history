@@ -13,9 +13,9 @@
 #define OPC_INTL	0x11
 #define OPC_INTS	0x12
 #define OPC_INTM	0x13
-#define OPC_FLTV	0x14
-#define OPC_FLTI	0x15
-#define OPC_FLTL	0x16
+#define OPC_FLTV	0x15
+#define OPC_FLTI	0x16
+#define OPC_FLTL	0x17
 
 #define OPC_MISC	0x18
 

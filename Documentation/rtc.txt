@@ -65,6 +65,35 @@ that will be using this driver.
 
 						Paul Gortmaker
 
+Update in version 1.09
+======================
+
+Epoch handling is added.  Epoch is the number which should be added to the
+value of the clock's year register to get the actual year.  The default
+Linux epoch is therefore 1900.
+
+Epochs are especially useful on Alphas where different operating systems
+use different epochs, and Linux wants to be compatible with all of them.
+They may eventually be helpful on Intel architecture as well, where a
+value of an RTC register cannot exceed 99 due to BCD tradition originated
+from DOS.
+
+When the epoch is set to 1900, the new code behaves exactly like the old
+one with respect to the BCD wrapping: values 00 - 69 are treated as if
+they were 100 - 169.  That means that after the 2000th year epoch 1900
+will be the same as epoch 2000.
+
+Two new ioctls are introduced to read and set the epoch, RTC_EPOCH_READ
+and RTC_EPOCH_SET.  They can be used in exactly the same manner as
+RTC_IRQP_READ and RTC_IRQP_SET, so they are not included in the example
+program below.
+
+On Alphas an epoch autodetection is performed.  Currently 3 epochs
+are recognised: Linux (1900), Digital UNIX (1952) and Windows NT (1980).
+
+Nikita Schmidt	<cetus@snowball.ucd.ie>
+
+
 -------------------- 8< ---------------- 8< -----------------------------
 
 /*

@@ -81,6 +81,12 @@ unsigned long init_swap_cache(unsigned long mem_start,
 	return (unsigned long) (swap_cache + swap_cache_size);
 }
 
+/* We shouldn't be able to have more processes sharing a swapped page than
+   we can count in the swap map */
+#if NR_TASKS > SWAP_MAP_MAX
+#error SWAP_MAP_MAX is too small
+#endif
+
 void swap_duplicate(unsigned long entry)
 {
 	struct swap_info_struct * p;
@@ -98,14 +104,16 @@ void swap_duplicate(unsigned long entry)
 	}
 	p = type + swap_info;
 	if (offset >= p->max) {
-		printk("swap_duplicate: weirdness\n");
+		printk("swap_duplicate: weirdness, entry %08lx\n", entry);
 		return;
 	}
-	if (!p->swap_map[offset]) {
-		printk("swap_duplicate: trying to duplicate unused page\n");
-		return;
-	}
-	p->swap_map[offset]++;
+	if (!p->swap_map[offset])
+		printk("swap_duplicate: trying to duplicate unused page, "
+		       "entry %08lx\n", entry);
+	else if (p->swap_map[offset] == SWAP_MAP_RESERVED)
+		printk("swap_duplicate: trying to duplicate reserved page, "
+		       "entry %08lx\n", entry);
+	else p->swap_map[offset]++;
 	return;
 }
 

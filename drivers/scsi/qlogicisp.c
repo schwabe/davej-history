@@ -296,7 +296,12 @@ struct Status_Entry {
 #define CS_DEVICE_RESET_MSG_FAILED	0x0012
 #define CS_ID_MSG_FAILED		0x0013
 #define CS_UNEXP_BUS_FREE		0x0014
+/* as per app note #83120-514-06a: */
 #define CS_DATA_UNDERRUN		0x0015
+#define CS_INVALID_ENTRY_TYPE		0x001b
+#define CS_DEVICE_QUEUE_FULL		0x001c
+#define CS_SCSI_PHASE_SKIPPED		0x001d
+#define CS_ARS_FAILED			0x001e	/* auto Req. Sense failed */
 
 /* status entry state flag definitions */
 #define SF_GOT_BUS			0x0100
@@ -992,6 +997,10 @@ static int isp1020_return_status(struct Status_Entry *sts)
 	      case CS_DEVICE_RESET_MSG_FAILED:
 	      case CS_ID_MSG_FAILED:
 	      case CS_UNEXP_BUS_FREE:
+	      case CS_INVALID_ENTRY_TYPE:
+	      case CS_DEVICE_QUEUE_FULL:
+	      case CS_SCSI_PHASE_SKIPPED:
+	      case CS_ARS_FAILED:
 		host_status = DID_ERROR;
 		break;
 	      case CS_DATA_UNDERRUN:
@@ -1248,7 +1257,8 @@ static int isp1020_init(struct Scsi_Host *sh)
 	if (inw(io_base + PCI_ID_LOW) != PCI_VENDOR_ID_QLOGIC
 	    || inw(io_base + PCI_ID_HIGH) != PCI_DEVICE_ID_QLOGIC_ISP1020)
 	{
-		printk("qlogicisp : can't decode i/o address space\n");
+		printk("qlogicisp : can't decode i/o address space at 0x%x\n",
+		       io_base);
 		return 1;
 	}
 

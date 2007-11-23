@@ -19,6 +19,7 @@
 
 extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+extern int scsi_ioctl_send_command(Scsi_Device *dev, void *buffer);
 
 #endif
 

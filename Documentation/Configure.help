@@ -465,31 +465,9 @@ CONFIG_SYN_COOKIES
   this option turned on the TCP/IP stack will use a cryptographic
   challenge protocol known as SYN cookies to enable legitimate users
   to continue to connect, even when your machine is under attack.
-  The RST_COOKIES option provides an alternative method to accomplish
-  the same end.  SYN cookies use less space than RST cookies,
-  but have a small probability of introducing an non timed-out
-  failure to connect in the remote TCP.  You can use both options
-  simultatenously.  If you are SYN flooded, the source address
-  reported by the kernel is likely to have been forged by the
-  attacker.  The source address is reported as an aid in tracing the
-  packets to their actual source.
-
-SYN flood protection
-CONFIG_RST_COOKIES
-  Normal TCP/IP networking is open to an attack known as SYN flooding.
-  This attack prevents legitimate users from being able to connect to
-  your computer and requires very little work for the attacker.
-  SYN cookies provide protection against this type of attack. With
-  this option turned on the TCP/IP stack will use a cryptographic
-  challenge protocol known as RST cookies to enable legitimate users
-  to continue to connect, even when your machine is under attack.
-  The SYN_COOKIES option provides an alternative method to accomplish
-  the same end. RST cookies use more space than SYN cookies on your
-  machine, but never increase the probability of a frozen connection
-  in a remote TCP. You can use both options simultatenously.  If you
-  are SYN flooded, the source address reported by the kernel is likely
-  to have been forged by the attacker.  The source address is reported
-  as an aid in tracing the packets to their actual source.
+  If you are SYN flooded, the source address reported by the kernel is 
+  likely to have been forged by the attacker.  The source address is 
+  reported as an aid in tracing the packets to their actual source.
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -1867,6 +1845,15 @@ CONFIG_SCSI_PPA
   Documentation/modules.txt. Note that you can say N here if you have
   the SCSI version of the ZIP drive: it will be supported
   automatically if you enabled the generic "SCSI disk support", above.
+
+IOMEGA ZIP drive - Buggy EPP chipset support
+CONFIG_SCSI_PPA_HAVE_PEDANTIC
+  Contacts with the Iomega driver development team indicate there are
+  a few reputably bad EPP implementations in existance. The following
+  mainboard chipsets will probably require the PEDANTIC option to
+  reliably transfer data:
+       Winbond xxx837
+       National Semiconductor PC87306 (early revisions)
 
 Network device support?
 CONFIG_NETDEVICES

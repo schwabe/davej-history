@@ -39,7 +39,7 @@ static const char *version=
 #include <asm/irq.h>
 #include <linux/netdevice.h>
 
-struct device *irq2dev_map[16] = {0, 0, /* ... zeroed */};
+struct device *irq2dev_map[NR_IRQS] = {0, 0, /* ... zeroed */};
 
 unsigned long irqs_busy = 0x2147;		/* The set of fixed IRQs (keyboard, timer, etc) */
 unsigned long irqs_used = 0x0001;		/* The set of fixed IRQs sometimes enabled. */
@@ -65,8 +65,8 @@ static void autoirq_probe(int irq, void *dev_id, struct pt_regs * regs)
 int autoirq_setup(int waittime)
 {
 	int i;
-	int timeout = jiffies + waittime;
-	int boguscount = (waittime*loops_per_sec) / 100;
+	unsigned long timeout = jiffies + waittime;
+	unsigned long boguscount = (waittime*loops_per_sec) / 100;
 
 	irq_handled = 0;
 	irq_bitmap = 0;
@@ -93,8 +93,8 @@ int autoirq_setup(int waittime)
 int autoirq_report(int waittime)
 {
 	int i;
-	int timeout = jiffies+waittime;
-	int boguscount = (waittime*loops_per_sec) / 100;
+	unsigned long timeout = jiffies+waittime;
+	unsigned long boguscount = (waittime*loops_per_sec) / 100;
 
 	/* Hang out at least <waittime> jiffies waiting for the IRQ. */
 

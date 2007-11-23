@@ -1,4 +1,5 @@
 README.ppa (c) 1996   Grant R. Guenther,  grant@torque.net
+README.ppa (c) 1998   David J. Campbell,  campbell@torque.net
 
 
          The IOMEGA PPA3 parallel port SCSI Host Bus Adapter
@@ -37,83 +38,72 @@ I'd like to thank Byron Jeff (byron@cc.gatech.edu) for publishing his
 observation that the 'guest' driver loads under DOSemu.  His remark was
 the stimulus that began this project.
 
-The ppa driver can detect and adapt to 4- and 8-bit parallel ports, but 
-there is currently no support for EPP or ECP ports, as I have been unable 
-to make the DOS drivers work in these modes on my test rig.
-
-The driver may be built in to the kernel, or loaded as a module.  It
-may be configured on the command line in both cases, although the syntax
-is different.  It may also be configured by editing the source file.
-
-Built-in drivers accept parameters using this LILO/LOADLIN command line
-syntax (omitted parameters retain their default values):
-
-        ppa=base[,speed_high[,speed_low[,nybble]]]
-
-For example:    ppa=0x378,0,3
-
-If a driver is loaded as a module the parameters may be set on the
-insmod command line, but each one must be specified by name:
-
-For example:    insmod ppa.o ppa_base=0x378 ppa_nybble=1
-
-(Notice the ppa_ prefix on each of the parameters in the insmod form.)
-
-Here are the parameters and their functions:
-
-Variable        Default    Description
-
-ppa_base        0x378   The base address of PPA's parallel port.
-ppa_speed_high  1       Microsecond i/o delay used in data transfers
-ppa_speed_low   6       Microsecond delay used in other operations
-ppa_nybble      0       1 to force the driver to use 4-bit mode.
-
-A word about the timing parameters:  the ppa_speed_low parameter controls 
-the widths of a large number of pulses that are sent over the parallel bus, 
-the narrower the pulses, the faster things go, but the greater the risk of 
-distortion by noise damping circuits in the parallel ports.  The 
-ppa_speed_high parameter controls the same delays, but during the data 
-transfer phase only.   In this phase, there is a lot of handshaking going 
-on and the pulse shaping should not be so much of an issue, but if you 
-see data corruption, you can increase this parameter as well.
-
-You might also want to reduce the timing values to attempt to increase
-the transfer rates on your system.  Please be careful to watch for
-SCSI timeout errors in your log files.  If you are getting timeouts, you
-have set these parameters too low.  The default values appear to be
-safe on most machines.
-
-If you have both the lp and ppa drivers in your kernel, you must ensure
-that they access different parallel ports.  By default, the lp driver is
-initialised early in the booting process, and it claims all parallel
-ports that it can find.  You may control this behaviour with a LILO or
-LOADLIN command line argument of the form:
-
-        lp=base0[,irq0[,base1[,irq1[,base2[,irq2]]]]]
-
-For example:    lp=0x278,7
-
-If you use this method, only the ports named will be adopted by the lp
-driver.  You can disable them all with lp=0 .
-
-So, if you have a printer on 0x3bc and a ZIP drive on 0x278 you would
-give the following options on your boot command:
-
-        lp=0x3bc ppa=0x278
-
-In this case lp would use the polling driver, since an interrupt was not 
-specified.
-
-If you want to share the same parallel port between a ZIP drive and a
-printer, you should build both the lp and ppa drivers as modules and
-load and unload one or the other as required.  This is clumsy but we
-currently have no protocol for synchronising access to shared parallel
-ports.
-
 For information about using the ZIP drive, please read the generic
 instructions in the SCSI-HOWTO and the man pages for the normal disk
 management tools,  fdisk, mkfs, mount, umount, etc.  There is a mini-HOWTO
 circulating concerning the use of the normal SCSI version of the ZIP
 drive, most of its comments will apply to disks connected through the
 ppa driver as well.
+
+>------------------------------------------------------------------------<
+David Campbell writes:
+
+Since the original was released by Grant several people have made many minor
+modifications:
+
+	a) Support for EPP
+	b) Autoprobing known parallel ports
+	c) Parallel port sharing with other devices (see notes)
+
+It has been found that the JAZ Traveller also uses the VPI0 interface chipset
+(a reworked ppa3). This driver will also support this device without
+modifications.
+
+Please note that the ZIP Plus drive uses a VPI2 interface chipset (VPI1 never
+made it out of the Iomega development lab). A driver for this device exists,
+check my web page at http://www.torque.net/~campbell for further details.
+
+                                 -<-->-
+
+Built-in drivers accept parameters using this LILO/LOADLIN command line
+syntax (omitted parameters retain their default values):
+
+        ppa=base,mode[,sg_buffer_size]
+
+For example:    ppa=0x378,1
+
+The modes are as follows:
+	0       Autodetect mode
+	1       work in standard 4 bit mode
+	2       PS/2 byte mode
+	3       EPP mode, 8 bit
+	4       EPP mode, 16 bit
+	5       EPP mode, 32 bit
+
+If ppa is built as a module there is currently no method of changing the
+operation of the driver. Basically there is no need (unless you have a very
+strange parallel port address).
+
+                                 -<-->-
+
+Using the ZIP drive and a printer either requires two parallel ports (one
+for each device) or use of the parport driver (which can be found in the
+2.1.x kernels).
+
+In the first case compile the lp driver as a module and load it after ppa.
+Alternatively specify which ports the lp driver should use by the LILO/LOADLIN
+options:
+        lp=base0[,irq0[,base1[,irq1[,base2[,irq2]]]]]
+
+                                 -<-->-
+
+Mainboard buggy chipset hall of shame: [information courtesy of Iomega]
+
+	National Semiconductor PC87306 rev ID 0x70, 0x71
+	Winbond xx837
+
+The above chipsets are known to have problems using EPP. Note that the
+National Semicondutor problems only affect early batches of PC87306 which
+should really never made it to market (a run for mainboard developers).
+>------------------------------------------------------------------------<
 

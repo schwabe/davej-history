@@ -1,10 +1,10 @@
 	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-			 Version 2.0.13 for Linux 2.0
+			 Version 2.0.14 for Linux 2.0
 
 			      PRODUCTION RELEASE
 
-				 17 April 1998
+				 29 April 1998
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -591,7 +591,7 @@ To install the new BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-2.0.13.tar.gz
+  tar -xvzf BusLogic-2.0.14.tar.gz
   mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
   patch -p < BusLogic.patch
   cd linux

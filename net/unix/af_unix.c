@@ -28,6 +28,7 @@
  *		Nick Nevin	:	recvmsg bugfix.
  *		Alan Cox	:	Started proper garbage collector
  *		Heiko EiBfeldt	:	Missing verify_area check
+ *		Alan Cox	:	Shutdown() bug
  *
  * Known differences from reference BSD that was tested:
  *
@@ -1155,6 +1156,9 @@ static int unix_shutdown(struct socket *sock, int mode)
 {
 	unix_socket *sk=(unix_socket *)sock->data;
 	unix_socket *other=sk->protinfo.af_unix.other;
+	
+	mode++;
+	
 	if(mode&SEND_SHUTDOWN)
 	{
 		sk->shutdown|=SEND_SHUTDOWN;

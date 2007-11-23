@@ -25,7 +25,11 @@ extern struct hae {
 /*
  * Virtual -> physical identity mapping starts at this offset
  */
+#ifdef USE_48_BIT_KSEG
+#define IDENT_ADDR	(0xffff800000000000UL)
+#else
 #define IDENT_ADDR	(0xfffffc0000000000UL)
+#endif
 
 #ifdef __KERNEL__
 
@@ -42,6 +46,7 @@ extern inline void set_hae(unsigned long new_hae)
 	hae.cache = new_hae;
 	*hae.reg = new_hae;
 	mb();
+	new_hae = *hae.reg; /* read to make sure it was written */
 	setipl(ipl);
 }
 
@@ -79,6 +84,10 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # include <asm/apecs.h>		/* get chip-specific definitions */
 #elif defined(CONFIG_ALPHA_CIA)
 # include <asm/cia.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_T2)
+# include <asm/t2.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_PYXIS)
+# include <asm/pyxis.h>		/* get chip-specific definitions */
 #else
 # include <asm/jensen.h>
 #endif
@@ -150,9 +159,21 @@ extern void		_writel(unsigned int b, unsigned long addr);
 #endif
 
 /*
- * The "address" in IO memory space is not clearly either a integer or a
+ * The "address" in IO memory space is not clearly either an integer or a
  * pointer. We will accept both, thus the casts.
+ *
+ * On the alpha, we have the whole physical address space mapped at all
+ * times, so "ioremap()" and "iounmap()" do not need to do anything.
  */
+extern inline void * ioremap(unsigned long offset, unsigned long size)
+{
+	return (void *) offset;
+} 
+
+extern inline void iounmap(void *addr)
+{
+}
+
 #ifndef readb
 # define readb(a)	_readb((unsigned long)(a))
 #endif
@@ -202,6 +223,22 @@ extern void outsl (unsigned long port, const void *src, unsigned long count);
  */
 
 #define eth_io_copy_and_sum(skb,src,len,unused)	memcpy_fromio((skb)->data,(src),(len))
+
+static inline int check_signature(unsigned long io_addr,
+	const unsigned char *signature, int length)
+{
+	int retval = 0;
+	do {
+		if (readb(io_addr) != *signature)
+			goto out;
+		io_addr++;
+		signature++;
+		length--;
+	} while (length);
+	retval = 1;
+out:
+	return retval;
+}
 
 #endif /* __KERNEL__ */
 

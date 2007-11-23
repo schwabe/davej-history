@@ -1025,7 +1025,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 */
 	 
 	if(ct==1000)
-		printk("CPU #%d: previous IPI still not cleared after 10mS", smp_processor_id());
+		printk("CPU #%d: previous IPI still not cleared after 10ms\n", smp_processor_id());
 		
 	/*
 	 *	Program the APIC to deliver the IPI

@@ -838,8 +838,6 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 		__u32 addr = sk->rcv_saddr;
 		if (!addr) {
 			addr = sk->saddr;
-			if (!addr)
-				addr = ip_my_addr();
 		}
 		sin->sin_port = sk->dummy_th.source;
 		sin->sin_addr.s_addr = addr;

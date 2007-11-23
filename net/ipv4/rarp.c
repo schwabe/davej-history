@@ -28,7 +28,9 @@
  * Fixes
  *	Alan Cox	:	Rarp delete on device down needed as
  *				reported by Walter Wolfgang.
- *  Lawrence V. Stefani : Added FDDI support.
+ *  Lawrence V. Stefani :	Added FDDI support.
+ *      San Mehat	:	Fixed bug where rarp would fail to build
+ *				if procfs was not compiled into the kernel
  */
 
 #include <linux/module.h>

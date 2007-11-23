@@ -4,6 +4,7 @@
  * kernel entry-points
  */
 
+#include <linux/config.h>
 #include <asm/system.h>
 
 #define halt	.long PAL_halt
@@ -22,7 +23,7 @@
 /*
  * stack offsets
  */
-#define SP_OFF		160
+#define SP_OFF		184
 
 #define SWITCH_STACK_SIZE 320
 
@@ -47,9 +48,11 @@
  * regs 9-15 preserved by C code
  * regs 16-18 saved by PAL-code
  * regs 29-30 saved and set up by PAL-code
+ * JRP - Save regs 16-18 in a special area of the stack, so that
+ * the palcode-provided values are available to the signal handler.
  */
 #define SAVE_ALL			\
-	subq	$30,160,$30;		\
+	subq	$30,184,$30;		\
 	stq	$0,0($30);		\
 	stq	$1,8($30);		\
 	stq	$2,16($30);		\
@@ -71,7 +74,10 @@
 	stq	$28,144($30);		\
 	lda	$2,hae;			\
 	ldq	$2,HAE_CACHE($2);	\
-	stq	$2,152($30)
+	stq	$2,152($30);		\
+	stq	$16,160($30);		\
+	stq	$17,168($30);		\
+	stq	$18,176($30)
 
 #define RESTORE_ALL			\
 	lda	$8,hae;			\
@@ -107,11 +113,11 @@
 	ldq	$26,128($30);		\
 	ldq	$27,136($30);		\
 	ldq	$28,144($30);		\
-	addq	$30,160,$30
+	addq	$30,184,$30
 
 .text
 .set noat
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ELF__)
   .set singlegp
 #endif
 
@@ -160,6 +166,36 @@ entArith:
 .globl	entIF
 .ent	entIF
 entIF:
+#ifdef CONFIG_KGDB
+	bne	$16,1f		/* not a bpt trap -> */
+	/*
+	 * Call kgdb if it's enabled and if "current" is not being
+	 * traced or if we get a bpt in kernel mode (the architecture
+	 * manual defines the values of $17 and $18 as "unpredictable",
+	 * so they are fair game).
+	 */
+	lda	$17,kgdb_enabled
+	ldl	$17,0($17)
+	beq	$17,1f		/* kgdb not enabled -> */
+
+#ifndef CONFIG_ALPHA_CABRIOLET
+	/*
+	 * MILO on Cabriolet doesn't seem to setup the PS in the
+	 * PALframe correctly. (davidm@azstarnet.com)
+	 */
+	ldq	$18,0($30)	/* get ps */
+	and	$18,8,$18
+	beq	$18,entKGDB
+#endif
+
+	lda	$17,current_set
+	ldq	$17,0($17)
+	bis	$31,PF_PTRACED,$18
+	ldq	$17,TASK_FLAGS($17)
+	and	$17,$18,$17
+	beq	$17,entKGDB
+1:
+#endif
 	SAVE_ALL
 	lda	$27,do_entIF
 	lda	$26,ret_from_sys_call
@@ -759,3 +795,127 @@ sys_call_table:
 	.quad sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, do_entSys /* sys_afs_syscall */, sys_newuname
 	.quad sys_nanosleep, sys_mremap, do_entSys, do_entSys, do_entSys
 	.quad sys_pciconfig_read, sys_pciconfig_write, do_entSys, do_entSys, do_entSys
+
+
+#ifdef CONFIG_KGDB
+
+#define KGDB_STACK_SIZE	(8*1024)
+
+	.lcomm	kgdb_stack_bottom, KGDB_STACK_SIZE
+
+/*
+ * The following is the nasty part of entering KGDB.  GDB assumes that
+ * it can access the memory below the interrupted thread's stack
+ * pointer (SP).  This means that the stub cannot run on this stack
+ * (interrupts could overwrite changes made by GDB).  Similarly, we do
+ * not want to bother the GDB user with the call chain leading from
+ * the interrupt handler to this function.  That is, the SP reported
+ * to GDB should be the thread's SP at the point it was interrupted.  We
+ * achieve all this by switching to KGDB's own stack before saving any
+ * registers (of course, the PAL-generated frame is already on the stack and
+ * we copy that part explicitly).  GDB does whatever it wants to the
+ * thread's stack; and when it continues execution, we restore the
+ * registers from the private stack and return from the interrupt.
+ *
+ * This is not re-entrant---gdb on the host probably would get confused
+ * anyway, but we probably ought to detect that case at the least...
+ */
+.align 3
+.globl	entKGDB
+.ent	entKGDB
+entKGDB:
+	lda	$16,kgdb_stack_bottom
+	lda	$16,(KGDB_STACK_SIZE-48)($16)
+	bis	$31,$30,$17	/* save real sp in a1 */
+	bis	$31,$16,$30	/* update sp atomically! */
+	SAVE_ALL		/* save regular stuff */
+	/*
+	 * Only now can we disable interrupts (swpipl may step on
+	 * t0,t8..t11, and a0):
+	 */
+	bis	$31,7,$16
+	call_pal PAL_swpipl
+
+	/* copy PAL frame to kgdb stack: */
+
+	ldq	$1,0($17)
+	ldq	$2,8($17)
+	ldq	$3,16($17)
+	ldq	$4,24($17)
+	ldq	$5,32($17)
+	ldq	$6,40($17)
+
+	stq	$1,0+184($30)
+	stq	$2,8+184($30)
+	stq	$3,16+184($30)
+	stq	$4,24+184($30)
+	stq	$5,32+184($30)
+	stq	$6,40+184($30)
+
+	/* allocate space for and save caller saved regs as well as orig sp: */
+
+	lda	$30,-320($30)
+	addq	$17,48,$17	/* pop PAL frame */
+	stq	$17,0($30)	/* save original sp */
+
+	stq	 $9,0x08($30); stq $10,0x10($30); stq $11,0x18($30)
+	stq	$12,0x20($30); stq $13,0x28($30); stq $14,0x30($30)
+	stq	$15,0x38($30)
+
+	stt	$f0,0x40($30);   stt $f1,0x48($30);   stt $f2,0x50($30);   stt $f3,0x58($30)
+	stt	$f4,0x60($30);   stt $f5,0x68($30);   stt $f6,0x70($30);   stt $f7,0x78($30)
+	stt	$f8,0x80($30);   stt $f9,0x88($30);   stt $f10,0x90($30);  stt $f11,0x98($30)
+	stt	$f12,0xa0($30);  stt $f13,0xa8($30);  stt $f14,0xb0($30);  stt $f15,0xb8($30)
+	stt	$f16,0xc0($30);  stt $f17,0xc8($30);  stt $f18,0xd0($30);  stt $f19,0xd8($30)
+	stt	$f20,0xe0($30);  stt $f21,0xe8($30);  stt $f22,0xf0($30);  stt $f23,0xf8($30)
+	stt	$f24,0x100($30); stt $f25,0x108($30); stt $f26,0x110($30); stt $f27,0x118($30)
+	stt	$f28,0x120($30); stt $f29,0x128($30); stt $f30,0x130($30); stt $f31,0x138($30)
+
+	bis	$31,$30,$16
+
+	lda	$27,kgdb_handle_exception
+	jsr	$26,($27),kgdb_handle_exception
+
+	ldq	$17,0($30)	/* load new sp and caller-saved registers */
+
+	ldq	 $9,0x08($30); ldq $10,0x10($30); ldq $11,0x18($30)
+	ldq	$12,0x20($30); ldq $13,0x28($30); ldq $14,0x30($30)
+	ldq	$15,0x38($30)
+
+	ldt	$f0,0x40($30);   ldt $f1,0x48($30);   ldt $f2,0x50($30);   ldt $f3,0x58($30)
+	ldt	$f4,0x60($30);   ldt $f5,0x68($30);   ldt $f6,0x70($30);   ldt $f7,0x78($30)
+	ldt	$f8,0x80($30);   ldt $f9,0x88($30);   ldt $f10,0x90($30);  ldt $f11,0x98($30)
+	ldt	$f12,0xa0($30);  ldt $f13,0xa8($30);  ldt $f14,0xb0($30);  ldt $f15,0xb8($30)
+	ldt	$f16,0xc0($30);  ldt $f17,0xc8($30);  ldt $f18,0xd0($30);  ldt $f19,0xd8($30)
+	ldt	$f20,0xe0($30);  ldt $f21,0xe8($30);  ldt $f22,0xf0($30);  ldt $f23,0xf8($30)
+	ldt	$f24,0x100($30); ldt $f25,0x108($30); ldt $f26,0x110($30); ldt $f27,0x118($30)
+	ldt	$f28,0x120($30); ldt $f29,0x128($30); ldt $f30,0x130($30); ldt $f31,0x138($30)
+	lda	$30,320($30)	/* pop extra register frame */
+
+	/*
+	 * Copy PAL frame from kgdb stack to new stack so we can rti
+	 * to it:
+	 */
+	ldq	$1,0+184($30)
+	ldq	$2,8+184($30)
+	ldq	$3,16+184($30)
+	ldq	$4,24+184($30)
+	ldq	$5,32+184($30)
+	ldq	$6,40+184($30)
+
+	subq	$17,48,$17	/* alloc space for PAL frame on new stack */
+
+	stq	$1,0($17)
+	stq	$2,8($17)
+	stq	$3,16($17)
+	stq	$4,24($17)
+	stq	$5,32($17)
+	stq	$6,40($17)
+
+	RESTORE_ALL
+	bis	$31,$17,$30	/* establish new sp */
+	rti
+
+.end entKGDB
+
+#endif /* CONFIG_KGDB */

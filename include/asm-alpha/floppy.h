@@ -51,11 +51,11 @@ static int FDC2 = -1;
 /*
  * Most Alphas have no problems with floppy DMA crossing 64k borders. Sigh...
  */
-#ifdef CONFIG_ALPHA_XL
+#if defined(CONFIG_ALPHA_XL) || defined(CONFIG_ALPHA_RUFFIAN)
 #define CROSS_64KB(a,s) \
     ((unsigned long)(a)/0x10000 != ((unsigned long)(a) + (s) - 1) / 0x10000)
-#else /* CONFIG_ALPHA_XL */
+#else /* XL || RUFFIAN */
 #define CROSS_64KB(a,s) (0)
-#endif /* CONFIG_ALPHA_XL */
+#endif /* XL || RUFFIAN */
 
 #endif /* __ASM_ALPHA_FLOPPY_H */

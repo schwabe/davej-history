@@ -164,7 +164,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd,
  * interface instead, as this is a more flexible approach to performing
  * generic SCSI commands on a device.
  */
-static int ioctl_command(Scsi_Device *dev, void *buffer)
+int scsi_ioctl_send_command(Scsi_Device *dev, void *buffer)
 {
     char * buf;
     unsigned char cmd[12]; 
@@ -369,7 +369,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	return ioctl_probe(dev->host, arg);
     case SCSI_IOCTL_SEND_COMMAND:
 	if(!suser() || securelevel > 0)  return -EACCES;
-	return ioctl_command((Scsi_Device *) dev, arg);
+	return scsi_ioctl_send_command((Scsi_Device *) dev, arg);
     case SCSI_IOCTL_DOORLOCK:
 	if (!dev->removable || !dev->lockable) return 0;
 	scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;

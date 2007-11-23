@@ -80,6 +80,8 @@ static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsign
  * "this is gonna have to change to 1gig for the sparc" - David S. Miller
  */
 #define TASK_SIZE	(0x80000000UL)
+#define MAX_USER_ADDR	TASK_SIZE
+#define MMAP_SEARCH_START (TASK_SIZE/3)
 
 struct thread_struct 
    {

@@ -145,9 +145,10 @@ void swap_free(unsigned long entry)
 	if (offset > p->highest_bit)
 		p->highest_bit = offset;
 	if (!p->swap_map[offset])
-		printk("swap_free: swap-space map bad (entry %08lx)\n",entry);
-	else
-		if (!--p->swap_map[offset])
+		printk("swap_free: swap-space map null (entry %08lx)\n",entry);
+	else if (p->swap_map[offset] == SWAP_MAP_RESERVED)
+		printk("swap_free: swap-space reserved (entry %08lx)\n",entry);
+	else if (!--p->swap_map[offset])
 			nr_swap_pages++;
 	if (p->prio > swap_info[swap_list.next].prio) {
 	    swap_list.next = swap_list.head;
@@ -503,7 +504,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		error = -EINVAL;
 		goto bad_swap;
 	}
-	p->swap_map = (unsigned char *) vmalloc(p->max);
+	p->swap_map = (unsigned short *) vmalloc(p->max * sizeof(short));
 	if (!p->swap_map) {
 		error = -ENOMEM;
 		goto bad_swap;
@@ -512,9 +513,9 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		if (test_bit(i,p->swap_lockmap))
 			p->swap_map[i] = 0;
 		else
-			p->swap_map[i] = 0x80;
+			p->swap_map[i] = SWAP_MAP_RESERVED;
 	}
-	p->swap_map[0] = 0x80;
+	p->swap_map[0] = SWAP_MAP_RESERVED;
 	memset(p->swap_lockmap,0,PAGE_SIZE);
 	p->flags = SWP_WRITEOK;
 	p->pages = j;
@@ -562,7 +563,7 @@ void si_swapinfo(struct sysinfo *val)
 			continue;
 		for (j = 0; j < swap_info[i].max; ++j)
 			switch (swap_info[i].swap_map[j]) {
-				case 128:
+				case SWAP_MAP_RESERVED:
 					continue;
 				case 0:
 					++val->freeswap;

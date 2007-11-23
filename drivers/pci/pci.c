@@ -740,6 +740,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_MATROX:	return "Matrox";
 	      case PCI_VENDOR_ID_CT:		return "Chips & Technologies";
 	      case PCI_VENDOR_ID_MIRO:		return "Miro";
+	      case PCI_VENDOR_ID_NEC:		return "NEC";
 	      case PCI_VENDOR_ID_FD:		return "Future Domain";
 	      case PCI_VENDOR_ID_SI:		return "Silicon Integrated Systems";
 	      case PCI_VENDOR_ID_HP:		return "Hewlett Packard";
@@ -892,15 +893,16 @@ static void burst_bridge(unsigned char bus, unsigned char devfn,
 static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 {
 	unsigned long base;
-	unsigned int l, class_rev, bus, devfn;
+	unsigned int l, class_rev, bus, devfn, last_reg;
 	unsigned short vendor, device, status;
-	unsigned char bist, latency, min_gnt, max_lat;
+	unsigned char bist, latency, min_gnt, max_lat, hdr_type;
 	int reg, len = 0;
 	const char *str;
 
 	bus   = dev->bus->number;
 	devfn = dev->devfn;
 
+	pcibios_read_config_byte (bus, devfn, PCI_HEADER_TYPE, &hdr_type);
 	pcibios_read_config_dword(bus, devfn, PCI_CLASS_REVISION, &class_rev);
 	pcibios_read_config_word (bus, devfn, PCI_VENDOR_ID, &vendor);
 	pcibios_read_config_word (bus, devfn, PCI_DEVICE_ID, &device);
@@ -979,7 +981,17 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		  len += sprintf(buf + len, "Max Lat=%d.", max_lat);
 	}
 
-	for (reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg += 4) {
+	switch (hdr_type & 0x7f) {
+		case 0:
+			last_reg = PCI_BASE_ADDRESS_5;
+			break;
+		case 1:
+			last_reg = PCI_BASE_ADDRESS_1;
+			break;
+		default:
+			last_reg = 0;
+	}
+	for (reg = PCI_BASE_ADDRESS_0; reg <= last_reg; reg += 4) {
 		if (len + 40 > size) {
 			return -1;
 		}
@@ -1072,7 +1084,7 @@ static void *pci_malloc(long size, unsigned long *mem_startp)
 static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 {
 	unsigned int devfn, l, max;
-	unsigned char cmd, tmp, hdr_type, is_multi = 0;
+	unsigned char cmd, tmp, hdr_type, ht, is_multi = 0;
 	struct pci_dev_info *info;
 	struct pci_dev *dev;
 	struct pci_bus *child;
@@ -1146,10 +1158,20 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 
 		/*
 		 * Check if the header type is known and consistent with
-		 * device type. Bridges should have hdr_type 1, all other
-		 * devices 0.
+		 * device type. PCI-to-PCI Bridges should have hdr_type 1,
+		 * CardBus Bridges 2, all other devices 0.
 		 */
-		if ((dev->class >> 8 == PCI_CLASS_BRIDGE_PCI) != (hdr_type & 0x7f)) {
+		switch (dev->class >> 8) {
+			case PCI_CLASS_BRIDGE_PCI:
+				ht = 1;
+				break;
+			case PCI_CLASS_BRIDGE_CARDBUS:
+				ht = 2;
+				break;
+			default:
+				ht = 0;
+		}
+		if (ht != (hdr_type & 0x7f)) {
 			printk(KERN_WARNING "PCI: %02x:%02x [%04x/%04x/%06x] has unknown header type %02x, ignoring.\n",
 				bus->number, dev->devfn, dev->vendor, dev->device, dev->class, hdr_type);
 			continue;

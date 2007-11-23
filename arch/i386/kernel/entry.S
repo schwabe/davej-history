@@ -326,7 +326,7 @@ ENTRY(system_call)
 	ALIGN
 1:	call SYMBOL_NAME(syscall_trace)
 	movl ORIG_EAX(%esp),%eax
-	call SYMBOL_NAME(sys_call_table)(,%eax,4)
+	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
 #ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%eax)

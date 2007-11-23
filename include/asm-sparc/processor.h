@@ -31,6 +31,8 @@
 
 /* Whee, this is STACK_TOP and the lowest kernel address too... */
 #define TASK_SIZE	(KERNBASE)
+#define MAX_USER_ADDR	TASK_SIZE
+#define MMAP_SEARCH_START (TASK_SIZE/3)
 
 /* The Sparc processor specific thread struct. */
 struct thread_struct {

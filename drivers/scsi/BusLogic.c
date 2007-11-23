@@ -26,8 +26,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.13"
-#define BusLogic_DriverDate		"17 April 1998"
+#define BusLogic_DriverVersion		"2.0.14"
+#define BusLogic_DriverDate		"29 April 1998"
 
 
 #include <linux/version.h>
@@ -1217,10 +1217,13 @@ static boolean BusLogic_Failure(BusLogic_HostAdapter_T *HostAdapter,
 {
   BusLogic_AnnounceDriver(HostAdapter);
   if (HostAdapter->HostAdapterBusType == BusLogic_PCI_Bus)
-    BusLogic_Error("While configuring BusLogic PCI Host Adapter at\n"
-		   "Bus %d Device %d I/O Address 0x%X PCI Address 0x%X:\n",
-		   HostAdapter, HostAdapter->Bus, HostAdapter->Device,
-		   HostAdapter->IO_Address, HostAdapter->PCI_Address);
+    {
+      BusLogic_Error("While configuring BusLogic PCI Host Adapter at\n",
+		     HostAdapter);
+      BusLogic_Error("Bus %d Device %d I/O Address 0x%X PCI Address 0x%X:\n",
+		     HostAdapter, HostAdapter->Bus, HostAdapter->Device,
+		     HostAdapter->IO_Address, HostAdapter->PCI_Address);
+    }
   else BusLogic_Error("While configuring BusLogic Host Adapter at "
 		      "I/O Address 0x%X:\n", HostAdapter,
 		      HostAdapter->IO_Address);

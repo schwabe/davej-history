@@ -28,9 +28,14 @@
  *	Based on other minimal char device drivers, like Alan's
  *	watchdog, Ted's random, etc. etc.
  *
+ *	1.07	Paul Gortmaker.
+ *	1.08	Miquel van Smoorenburg: disallow certain things on the
+ *		DEC Alpha as the CMOS clock is also used for other things.
+ *	1.09	Nikita Schmidt: epoch support and some Alpha cleanup.
+ *
  */
 
-#define RTC_VERSION		"1.07"
+#define RTC_VERSION		"1.09"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
 #define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
@@ -98,6 +103,13 @@ unsigned char rtc_status = 0;		/* bitmapped status byte.	*/
 unsigned long rtc_freq = 0;		/* Current periodic IRQ rate	*/
 unsigned long rtc_irq_data = 0;		/* our output to the world	*/
 
+/*
+ *	If this driver ever becomes modularised, it will be really nice
+ *	to make the epoch retain its value across module reload...
+ */
+
+static unsigned long epoch = 1900;	/* year corresponding to 0x00	*/
+
 unsigned char days_in_mo[] = 
 		{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
@@ -106,8 +118,12 @@ unsigned char days_in_mo[] =
  *	so that there is no possibility of conflicting with the
  *	set_rtc_mmss() call that happens during some timer interrupts.
  *	(See ./arch/XXXX/kernel/time.c for the set_rtc_mmss() function.)
+ *
+ *	On Alpha we won't get any interrupts anyway, as they all end up
+ *	in the system timer code.
  */
 
+#ifndef __alpha__
 static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/*
@@ -128,9 +144,11 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		add_timer(&rtc_irq_timer);
 	}
 }
+#endif
 
 /*
  *	Now all the various file operations that we export.
+ *	They are all useless on Alpha...  *sigh*.
  */
 
 static int rtc_lseek(struct inode *inode, struct file *file, off_t offset,
@@ -141,6 +159,9 @@ static int rtc_lseek(struct inode *inode, struct file *file, off_t offset,
 
 static int rtc_read(struct inode *inode, struct file *file, char *buf, int count)
 {
+#ifdef __alpha__
+	return -EIO;
+#else
 	struct wait_queue wait = { current, NULL };
 	int retval;
 	
@@ -182,6 +203,7 @@ static int rtc_read(struct inode *inode, struct file *file, char *buf, int count
 	remove_wait_queue(&rtc_wait, &wait);
 
 	return retval;
+#endif
 }
 
 static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
@@ -191,6 +213,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	unsigned long flags;
 
 	switch (cmd) {
+#ifndef __alpha__
 		case RTC_AIE_OFF:	/* Mask alarm int. enab. bit	*/
 		{
 			mask_rtc_irq_bit(RTC_AIE);
@@ -238,6 +261,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			set_rtc_irq_bit(RTC_UIE);
 			return 0;
 		}
+#endif
 		case RTC_ALM_READ:	/* Read the present alarm time */
 		{
 			/*
@@ -342,7 +366,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			min = rtc_tm.tm_min;
 			sec = rtc_tm.tm_sec;
 
-			if ((yrs < 1970) || (yrs > 2069))
+			if (yrs < 1970)
 				return -EINVAL;
 
 			leap_yr = ((!(yrs % 4) && (yrs % 100)) || !(yrs % 400));
@@ -356,16 +380,19 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			if ((hrs >= 24) || (min >= 60) || (sec >= 60))
 				return -EINVAL;
 
-			if (yrs >= 2000)
-				yrs -= 2000;	/* RTC (0, 1, ... 69) */
-			else
-				yrs -= 1900;	/* RTC (70, 71, ... 99) */
+			if ((yrs -= epoch) > 255)    /* They are unsigned */
+				return -EINVAL;
 
 			save_flags(flags);
 			cli();
-			if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) ||
-							RTC_ALWAYS_BCD)
-			{
+			if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) || RTC_ALWAYS_BCD) {
+				if (yrs > 169) {
+					restore_flags(flags);
+					return -EINVAL;
+				}
+				if (yrs >= 100)
+					yrs -= 100;
+
 				BIN_TO_BCD(sec);
 				BIN_TO_BCD(min);
 				BIN_TO_BCD(hrs);
@@ -403,6 +430,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			memcpy_tofs((unsigned long*)arg, &rtc_freq, sizeof(unsigned long));
 			return 0;
 		}
+#ifndef __alpha__
 		case RTC_IRQP_SET:	/* Set periodic IRQ rate.	*/
 		{
 			int tmp = 0;
@@ -439,6 +467,34 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			restore_flags(flags);
 			return 0;
 		}
+#endif
+#ifdef __alpha__
+		case RTC_EPOCH_READ:	/* Read the epoch.	*/
+		{
+			int retval;
+
+			retval = verify_area(VERIFY_WRITE, (unsigned long*)arg, sizeof(unsigned long));
+			if (retval != 0)
+				return retval;
+
+			memcpy_tofs((unsigned long*)arg, &epoch, sizeof(unsigned long));
+			return 0;
+		}
+		case RTC_EPOCH_SET:	/* Set the epoch.	*/
+		{
+			/* 
+			 * There were no RTC clocks before 1900.
+			 */
+			if (arg < 1900)
+				return -EINVAL;
+
+			if (!suser())
+				return -EACCES;
+
+			epoch = arg;
+			return 0;
+		}
+#endif
 		default:
 			return -EINVAL;
 	}
@@ -448,16 +504,18 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
  *	We enforce only one user at a time here with the open/close.
  *	Also clear the previous interrupt data on an open, and clean
  *	up things on a close.
+ *	On Alpha we just open, for we don't mess with interrups anyway.
  */
 
 static int rtc_open(struct inode *inode, struct file *file)
 {
-
+#ifndef __alpha__
 	if(rtc_status & RTC_IS_OPEN)
 		return -EBUSY;
 
 	rtc_status |= RTC_IS_OPEN;
 	rtc_irq_data = 0;
+#endif
 	return 0;
 }
 
@@ -469,6 +527,7 @@ static void rtc_release(struct inode *inode, struct file *file)
 	 * in use, and clear the data.
 	 */
 
+#ifndef __alpha__
 	unsigned char tmp;
 	unsigned long flags;
 
@@ -489,8 +548,10 @@ static void rtc_release(struct inode *inode, struct file *file)
 
 	rtc_irq_data = 0;
 	rtc_status &= ~RTC_IS_OPEN;
+#endif
 }
 
+#ifndef __alpha__
 static int rtc_select(struct inode *inode, struct file *file,
 			int sel_type, select_table *wait)
 {
@@ -501,6 +562,7 @@ static int rtc_select(struct inode *inode, struct file *file,
 	}
 	return 0;
 }
+#endif
 
 /*
  *	The various file operations we support.
@@ -511,7 +573,11 @@ static struct file_operations rtc_fops = {
 	rtc_read,
 	NULL,		/* No write */
 	NULL,		/* No readdir */
+#ifdef __alpha__
+	NULL,		/* No select on Alpha */
+#else
 	rtc_select,
+#endif
 	rtc_ioctl,
 	NULL,		/* No mmap */
 	rtc_open,
@@ -528,17 +594,54 @@ static struct miscdevice rtc_dev=
 int rtc_init(void)
 {
 	unsigned long flags;
+#ifdef __alpha__
+	unsigned int year, ctrl;
+	unsigned long uip_watchdog;
+	char *guess = NULL;
+#endif
 
 	printk("Real Time Clock Driver v%s\n", RTC_VERSION);
+#ifndef __alpha__
 	if(request_irq(RTC_IRQ, rtc_interrupt, SA_INTERRUPT, "rtc", NULL))
 	{
 		/* Yeah right, seeing as irq 8 doesn't even hit the bus. */
 		printk("rtc: IRQ %d is not free.\n", RTC_IRQ);
 		return -EIO;
 	}
+#endif
 	misc_register(&rtc_dev);
 	/* Check region? Naaah! Just snarf it up. */
 	request_region(RTC_PORT(0), RTC_IO_EXTENT, "rtc");
+#ifdef __alpha__
+	rtc_freq = HZ;
+
+	/* Each operating system on an Alpha uses its own epoch.
+	   Let's try to guess which one we are using now. */
+
+	uip_watchdog = jiffies;
+	if (rtc_is_updating() != 0)
+		while (jiffies - uip_watchdog < 2*HZ/100)
+			barrier();
+
+	save_flags(flags);
+	cli();
+	year = CMOS_READ(RTC_YEAR);
+	ctrl = CMOS_READ(RTC_CONTROL);
+	restore_flags(flags);
+
+	if (!(ctrl & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
+		BCD_TO_BIN(year);	/* This should never happen... */
+
+	if (year > 10 && year < 44) {
+		epoch = 1980;
+		guess = "ARC console";
+	} else if (year < 96) {
+		epoch = 1952;
+		guess = "Digital UNIX";
+	}
+	if (guess)
+		printk("rtc: %s epoch (%ld) detected\n", guess, epoch);
+#else
 	init_timer(&rtc_irq_timer);
 	rtc_irq_timer.function = rtc_dropped_irq;
 	rtc_wait = NULL;
@@ -548,6 +651,7 @@ int rtc_init(void)
 	CMOS_WRITE(((CMOS_READ(RTC_FREQ_SELECT) & 0xF0) | 0x06), RTC_FREQ_SELECT);
 	restore_flags(flags);
 	rtc_freq = 1024;
+#endif
 	return 0;
 }
 
@@ -563,6 +667,7 @@ int rtc_init(void)
  *	for something that requires a steady > 1KHz signal anyways.)
  */
 
+#ifndef __alpha__
 void rtc_dropped_irq(unsigned long data)
 {
 	unsigned long flags;
@@ -579,6 +684,7 @@ void rtc_dropped_irq(unsigned long data)
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);	/* restart */
 	restore_flags(flags);
 }
+#endif
 
 /*
  *	Info exported via "/proc/rtc".
@@ -723,7 +829,7 @@ void get_rtc_time(struct rtc_time *rtc_tm)
 	 * Account for differences between how the RTC uses the values
 	 * and how they are defined in a struct rtc_time;
 	 */
-	if (rtc_tm->tm_year <= 69)
+	if ((rtc_tm->tm_year += epoch - 1900) <= 69)
 		rtc_tm->tm_year += 100;
 
 	rtc_tm->tm_mon--;
@@ -763,6 +869,8 @@ void get_rtc_alm_time(struct rtc_time *alm_tm)
  * We also clear out any old irq data after an ioctl() that
  * meddles with the interrupt enable/disable bits.
  */
+
+#ifndef __alpha__
 void mask_rtc_irq_bit(unsigned char bit)
 {
 	unsigned char val;
@@ -792,4 +900,4 @@ void set_rtc_irq_bit(unsigned char bit)
 	rtc_irq_data = 0;
 	restore_flags(flags);
 }
-
+#endif

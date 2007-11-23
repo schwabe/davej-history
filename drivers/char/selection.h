@@ -61,10 +61,15 @@ extern void putconsxy(int currcons, char *p);
 /* how to access screen memory */
 
 #include <linux/config.h>
+#include <asm/io.h> 
 
 #ifdef CONFIG_TGA_CONSOLE
 
-extern int tga_blitc(unsigned int, unsigned long);
+# ifdef CONFIG_VGA_CONSOLE
+extern int curr_cons;
+extern const struct console_desc cons_devices[];
+# endif
+
 extern unsigned long video_mem_term;
 
 /*
@@ -83,24 +88,57 @@ extern unsigned long video_mem_term;
  *
  * NOTE also: there's only *TWO* operations: to put/get a character/attribute.
  *  All the others needed by VGA support go away, as Not Applicable for TGA.
+ *
+ * NOTE: "(long) addr < 0" tests for an Alpha kernel virtual address; this
+ *  indicates a VC's backing store; otherwise, it's a bus memory address, for
+ *  the VGA's screen memory, so we do the Alpha "swizzle"... :-)
  */
+#define IS_VIDEO_MEMORY(a) \
+        ((unsigned long)(a) - video_mem_base < video_mem_term - video_mem_base)
+
 static inline void scr_writew(unsigned short val, unsigned short * addr)
 {
+        if ((long) addr < 0) {
 	/*
-	 * always deposit the char/attr, then see if it was to "screen" mem.
+		 * always deposit the char/attr, then see if it was to
+		 * "screen" mem.
 	 * if so, then render the char/attr onto the real screen.
 	 */
         *addr = val;
-        if ((unsigned long)addr < video_mem_term &&
-	    (unsigned long)addr >= video_mem_base) {
-                tga_blitc(val, (unsigned long) addr);
-        }
+
+                /*
+		 * TGA might need the char blitted to the screen,
+		 * but check first, we could be running on a VGA.
+		 */
+                if (con_blitc && IS_VIDEO_MEMORY(addr))
+			con_blitc(val, (unsigned long) addr);
+        } else
+                writew(val, (unsigned long) addr);
 }
 
 static inline unsigned short scr_readw(unsigned short * addr)
 {
+	if ((long) addr < 0)
 	return *addr;
+	return readw((unsigned long) addr);
 }
+
+/* scr_writeb and scr_readb are not expected to be called with a TGA */
+static inline void scr_writeb(unsigned char val, unsigned char * addr)
+{
+	if ((long) addr < 0)
+		*addr = val;
+	else
+		writeb(val, (unsigned long) addr);
+}
+
+static inline unsigned char scr_readb(unsigned char * addr)
+{
+	if ((long) addr < 0)
+		return *addr;
+	return readb((unsigned long) addr);
+}
+
 #else /* CONFIG_TGA_CONSOLE */
 
 /*
@@ -109,8 +147,6 @@ static inline unsigned short scr_readw(unsigned short * addr)
  */ 
 
 #ifdef __alpha__
-
-#include <asm/io.h> 
 
 /*
  * NOTE: "(long) addr < 0" tests for an Alpha kernel virtual address; this

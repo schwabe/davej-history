@@ -232,6 +232,9 @@ int misc_init(void)
 #ifdef CONFIG_APM
 	apm_bios_init();
 #endif
+#ifdef CONFIG_H8
+	h8_init();
+#endif
 #ifdef CONFIG_RTC
 	rtc_init();
 #endif

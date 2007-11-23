@@ -196,6 +196,11 @@ LX_OBJS += apm_bios.o
 M = y
 endif
 
+ifdef CONFIG_H8
+LX_OBJS += h8.o
+M = y
+endif
+
 ifdef M
 LX_OBJS += misc.o
 else
@@ -222,6 +227,9 @@ endif
 
 ifdef CONFIG_TGA_CONSOLE
 L_OBJS += tga.o
+  ifdef CONFIG_VGA_CONSOLE
+    L_OBJS += vga.o vesa_blank.o
+  endif
 else
  ifndef CONFIG_SUN_CONSOLE
  L_OBJS += vga.o vesa_blank.o

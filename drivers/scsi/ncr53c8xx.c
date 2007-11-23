@@ -67,7 +67,7 @@
 */
 
 /*
-**	2 January 1998, version 2.5f
+**	30 January 1998, version 2.5f.1
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -1959,7 +1959,7 @@ static	void	ncr_free_ccb	(ncb_p np, ccb_p cp, u_long t, u_long l);
 static	void	ncr_getclock	(ncb_p np, int mult);
 static	void	ncr_selectclock	(ncb_p np, u_char scntl3);
 static	ccb_p	ncr_get_ccb	(ncb_p np, u_long t,u_long l);
-static	void	ncr_init	(ncb_p np, char * msg, u_long code);
+static	void	ncr_init	(ncb_p np, int reset, char * msg, u_long code);
 static	int	ncr_int_sbmc	(ncb_p np);
 static	int	ncr_int_par	(ncb_p np);
 static	void	ncr_int_ma	(ncb_p np);
@@ -5243,6 +5243,12 @@ static int ncr_reset_scsi_bus(ncb_p np, int enab_int, int settle_delay)
 	OUTB (nc_istat, 0);
 	if (enab_int)
 		OUTW (nc_sien, RST);
+	/*
+	**	Enable Tolerant, reset IRQD if present and 
+	**	properly set IRQ mode, prior to resetting the bus.
+	*/
+	OUTB (nc_stest3, TE);
+	OUTB (nc_dcntl, (np->rv_dcntl & IRQM));
 	OUTB (nc_scntl1, CRST);
 	DELAY (100);
 
@@ -5958,16 +5964,21 @@ void ncr_wakeup (ncb_p np, u_long code)
 **==========================================================
 */
 
-void ncr_init (ncb_p np, char * msg, u_long code)
+void ncr_init (ncb_p np, int reset, char * msg, u_long code)
 {
 	int	i;
 
 	/*
-	**	Reset chip.
+	**	Reset chip if asked, otherwise just clear fifos.
 	*/
-
-	OUTB (nc_istat,  SRST);
-	DELAY (10000);
+	if (reset) {
+		OUTB (nc_istat,  SRST);
+		DELAY (10000);
+	}
+	else {
+		OUTB (nc_stest3, TE|CSF);
+		OUTONB (nc_ctest3, CLF);
+	}
 
 	/*
 	**	Message.
@@ -7035,7 +7046,7 @@ void ncr_exception (ncb_p np)
 	*/
 
 	if (sist & RST) {
-		ncr_init (np, bootverbose ? "scsi reset" : NULL, HS_RESET);
+		ncr_init (np, 1, bootverbose ? "scsi reset" : NULL, HS_RESET);
 		return;
 	};
 
@@ -7156,7 +7167,7 @@ void ncr_int_sto (ncb_p np)
 		OUTL (nc_dsp, NCB_SCRIPT_PHYS (np, start));
 		return;
 	};
-	ncr_init (np, "selection timeout", HS_FAIL);
+	ncr_init (np, 1, "selection timeout", HS_FAIL);
 	np->disc = 1;
 }
 
@@ -7181,11 +7192,17 @@ static int ncr_int_sbmc (ncb_p np)
 {
 	u_char scsi_mode = INB (nc_stest4) & SMODE;
 
-	printf("%s: SCSI bus mode change from %x to %x, resetting ...\n",
+	printf("%s: SCSI bus mode change from %x to %x.\n",
 		ncr_name(np), np->scsi_mode, scsi_mode);
 
 	np->scsi_mode = scsi_mode;
-	ncr_start_reset(np, driver_setup.settle_delay);
+
+	/*
+	**	Suspend command processing for 1 second and 
+	**	reinitialize all except the chip.
+	*/
+	np->settle_time	= jiffies + HZ;
+	ncr_init (np, 0, bootverbose ? "scsi mode change" : NULL, HS_RESET);
 
 	return 1;
 }
@@ -8785,7 +8802,7 @@ static void ncr_selectclock(ncb_p np, u_char scntl3)
 	OUTB(nc_stest3, HSC);		/* Halt the scsi clock		*/
 	OUTB(nc_scntl3,	scntl3);
 	OUTB(nc_stest1, (DBLEN|DBLSEL));/* Select clock multiplier	*/
-	OUTB(nc_stest3, 0x00);		/* Restart scsi clock 		*/
+	OUTB(nc_stest3, 0x00|TE);		/* Restart scsi clock 		*/
 }
 
 

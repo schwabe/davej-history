@@ -629,26 +629,28 @@ int isofs_bmap(struct inode * inode,int block)
 		inode->i_ino, nextino, firstext, size);
 #endif
 	i = 0;
-	while(b_off >= offset + size) {
-		offset += size;
+	if (nextino) {
+		while(b_off >= offset + size) {
+			offset += size;
 
-		if(nextino == 0) return 0;
-		ino = iget(inode->i_sb, nextino);
-		if(!ino) return 0;
-		firstext = ino->u.isofs_i.i_first_extent;
-		size = ino->u.isofs_i.i_section_size;
+			if(nextino == 0) return 0;
+			ino = iget(inode->i_sb, nextino);
+			if(!ino) return 0;
+			firstext = ino->u.isofs_i.i_first_extent;
+			size = ino->u.isofs_i.i_section_size;
 #ifdef DEBUG
-		printk("read inode: inode=%lu ino=%lu nextino=%lu firstext=%u size=%lu\n",
-			inode->i_ino, nextino, ino->u.isofs_i.i_next_section_ino, firstext, size);
+			printk("read inode: inode=%lu ino=%lu nextino=%lu firstext=%u size=%lu\n",
+			       inode->i_ino, nextino, ino->u.isofs_i.i_next_section_ino, firstext, size);
 #endif
-		nextino = ino->u.isofs_i.i_next_section_ino;
-		iput(ino);
+			nextino = ino->u.isofs_i.i_next_section_ino;
+			iput(ino);
 		
-		if(++i > 100) {
-			printk("isofs_bmap: More than 100 file sections ?!?, aborting...\n");
-			printk("isofs_bmap: ino=%lu block=%d firstext=%u size=%u nextino=%lu\n",
-				inode->i_ino, block, firstext, (unsigned)size, nextino);
-			return 0;
+			if(++i > 100) {
+				printk("isofs_bmap: More than 100 file sections ?!?, aborting...\n");
+				printk("isofs_bmap: ino=%lu block=%d firstext=%u size=%u nextino=%lu\n",
+				       inode->i_ino, block, firstext, (unsigned)size, nextino);
+				return 0;
+			}
 		}
 	}
 #ifdef DEBUG

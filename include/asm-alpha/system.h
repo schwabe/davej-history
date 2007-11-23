@@ -52,6 +52,8 @@ extern void wrusp(unsigned long);
 extern unsigned long rdusp(void);
 extern unsigned long rdmces (void);
 extern void wrmces (unsigned long);
+extern unsigned long whami(void);
+extern void wripir(unsigned long);
 
 #define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
 

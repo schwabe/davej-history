@@ -45,7 +45,7 @@ pgprot_t protection_map[16] = {
  * Check that a process has enough memory to allocate a
  * new virtual mapping.
  */
-static inline int vm_enough_memory(long pages)
+int vm_enough_memory(long pages)
 {
 	/*
 	 * stupid algorithm to decide if we have enough memory: while
@@ -147,7 +147,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
 
-	if (len > TASK_SIZE || addr > TASK_SIZE-len)
+	if (len > MAX_USER_ADDR || addr > MAX_USER_ADDR-len)
 		return -EINVAL;
 
 	/* offset overflow? */
@@ -178,6 +178,9 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			 */
 			if (locks_verify_locked(file->f_inode))
 				return -EAGAIN;
+			/* cevans -- whoops another append-only file flaw */
+			if (IS_APPEND(file->f_inode) && (prot & PROT_WRITE))
+				return -EACCES;
 			/* fall through */
 		case MAP_PRIVATE:
 			if (!(file->f_mode & 1))
@@ -306,15 +309,15 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 {
 	struct vm_area_struct * vmm;
 
-	if (len > TASK_SIZE)
+	if (len > MAX_USER_ADDR)
 		return 0;
 	if (!addr)
-		addr = TASK_SIZE / 3;
+		addr = MMAP_SEARCH_START;
 	addr = PAGE_ALIGN(addr);
 
 	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
 		/* At this point:  (!vmm || addr < vmm->vm_end). */
-		if (TASK_SIZE - len < addr)
+		if (MAX_USER_ADDR - len < addr)
 			return 0;
 		if (!vmm || addr + len <= vmm->vm_start)
 			return addr;
@@ -794,7 +797,7 @@ int do_munmap(unsigned long addr, size_t len)
 {
 	struct vm_area_struct *mpnt, *prev, *next, **npp, *free;
 
-	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
+	if ((addr & ~PAGE_MASK) || addr > MAX_USER_ADDR || len > MAX_USER_ADDR-addr)
 		return -EINVAL;
 
 	if ((len = PAGE_ALIGN(len)) == 0)

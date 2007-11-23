@@ -1249,6 +1249,8 @@ void unlock_buffer(struct buffer_head * bh)
 
 	clear_bit(BH_Lock, &bh->b_state);
 	wake_up(&bh->b_wait);
+	if (waitqueue_active(&buffer_wait))
+		wake_up(&buffer_wait);
 
 	if (!test_bit(BH_FreeOnIO, &bh->b_state))
 		return;

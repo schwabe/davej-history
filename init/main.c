@@ -454,7 +454,7 @@ static void ramdisk_start_setup(char *str, int *ints)
 static void load_ramdisk(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
-      rd_doload = ints[1] & 1;
+      rd_doload = ints[1] & 3;
 }
 
 static void prompt_ramdisk(char *str, int *ints)

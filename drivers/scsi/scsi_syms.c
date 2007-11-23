@@ -36,6 +36,7 @@ extern int scsicam_bios_param (Disk * disk,
 
 extern void print_command (unsigned char *command);
 extern void print_sense(const char * devclass, Scsi_Cmnd * SCpnt);
+extern int scsi_ioctl_send_command(Scsi_Device *dev, void *buffer);
 
 struct symbol_table scsi_symbol_table = {
 #include <linux/symtab_begin.h>
@@ -64,6 +65,7 @@ struct symbol_table scsi_symbol_table = {
     X(scsi_mark_host_reset),
     X(scsi_mark_bus_reset),
     X(scsi_device_types),
+    X(scsi_ioctl_send_command),
 #if defined(CONFIG_PROC_FS)
     X(proc_print_scsidevice),
 #endif

@@ -2634,11 +2634,12 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 {
 	int hd_status, rc;
 	unsigned long timeout;
-	int irqs = 0;
+	unsigned long irqs_on = 0;
+	int irq_off;
 
 	if (!HWIF(drive)->irq) {		/* already got an IRQ? */
 		probe_irq_off(probe_irq_on());	/* clear dangling irqs */
-		irqs = probe_irq_on();		/* start monitoring irqs */
+		irqs_on = probe_irq_on();	/* start monitoring irqs */
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* enable device irq */
 	}
 
@@ -2652,8 +2653,8 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 #if CONFIG_BLK_DEV_PROMISE
 	if (IS_PROMISE_DRIVE) {
 		if (promise_cmd(drive,PROMISE_IDENTIFY)) {
-			if (irqs)
-				(void) probe_irq_off(irqs);
+			if (irqs_on)
+				(void) probe_irq_off(irqs_on);
 			return 1;
 		}
 	} else
@@ -2663,8 +2664,8 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	timeout += jiffies;
 	do {
 		if (jiffies > timeout) {
-			if (irqs)
-				(void) probe_irq_off(irqs);
+			if (irqs_on)
+				(void) probe_irq_off(irqs_on);
 			return 1;	/* drive timed-out */
 		}
 		delay_50ms();		/* give drive a breather */
@@ -2682,18 +2683,18 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	} else
 		rc = 2;			/* drive refused ID */
 	if (!HWIF(drive)->irq) {
-		irqs = probe_irq_off(irqs);	/* get our irq number */
-		if (irqs > 0) {
-			HWIF(drive)->irq = irqs; /* save it for later */
-			irqs = probe_irq_on();
+		irq_off = probe_irq_off(irqs_on);	/* get our irq number */
+		if (irq_off > 0) {
+			HWIF(drive)->irq = irq_off; /* save it for later */
+			irqs_on = probe_irq_on();
 			OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG); /* mask device irq */
 			udelay(5);
-			(void) probe_irq_off(irqs);
+			(void) probe_irq_off(irqs_on);
 			(void) probe_irq_off(probe_irq_on()); /* clear self-inflicted irq */
 			(void) GET_STAT();	/* clear drive IRQ */
 
 		} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
-			printk("%s: IRQ probe failed (%d)\n", drive->name, irqs);
+			printk("%s: IRQ probe failed (%d)\n", drive->name, irq_off);
 #ifdef CONFIG_BLK_DEV_CMD640
 #ifdef CMD640_DUMP_REGS
 			if (HWIF(drive)->chipset == ide_cmd640) {

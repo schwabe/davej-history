@@ -16,11 +16,14 @@
 
 #define SWAP_CLUSTER_MAX 32
 
+#define SWAP_MAP_MAX	  0xfffe	/* max val of swapinfo->swap_map[n] */
+#define SWAP_MAP_RESERVED 0xffff	/* max val of swapinfo->swap_map[n] */
+
 struct swap_info_struct {
 	unsigned int flags;
 	kdev_t swap_device;
 	struct inode * swap_file;
-	unsigned char * swap_map;
+	unsigned short * swap_map;
 	unsigned char * swap_lockmap;
 	int lowest_bit;
 	int highest_bit;

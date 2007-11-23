@@ -13,6 +13,7 @@
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
+#include <net/sock.h>
 
 #ifdef CONFIG_AX25
 #include <net/ax25.h>

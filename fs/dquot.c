@@ -1080,6 +1080,9 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 			return(-EINVAL);
 	}
 
+	if (id & ~0xFFFF)
+		return(-EINVAL);
+
 	flags |= QUOTA_SYSCALL;
 	if (has_quota_enabled(dev, type))
 		return(set_dqblk(dev, id, type, flags, (struct dqblk *) addr));
