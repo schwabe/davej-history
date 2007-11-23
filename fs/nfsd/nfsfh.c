@@ -690,6 +690,15 @@ repeat:
 		return 1;
 	}
 
+	/* if nfsd_server is zero, NFSD_MAXFH will be zero too, so
+	 * find_fhe() will NEVER find the file handle NOR an empty space,
+	 * and expire_slot will not be able to expire any file handle,
+	 * because NFSD_MAXFH is zero ... */
+
+	if (nfsd_nservers <= 0) {
+		return 0;
+	}
+
 	expire_slot(cache);
 	goto repeat;
 }

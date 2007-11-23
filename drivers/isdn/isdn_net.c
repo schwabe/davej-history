@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.103 2000/01/23 18:45:37 keil Exp $
+/* $Id: isdn_net.c,v 1.114 2000/03/16 16:37:41 kai Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,51 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.114  2000/03/16 16:37:41  kai
+ * Allow phone numbers starting with "*" as outgoing numbers for
+ * networking interface. Some PBX's need this to allow dialing internal
+ * numbers (mine, for example ;-)
+ *
+ * Revision 1.113  2000/03/16 15:46:37  kai
+ * a little bugfix and cosmetic changes
+ *
+ * Revision 1.112  2000/03/04 16:20:42  detabc
+ * copy frames before rewriting frame's saddr
+ *
+ * Revision 1.111  2000/02/28 22:28:24  he
+ * moved tx_timeout warning messages in old (2.2.x) branch where it really only
+ * indicates problems.
+ *
+ * Revision 1.110  2000/02/26 01:00:53  keil
+ * changes from 2.3.47
+ *
+ * Revision 1.109  2000/02/25 11:29:17  paul
+ * changed chargetime to ulong from int (after about 20 days the "chargetime of
+ * ipppX is now 1234" message displays a negative number on alpha).
+ *
+ * Revision 1.108  2000/02/15 12:54:01  kai
+ * set TX timeout back to 2 secs for 2.2.x, just to be safe
+ *
+ * Revision 1.107  2000/02/13 09:52:05  kai
+ * increased TX_TIMEOUT to 20sec
+ *
+ * Revision 1.106  2000/02/12 19:26:55  kai
+ * adopted to latest 2.3 softnet changes.
+ *
+ * tested with PPP and MPPP, it works here.
+ * can somebody check raw-ip?
+ *
+ * also changed std2kern, stddiff for bash-1 compatibility,
+ * hope this doesn't break anything.
+ *
+ * Revision 1.105  2000/02/12 11:43:26  he
+ * SOFTNET related changes, first try. Compatible with linux 2.2.x, but
+ * not tested for kernels with softnet (>= 2.3.43) yet.
+ *
+ * Revision 1.104  2000/02/06 21:49:59  detabc
+ * add rewriting of socket's and frame's saddr for udp-ipv4 dynip-connections.
+ * Include checksum-recompute of ip- and udp-header's.
+ *
  * Revision 1.103  2000/01/23 18:45:37  keil
  * Change EAZ mapping to forbit the use of cards (insert a "-" for the MSN)
  *
@@ -433,10 +478,6 @@
 #endif
 
 
-#ifndef ISDN_NEW_TBUSY
-#define ISDN_NEW_TBUSY
-#endif
-#ifdef ISDN_NEW_TBUSY
 /*
  * Outline of new tbusy handling: 
  *
@@ -453,29 +494,55 @@
  */
 
 /*
- * Tell upper layers that the network device is ready to xmit more frames.
+ * About SOFTNET:
+ * Most of the changes were pretty obvious and basically done by HE already.
+ *
+ * One problem of the isdn net device code is that is uses struct net_device
+ * for masters and slaves. However, only master interface are registered to 
+ * the network layer, and therefore, it only makes sense to call netif_* 
+ * functions on them.
+ *
+ * --KG
  */
-static void __inline__ isdn_net_dev_xon(struct device * dev)
-{
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
-}
 
-static void __inline__ isdn_net_lp_xon(isdn_net_local * lp)
+/* 
+ * Find out if the netdevice has been ifup-ed yet.
+ * For slaves, look at the corresponding master.
+ */
+static int __inline__ isdn_net_started(isdn_net_dev *n)
 {
-	lp->netdev->dev.tbusy = 0;
-	if(lp->master) lp->master->tbusy = 0;
-	mark_bh(NET_BH);
+	isdn_net_local *lp = n->local;
+	struct device *dev;
+	
+	if (lp->master) 
+		dev = lp->master;
+	else
+		dev = &n->dev;
+	return dev->start;
 }
 
 /*
- * Ask upper layers to temporarily cease passing us more xmit frames.
+ * wake up the network -> net_device queue.
+ * For slaves, wake the corresponding master interface.
  */
-static void __inline__ isdn_net_dev_xoff(struct device * dev)
+static void __inline__ isdn_net_lp_xon(isdn_net_local * lp)
 {
-	dev->tbusy = 1;
+	if (lp->master) 
+		netif_wake_queue(lp->master);
+	else
+		netif_wake_queue(&lp->netdev->dev);
 }
-#endif
+
+/* For 2.2.x we leave the transmitter busy timeout at 2 secs, just 
+ * to be safe.
+ * For 2.3.x we push it up to 20 secs, because call establishment
+ * (in particular callback) may take such a long time, and we 
+ * don't want confusing messages in the log. However, there is a slight
+ * possibility that this large timeout will break other things like MPPP,
+ * which might rely on the tx timeout. If so, we'll find out this way...
+ */
+
+#define ISDN_NET_TX_TIMEOUT (2*HZ)
 
 /* Prototypes */
 
@@ -483,7 +550,7 @@ int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
 
-char *isdn_net_revision = "$Revision: 1.103 $";
+char *isdn_net_revision = "$Revision: 1.114 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -522,14 +589,9 @@ isdn_net_reset(struct device *dev)
 #endif
 	ulong flags;
 
+	/* not sure if the cli() is needed at all --KG */
 	save_flags(flags);
 	cli();                  /* Avoid glitch on writes to CMD regs */
-	dev->interrupt = 0;
-#ifdef ISDN_NEW_TBUSY
-	isdn_net_dev_xon(dev);
-#else
-	dev->tbusy = 0;
-#endif
 #ifdef CONFIG_ISDN_X25
 	if( cprot && cprot -> pops && dops )
 		cprot -> pops -> restart ( cprot, dev, dops );
@@ -545,8 +607,12 @@ isdn_net_open(struct device *dev)
 	struct device *p;
 	struct in_device *in_dev;
 
+	/* moved here from isdn_net_reset, because only the master has an
+	   interface associated which is supposed to be started. BTW:
+	   we need to call netif_start_queue, not netif_wake_queue here */
+	netif_start_queue(dev);
+
 	isdn_net_reset(dev);
-	dev->start = 1;
 	/* Fill in the MAC-level header (not needed, but for compatibility... */
 	for (i = 0; i < ETH_ALEN - sizeof(u32); i++)
 		dev->dev_addr[i] = 0xfc;
@@ -564,7 +630,6 @@ isdn_net_open(struct device *dev)
 	if ((p = (((isdn_net_local *) dev->priv)->slave))) {
 		while (p) {
 			isdn_net_reset(p);
-			p->start = 1;
 			p = (((isdn_net_local *) p->priv)->slave);
 		}
 	}
@@ -682,7 +747,7 @@ isdn_net_autohup()
 							isdn_net_hangup(&p->dev);
 						} else if (jiffies - l->chargetime > l->chargeint) {
 							printk(KERN_DEBUG
-							       "isdn_net: %s: chtime = %d, chint = %d\n",
+							       "isdn_net: %s: chtime = %lu, chint = %d\n",
 							       l->name, l->chargetime, l->chargeint);
 							isdn_net_hangup(&p->dev);
 						}
@@ -743,19 +808,11 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 							mdev = &lp->netdev->dev;
 						if (!isdn_net_send_skb(mdev, lp, lp->sav_skb)) {
 							lp->sav_skb = NULL;
-#ifndef ISDN_NEW_TBUSY
-							mark_bh(NET_BH);
-#endif
 						} else {
 							return 1;
 						}
 					}
-#ifdef ISDN_NEW_TBUSY
 					isdn_net_lp_xon(lp);
-#else
-					if (test_and_clear_bit(0, (void *) &(p->dev.tbusy)))
-						mark_bh(NET_BH);
-#endif
 				}
 				return 1;
 			case ISDN_STAT_DCONN:
@@ -831,7 +888,7 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 						 * we correct the timestamp here.
 						 */
 						lp->chargetime = jiffies;
-						printk(KERN_DEBUG "isdn_net: chargetime of %s now %d\n",
+						printk(KERN_DEBUG "isdn_net: chargetime of %s now %lu\n",
 						lp->name, lp->chargetime);
 
 						/* reset dial-timeout */
@@ -854,18 +911,7 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 							if (!(isdn_net_xmit(&p->dev, lp, lp->first_skb)))
 								lp->first_skb = NULL;
 						}
-#ifdef ISDN_NEW_TBUSY
 						if(! lp->first_skb) isdn_net_lp_xon(lp);
-#else
-						else {
-							/*
-							 * dev.tbusy is usually cleared implicitly by isdn_net_xmit(,,lp->first_skb).
-							 * With an empty lp->first_skb, we need to do this ourselves
-							 */
-							lp->netdev->dev.tbusy = 0;
-							mark_bh(NET_BH);
-						}
-#endif /* ISDN_NEW_TBUSY */
 						return 1;
 				}
 				break;
@@ -889,26 +935,12 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 				if (lp->hupflags & ISDN_WAITCHARGE)
 					lp->hupflags |= ISDN_HAVECHARGE;
 				lp->chargetime = jiffies;
-				printk(KERN_DEBUG "isdn_net: Got CINF chargetime of %s now %d\n",
+				printk(KERN_DEBUG "isdn_net: Got CINF chargetime of %s now %lu\n",
 				       lp->name, lp->chargetime);
 				return 1;
 		}
 	}
 	return 0;
-}
-
-/*
- * Check, if a number contains wildcard-characters, in which case it
- * is for incoming purposes only.
- */
-static int
-isdn_net_checkwild(char *num)
-{
-	return ((strchr(num, '?')) ||
-		(strchr(num, '*')) ||
-		(strchr(num, '[')) ||
-		(strchr(num, ']')) ||
-		(strchr(num, '^')));
 }
 
 /*
@@ -1322,13 +1354,7 @@ isdn_net_log_skb(struct sk_buff * skb, isdn_net_local * lp)
  *
  * Return: 0 on success, !0 on failure.
  */
-#ifndef ISDN_NEW_TBUSY
-/*
- * Side-effects: ndev->tbusy is cleared on success.
- */
-#endif
-int
-isdn_net_send_skb
+int isdn_net_send_skb
 		(struct device *ndev, isdn_net_local * lp,struct sk_buff *skb)
 {
 	int ret;
@@ -1337,17 +1363,11 @@ isdn_net_send_skb
 	ret = isdn_writebuf_skb_stub(lp->isdn_device, lp->isdn_channel, 1, skb);
 	if (ret == len) {
 		lp->transcount += len;
-#ifndef ISDN_NEW_TBUSY
-		clear_bit(0, (void *) &(ndev->tbusy));
-#endif
 		return 0;
 	}
 	if (ret < 0) {
 		dev_kfree_skb(skb);
 		lp->stats.tx_errors++;
-#ifndef ISDN_NEW_TBUSY
-		clear_bit(0, (void *) &(ndev->tbusy));
-#endif
 		return 0;
 	}
 	return 1;
@@ -1393,11 +1413,7 @@ isdn_net_xmit(struct device *ndev, isdn_net_local * lp, struct sk_buff *skb)
 			if (lp->srobin == ndev)
 				ret = isdn_net_send_skb(ndev, lp, skb);
 			else
-#ifdef ISDN_NEW_TBUSY
 				ret = isdn_net_start_xmit(skb, lp->srobin);
-#else
-				ret = ndev->tbusy = isdn_net_start_xmit(skb, lp->srobin);
-#endif
 			lp->srobin = (slp->slave) ? slp->slave : ndev;
 			slp = (isdn_net_local *) (lp->srobin->priv);
 			if (!((slp->flags & ISDN_NET_CONNECTED) && (slp->dialstate == 0)))
@@ -1439,6 +1455,8 @@ isdn_net_adjust_hdr(struct sk_buff *skb, struct device *dev)
 	}
 }
 
+
+
 /*
  * Try sending a packet.
  * If this interface isn't connected to a ISDN-Channel, find a free channel,
@@ -1451,19 +1469,24 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 #ifdef CONFIG_ISDN_X25
 	struct concap_proto * cprot = lp -> netdev -> cprot;
 #endif
+	/* some comment as with the softnet TX timeout
+	   when this happens, it's a bug in the HL card driver
+	   and should be fixed there, so we can supposedly get rid of 
+	   this here at all. 
+	   I added a debugging message to find out if it ever occurs --KG
+	*/
+
 	if (ndev->tbusy) {
-		if (jiffies - ndev->trans_start < (2 * HZ))
+		if (jiffies - ndev->trans_start < ISDN_NET_TX_TIMEOUT)
 			return 1;
-		if (!lp->dialstate)
+		if (!lp->dialstate){
 			lp->stats.tx_errors++;
+			printk(KERN_WARNING "isdn_tx_timeout dev %s dialstate %d\n",
+				ndev->name, lp->dialstate);
+		}
 		ndev->trans_start = jiffies;
-#ifdef ISDN_NEW_TBUSY
-		isdn_net_dev_xon(ndev);
-#endif
+		netif_wake_queue(ndev);
 	}
-#ifndef ISDN_NEW_TBUSY
-	ndev->tbusy = 1; /* left instead of obsolete test_and_set_bit() */
-#endif
 #ifdef CONFIG_ISDN_X25
 /* At this point hard_start_xmit() passes control to the encapsulation
    protocol (if present).
@@ -1478,9 +1501,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 */
 	if( cprot ) {
 		int ret = cprot -> pops -> encap_and_xmit ( cprot , skb);
-#ifdef ISDN_NEW_TBUSY
-		if(ret) isdn_net_dev_xoff(ndev);
-#endif
+		if(ret) netif_stop_queue(ndev);
 		return ret;
 	} else
 #endif
@@ -1500,9 +1521,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 			if (!(ISDN_NET_DIALMODE(*lp) == ISDN_NET_DM_AUTO)) {
 				isdn_net_unreachable(ndev, skb, "dial rejected: interface not in dialmode `auto'");
 				dev_kfree_skb(skb);
-#ifndef ISDN_NEW_TBUSY
-				ndev->tbusy = 0;
-#endif
 				return 0;
 			}
 			if (lp->phone[1]) {
@@ -1518,9 +1536,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 					if(jiffies < lp->dialwait_timer) {
 						isdn_net_unreachable(ndev, skb, "dial rejected: retry-time not reached");
 						dev_kfree_skb(skb);
-#ifndef ISDN_NEW_TBUSY
-						ndev->tbusy = 0;
-#endif
 						restore_flags(flags);
 						return 0;
 					} else
@@ -1549,9 +1564,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 					isdn_net_unreachable(ndev, skb,
 							   "No channel");
 					dev_kfree_skb(skb);
-#ifndef ISDN_NEW_TBUSY
-					ndev->tbusy = 0;
-#endif
 					return 0;
 				}
 				/* Log packet, which triggered dialing */
@@ -1571,9 +1583,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 					}
 					restore_flags(flags);
 					isdn_net_dial();	/* Initiate dialing */
-#ifdef ISDN_NEW_TBUSY
-					isdn_net_dev_xoff(ndev);
-#endif
+					netif_stop_queue(ndev);
 					return 1;	/* let upper layer requeue skb packet */
 				}
 #endif
@@ -1587,9 +1597,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				}
 				lp->first_skb = skb;
 				/* Initiate dialing */
-#ifndef ISDN_NEW_TBUSY
-				ndev->tbusy = 0;
-#endif
 				restore_flags(flags);
 				isdn_net_dial();
 				return 0;
@@ -1597,9 +1604,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				isdn_net_unreachable(ndev, skb,
 						     "No phone number");
 				dev_kfree_skb(skb);
-#ifndef ISDN_NEW_TBUSY
-				ndev->tbusy = 0;
-#endif
 				return 0;
 			}
 		} else {
@@ -1610,24 +1614,16 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				int ret;
 				if (lp->first_skb) {
 					if (isdn_net_xmit(ndev, lp, lp->first_skb)){
-#ifdef ISDN_NEW_TBUSY
-						isdn_net_dev_xoff(ndev);
-#endif
+						netif_stop_queue(ndev);
 						return 1;
 }
 					lp->first_skb = NULL;
 				}
 				ret = (isdn_net_xmit(ndev, lp, skb));
-#ifdef ISDN_NEW_TBUSY
-				if(ret) isdn_net_dev_xoff(ndev);
-#endif
+				if(ret) netif_stop_queue(ndev);
 				return ret;
 			} else
-#ifdef ISDN_NEW_TBUSY
-				isdn_net_dev_xoff(ndev);
-#else
-				ndev->tbusy = 1;
-#endif
+				netif_stop_queue(ndev);
 		}
 	}
 	return 1;
@@ -1649,7 +1645,7 @@ isdn_net_close(struct device *dev)
 #ifdef CONFIG_ISDN_X25
 	if( cprot && cprot -> pops ) cprot -> pops -> close( cprot );
 #endif
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	dev->start = 0;
 	if ((p = (((isdn_net_local *) dev->priv)->slave))) {
 		/* If this interface has slaves, stop them also */
@@ -1661,8 +1657,6 @@ isdn_net_close(struct device *dev)
 				cprot -> pops -> close( cprot );
 #endif
 			isdn_net_hangup(p);
-			p->tbusy = 1;
-			p->start = 0;
 			p = (((isdn_net_local *) p->priv)->slave);
 		}
 	}
@@ -2403,7 +2397,7 @@ isdn_net_find_icall(int di, int ch, int idx, setup_parm setup)
 				 * Is the interface up?
 				 * If not, reject the call actively.
 				 */
-				if (!p->dev.start) {
+				if (!isdn_net_started(p)) {
 					restore_flags(flags);
 					printk(KERN_INFO "%s: incoming call, interface down -> rejected\n",
 					       lp->name);
@@ -2671,9 +2665,6 @@ isdn_net_new(char *name, struct device *master)
 			p = (((isdn_net_local *) p->priv)->slave);
 		}
 		((isdn_net_local *) q->priv)->slave = &(netdev->dev);
-		q->interrupt = 0;
-		q->tbusy = 0;
-		q->start = master->start;
 	} else {
 		/* Device shall be a master */
 		if (register_netdev(&netdev->dev) != 0) {
@@ -2746,7 +2737,7 @@ isdn_net_newslave(char *parm)
 		if (n->local->master)
 			return NULL;
 		/* Master must not be started yet */
-		if (n->dev.start)
+		if (isdn_net_started(n)) 
 			return NULL;
 		return (isdn_net_new(newname, &(n->dev)));
 	}
@@ -2789,9 +2780,8 @@ isdn_net_setcfg(isdn_net_ioctl_cfg * cfg)
 #ifdef CONFIG_ISDN_X25
 			struct concap_proto * cprot = p -> cprot;
 #endif
-			if (p->dev.start) {
-				printk(KERN_WARNING
-				"%s: cannot change encap when if is up\n",
+			if (isdn_net_started(p)) {
+				printk(KERN_WARNING "%s: cannot change encap when if is up\n",
 				       lp->name);
 				return -EBUSY;
 			}
@@ -3051,8 +3041,6 @@ isdn_net_addphone(isdn_net_ioctl_phone * phone)
 	isdn_net_dev *p = isdn_net_findif(phone->name);
 	isdn_net_phone *n;
 
-	if (isdn_net_checkwild(phone->phone) && (phone->outgoing & 1))
-		return -EINVAL;
 	if (p) {
 		if (!(n = (isdn_net_phone *) kmalloc(sizeof(isdn_net_phone), GFP_KERNEL)))
 			return -ENOMEM;
@@ -3225,14 +3213,8 @@ isdn_net_realrm(isdn_net_dev * p, isdn_net_dev * q)
 
 	save_flags(flags);
 	cli();
-	if (p->local->master) {
-		/* If it's a slave, it may be removed even if it is busy. However
-		 * it has to be hung up first.
-		 */
-		isdn_net_hangup(&p->dev);
-		p->dev.start = 0;
-	}
-	if (p->dev.start) {
+
+	if (isdn_net_started(p)) {
 		restore_flags(flags);
 		return -EBUSY;
 	}

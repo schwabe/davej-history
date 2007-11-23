@@ -6,7 +6,7 @@
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Fri Jan 14 21:07:20 2000
+ * Modified at:   Sat Mar 11 07:41:54 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
@@ -943,10 +943,14 @@ static int irport_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	switch (cmd) {
 	case SIOCSBANDWIDTH: /* Set bandwidth */
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irda_task_execute(self, __irport_change_speed, NULL, NULL, 
 				  (void *) irq->ifr_baudrate);
 		break;
 	case SIOCSDONGLE: /* Set dongle */
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		/* Initialize dongle */
 		dongle = irda_device_dongle_init(dev, irq->ifr_dongle);
 		if (!dongle)
@@ -967,12 +971,16 @@ static int irport_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 				  NULL);	
 		break;
 	case SIOCSMEDIABUSY: /* Set media busy */
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irda_device_set_media_busy(self->netdev, TRUE);
 		break;
 	case SIOCGRECEIVING: /* Check if we are receiving right now */
 		irq->ifr_receiving = irport_is_receiving(self);
 		break;
 	case SIOCSDTRRTS:
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irport_set_dtr_rts(dev, irq->ifr_dtr, irq->ifr_rts);
 		break;
 	default:

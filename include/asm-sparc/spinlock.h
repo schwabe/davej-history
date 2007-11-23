@@ -57,8 +57,13 @@ typedef struct { volatile unsigned int lock; } rwlock_t;
 
 #include <asm/psr.h>
 
-/* Define this to use the verbose/debugging versions in arch/sparc/lib/debuglocks.c */
-#define SPIN_LOCK_DEBUG
+/*
+ * Define this to use the verbose/debugging versions in
+ * arch/sparc/lib/debuglocks.c
+ *
+ * Be sure to make check_asm whenever changing this option.
+ */
+#undef SPIN_LOCK_DEBUG
 
 #ifdef SPIN_LOCK_DEBUG
 struct _spinlock_debug {
@@ -141,9 +146,13 @@ do {	unsigned long flags; \
 typedef unsigned char spinlock_t;
 #define SPIN_LOCK_UNLOCKED	0
 
-#define spin_lock_init(lock)	(*(lock) = 0)
+#define spin_lock_init(lock)   (*((unsigned char *)(lock)) = 0)
 #define spin_is_locked(lock)    (*((volatile unsigned char *)(lock)) != 0)
-#define spin_unlock_wait(lock)	do { barrier(); } while(*(volatile unsigned char *)lock)
+
+#define spin_unlock_wait(lock) \
+do { \
+	barrier(); \
+} while(*((volatile unsigned char *)lock))
 
 extern __inline__ void spin_lock(spinlock_t *lock)
 {
@@ -152,7 +161,7 @@ extern __inline__ void spin_lock(spinlock_t *lock)
 	orcc	%%g2, 0x0, %%g0
 	bne,a	2f
 	 ldub	[%0], %%g2
-	.text	2
+	.subsection	2
 2:	orcc	%%g2, 0x0, %%g0
 	bne,a	2b
 	 ldub	[%0], %%g2
@@ -178,77 +187,13 @@ extern __inline__ void spin_unlock(spinlock_t *lock)
 	__asm__ __volatile__("stb %%g0, [%0]" : : "r" (lock) : "memory");
 }
 
-extern __inline__ void spin_lock_irq(spinlock_t *lock)
-{
-	__asm__ __volatile__("
-	rd	%%psr, %%g2
-	or	%%g2, %0, %%g2
-	wr	%%g2, 0x0, %%psr
-	nop; nop; nop;
-1:	ldstub	[%1], %%g2
-	orcc	%%g2, 0x0, %%g0
-	bne,a	2f
-	 ldub	[%1], %%g2
-	.text	2
-2:	orcc	%%g2, 0x0, %%g0
-	bne,a	2b
-	 ldub	[%1], %%g2
-	b,a	1b
-	.previous
-"	: /* No outputs */
-	: "i" (PSR_PIL), "r" (lock)
-	: "g2", "memory", "cc");
-}
+#define spin_lock_irqsave(lock, flags) \
+	do { __save_and_cli(flags); spin_lock(lock); } while (0)
+#define spin_unlock_irqrestore(lock, flags) \
+	do { spin_unlock(lock); __restore_flags(flags); } while (0)
 
-extern __inline__ void spin_unlock_irq(spinlock_t *lock)
-{
-	__asm__ __volatile__("
-	rd	%%psr, %%g2
-	andn	%%g2, %1, %%g2
-	stb	%%g0, [%0]
-	wr	%%g2, 0x0, %%psr
-	nop; nop; nop;
-"	: /* No outputs. */
-	: "r" (lock), "i" (PSR_PIL)
-	: "g2", "memory");
-}
-
-#define spin_lock_irqsave(__lock, flags)	\
-do {						\
-	register spinlock_t *__lp asm("g1");	\
-	__lp = (__lock);			\
-	__asm__ __volatile__(			\
-	"rd	%%psr, %0\n\t"			\
-	"or	%0, %1, %%g2\n\t"		\
-	"wr	%%g2, 0x0, %%psr\n\t"		\
-	"nop; nop; nop;\n"			\
-	"1:\n\t"				\
-	"ldstub	[%2], %%g2\n\t"			\
-	"orcc	%%g2, 0x0, %%g0\n\t"		\
-	"bne,a	2f\n\t"				\
-	" ldub	[%2], %%g2\n\t"			\
-	".text	2\n"				\
-	"2:\n\t"				\
-	"orcc	%%g2, 0x0, %%g0\n\t"		\
-	"bne,a	2b\n\t"				\
-	" ldub	[%2], %%g2\n\t"			\
-	"b,a	1b\n\t"				\
-	".previous\n"				\
-	: "=r" (flags)				\
-	: "i" (PSR_PIL), "r" (__lp)		\
-	: "g2", "memory", "cc");		\
-} while(0)
-
-extern __inline__ void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
-{
-	__asm__ __volatile__("
-	stb	%%g0, [%0]
-	wr	%1, 0x0, %%psr
-	nop; nop; nop;
-"	: /* No outputs. */
-	: "r" (lock), "r" (flags)
-	: "memory", "cc");
-}
+#define spin_lock_irq(lock)	do { __cli(); spin_lock(lock); } while (0)
+#define spin_unlock_irq(lock)	do { spin_unlock(lock); __sti(); } while (0)
 
 /* Read-write spinlocks, allowing multiple readers
  * but only one writer.
@@ -290,7 +235,7 @@ extern __inline__ void _read_lock(rwlock_t *rw)
 	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
-	: "g2", "g4", "g7", "memory", "cc");
+	: "g2", "g4", "memory", "cc");
 }
 
 #define read_lock(lock) \
@@ -310,7 +255,7 @@ extern __inline__ void _read_unlock(rwlock_t *rw)
 	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
-	: "g2", "g4", "g7", "memory", "cc");
+	: "g2", "g4", "memory", "cc");
 }
 
 #define read_unlock(lock) \
@@ -330,7 +275,7 @@ extern __inline__ void write_lock(rwlock_t *rw)
 	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
-	: "g2", "g4", "g7", "memory", "cc");
+	: "g2", "g4", "memory", "cc");
 }
 
 #define write_unlock(rw)	do { (rw)->lock = 0; } while(0)

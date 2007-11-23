@@ -1,4 +1,4 @@
-/* $Id: teles3.c,v 2.14 1999/12/23 15:09:32 keil Exp $
+/* $Id: teles3.c,v 2.15 2000/02/03 16:40:10 keil Exp $
 
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
@@ -11,6 +11,9 @@
  *              Beat Doebeli
  *
  * $Log: teles3.c,v $
+ * Revision 2.15  2000/02/03 16:40:10  keil
+ * Fix teles pcmcia
+ *
  * Revision 2.14  1999/12/23 15:09:32  keil
  * change email
  *
@@ -91,7 +94,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *teles3_revision = "$Revision: 2.14 $";
+const char *teles3_revision = "$Revision: 2.15 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -228,7 +231,7 @@ void
 release_io_teles3(struct IsdnCardState *cs)
 {
 	if (cs->typ == ISDN_CTYPE_TELESPCMCIA) {
-		release_region(cs->hw.teles3.hscx[0], 97);
+		release_region(cs->hw.teles3.hscx[1], 96);
 	} else {
 		if (cs->hw.teles3.cfg_reg) {
 			if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
@@ -370,15 +373,15 @@ setup_teles3(struct IsdnCard *card))
 	cs->hw.teles3.hscxfifo[0] = cs->hw.teles3.hscx[0] + 0x3e;
 	cs->hw.teles3.hscxfifo[1] = cs->hw.teles3.hscx[1] + 0x3e;
 	if (cs->typ == ISDN_CTYPE_TELESPCMCIA) {
-		if (check_region((cs->hw.teles3.hscx[0]), 97)) {
+		if (check_region((cs->hw.teles3.hscx[1]), 96 )) {
 			printk(KERN_WARNING
 			       "HiSax: %s ports %x-%x already in use\n",
 			       CardType[cs->typ],
-			       cs->hw.teles3.hscx[0],
-			       cs->hw.teles3.hscx[0] + 96);
+			       cs->hw.teles3.hscx[1],
+			       cs->hw.teles3.hscx[1] + 96);
 			return (0);
 		} else
-			request_region(cs->hw.teles3.hscx[0], 97, "HiSax Teles PCMCIA");
+			request_region(cs->hw.teles3.hscx[1], 96, "HiSax Teles PCMCIA");
 	} else {
 		if (cs->hw.teles3.cfg_reg) {
 			if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {

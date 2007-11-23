@@ -22,12 +22,11 @@
  *
  *  6/8/99  - Official Release 0.2.0   
  *            Merged into the kernel code 
- *  
- *  1/10/00 - Added Spinlocks for smp.
  *
+ *  3/10/00 - Enabled FDX and fixed bugs produced thereafter.
+ *  	      Put in smp code 
  *  To Do:
- *	IPv6 Multicast 
- *	
+ *
  *  If Problems do Occur
  *  Most problems can be rectified by either closing and opening the interface
  *  (ifconfig down and up) or rmmod and insmod'ing the driver (a bit difficult
@@ -85,7 +84,7 @@
  */
 
 static char *version = 
-"Olympic.c v0.2.1 1/10/00 - Peter De Schrijver & Mike Phillips" ; 
+"Olympic.c v0.4.0 3/10/00 - Peter De Schrijver & Mike Phillips" ; 
 
 static char *open_maj_error[]  = {"No error", "Lobe Media Test", "Physical Insertion",
 				   "Address Verification", "Neighbor Notification (Ring Poll)",
@@ -397,7 +396,7 @@ static int olympic_open(struct device *dev)
 #if OLYMPIC_NETWORK_MONITOR
 		writew(ntohs(OPEN_ADAPTER_ENABLE_FDX | OPEN_ADAPTER_PASS_ADC_MAC | OPEN_ADAPTER_PASS_ATT_MAC | OPEN_ADAPTER_PASS_BEACON),init_srb+8);
 #else
-		writew(OPEN_ADAPTER_ENABLE_FDX,init_srb+8);
+		writew(ntohs(OPEN_ADAPTER_ENABLE_FDX),init_srb+8);
 #endif		
 
 		if (olympic_priv->olympic_laa[0]) {
@@ -755,7 +754,7 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (!(sisr & SISR_MI)) /* Interrupt isn't for us */ 
 		return ;
 
-	spin_lock(&olympic_priv->olympic_lock) ; 
+	spin_lock(&olympic_priv->olympic_lock);
 
 	if (dev->interrupt) 
 		printk(KERN_WARNING "%s: Re-entering interrupt \n",dev->name) ; 
@@ -835,7 +834,9 @@ static void olympic_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	dev->interrupt = 0 ;  
 
 	writel(SISR_MI,olympic_mmio+SISR_MASK_SUM);
+
 	spin_unlock(&olympic_priv->olympic_lock) ; 
+
 }	
 
 static int olympic_xmit(struct sk_buff *skb, struct device *dev) 
@@ -844,12 +845,11 @@ static int olympic_xmit(struct sk_buff *skb, struct device *dev)
 	__u8 *olympic_mmio=olympic_priv->olympic_mmio;
 	unsigned long flags ; 
 
-	spin_lock_irqsave(&olympic_priv->olympic_lock, flags) ; 
-
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags) ; 
 		return 1;
 	}
+
+	spin_lock_irqsave(&olympic_priv->olympic_lock, flags) ; 
 
 	if(olympic_priv->free_tx_ring_entries) {
 		olympic_priv->olympic_tx_ring[olympic_priv->tx_ring_free].buffer=virt_to_bus(skb->data);
@@ -864,13 +864,12 @@ static int olympic_xmit(struct sk_buff *skb, struct device *dev)
 		writew((((readw(olympic_mmio+TXENQ_1)) & 0x8000) ^ 0x8000) | 1,olympic_mmio+TXENQ_1);
 
 		dev->tbusy=0;		
-		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags) ; 
+		spin_unlock_irqrestore(&olympic_priv->olympic_lock, flags) ; 
 		return 0;
 	} else {
-		spin_unlock_irqrestore(&olympic_priv->olympic_lock,flags) ; 
+		spin_unlock_irqrestore(&olympic_priv->olympic_lock, flags) ; 
 		return 1;
-	} 
-
+	}	
 }
 	
 
@@ -951,9 +950,9 @@ static void olympic_set_rx_mode(struct device *dev)
 	options = olympic_priv->olympic_copy_all_options; 
 
 	if (dev->flags&IFF_PROMISC)  
-		options |= (3<<5) ; /* All LLC and MAC frames, all through the main rx channel */  
+		options |= 0x61 ; 
 	else
-		options &= ~(3<<5) ; 
+		options &= ~0x61 ; 
 
 	if (dev->mc_count) {  
 		set_mc_list = 1 ; 
@@ -1228,7 +1227,7 @@ static void olympic_arb_cmd(struct device *dev)
 	__u16 lan_status = 0, lan_status_diff  ; /* Initialize to stop compiler warning */
 	__u8 fdx_prot_error ; 
 	__u16 next_ptr;
-
+	int i ; 
 #if OLYMPIC_NETWORK_MONITOR
 	struct trh_hdr *mac_hdr ; 
 #endif
@@ -1288,7 +1287,7 @@ static void olympic_arb_cmd(struct device *dev)
 
 		/* Is the ASB free ? */ 	
 		
-		if (!(readl(olympic_priv->olympic_mmio + SISR) & SISR_ASB_FREE)) {
+		if (readb(asb_block + 2) != 0xff) { 
 			olympic_priv->asb_queued = 1 ; 
 			writel(LISR_ASB_FREE_REQ,olympic_priv->olympic_mmio+LISR_SUM); 
 			return ; 	
@@ -1307,7 +1306,7 @@ static void olympic_arb_cmd(struct device *dev)
 		return ; 	
 		
 	} else if (readb(arb_block) == ARB_LAN_CHANGE_STATUS) { /* Lan.change.status */
-		lan_status = readw(arb_block+6);
+		lan_status = ntohs(readw(arb_block+6)) ;
 		fdx_prot_error = readb(arb_block+8) ; 
 		
 		/* Issue ARB Free */
@@ -1335,11 +1334,20 @@ static void olympic_arb_cmd(struct device *dev)
 			dev->tbusy = 1 ;
 			dev->interrupt = 1 ; 
 			dev->start = 0 ; 
+	
 			olympic_priv->srb = readw(olympic_priv->olympic_lap + LAPWWO) ; 
+			olympic_priv->rx_status_last_received++;
+			olympic_priv->rx_status_last_received&=OLYMPIC_RX_RING_SIZE-1;
+			for(i=0;i<OLYMPIC_RX_RING_SIZE;i++) {
+				dev_kfree_skb(olympic_priv->rx_ring_skb[olympic_priv->rx_status_last_received]);
+				olympic_priv->rx_status_last_received++;
+				olympic_priv->rx_status_last_received&=OLYMPIC_RX_RING_SIZE-1;
+			}
+
 			free_irq(dev->irq,dev);
 			
 			printk(KERN_WARNING "%s: Adapter has been closed \n", dev->name) ; 
-	
+			MOD_DEC_USE_COUNT ; 
 		} /* If serious error */
 		
 		if (olympic_priv->olympic_message_level) { 

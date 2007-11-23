@@ -131,9 +131,7 @@ static char *AdapterName;
 
 static int AdapterNum = 0;
 
-#ifdef MODULE
 static int rate[SKTR_MAX_ADAPTERS] 	= { SPEED_16,  };
-#endif
 
 /* Use 0 for production, 1 for verification, 2 for debug, and
  * 3 for very verbose debug.

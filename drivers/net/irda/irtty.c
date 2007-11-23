@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Fri Jan 14 21:02:27 2000
+ * Modified at:   Sat Mar 11 07:43:30 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -34,6 +34,7 @@
 
 #include <asm/segment.h>
 #include <asm/uaccess.h>
+#include <asm/termios.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irtty.h>
@@ -325,7 +326,7 @@ static void irtty_stop_receiver(struct irtty_cb *self, int stop)
 {
 	struct termios old_termios;
 	int cflag;
-
+	
 	old_termios = *(self->tty->termios);
 	cflag = self->tty->termios->c_cflag;
 	
@@ -562,6 +563,8 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 {
 	struct irtty_cb *self = (struct irtty_cb *) tty->disc_data;
 
+	IRDA_DEBUG(2, __FUNCTION__ "(%ld)\n", jiffies);
+
 	if (!self || !self->netdev) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), not ready yet!\n");
 		return;
@@ -711,8 +714,6 @@ static void irtty_write_wakeup(struct tty_struct *tty)
 
 		self->tx_buff.data += actual;
 		self->tx_buff.len  -= actual;
-
-		self->stats.tx_packets++;		      
 	} else {		
 		/* 
 		 *  Now serial buffer is almost free & we can start 
@@ -734,6 +735,7 @@ static void irtty_write_wakeup(struct tty_struct *tty)
 			/* Tell network layer that we want more frames */
 			mark_bh(NET_BH);
 		}
+		self->stats.tx_packets++;
 	}
 }
 
@@ -972,10 +974,14 @@ static int irtty_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	switch (cmd) {
 	case SIOCSBANDWIDTH: /* Set bandwidth */
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irda_task_execute(self, irtty_change_speed, NULL, NULL, 
 				  (void *) irq->ifr_baudrate);
 		break;
 	case SIOCSDONGLE: /* Set dongle */
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		/* Initialize dongle */
 		dongle = irda_device_dongle_init(dev, irq->ifr_dongle);
 		if (!dongle)
@@ -996,15 +1002,21 @@ static int irtty_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 				  NULL);	
 		break;
 	case SIOCSMEDIABUSY: /* Set media busy */
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irda_device_set_media_busy(self->netdev, TRUE);
 		break;
 	case SIOCGRECEIVING: /* Check if we are receiving right now */
 		irq->ifr_receiving = irtty_is_receiving(self);
 		break;
 	case SIOCSDTRRTS:
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irtty_set_dtr_rts(dev, irq->ifr_dtr, irq->ifr_rts);
 		break;
 	case SIOCSMODE:
+		if (!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		irtty_set_mode(dev, irq->ifr_mode);
 		break;
 	default:

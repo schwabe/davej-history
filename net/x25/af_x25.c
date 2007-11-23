@@ -16,6 +16,7 @@
  *	X.25 001	Jonathan Naylor	Started coding.
  *	X.25 002	Jonathan Naylor	Centralised disconnect handling.
  *					New timer architecture.
+ *	2000-11-03	Henner Eisen	MSG_EOR handling more POSIX compliant.
  */
 
 #include <linux/config.h>
@@ -854,7 +855,7 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 	unsigned char *asmptr;
 	int size, qbit = 0;
 
-	if (msg->msg_flags & ~(MSG_DONTWAIT | MSG_OOB))
+	if (msg->msg_flags & ~(MSG_DONTWAIT | MSG_OOB | MSG_EOR))
 		return -EINVAL;
 
 	if (sk->zapped)
@@ -1035,6 +1036,9 @@ static int x25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int fl
 		copied = size;
 		msg->msg_flags |= MSG_TRUNC;
 	}
+
+	/* Currently, each datagram always contains a complete record */ 
+	msg->msg_flags |= MSG_EOR;
 
 	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 

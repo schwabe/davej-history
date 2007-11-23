@@ -1,11 +1,11 @@
-/* $Id: eicon_isa.c,v 1.12 1999/11/27 12:56:19 armin Exp $
+/* $Id: eicon_isa.c,v 1.14 2000/02/22 16:26:40 armin Exp $
  *
- * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
+ * ISDN low-level module for Eicon active ISDN-Cards.
  * Hardware-specific code for old ISA cards.
  *
- * Copyright 1998    by Fritz Elfert (fritz@isdn4linux.de)
- * Copyright 1998,99 by Armin Schindler (mac@melware.de)
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1998      by Fritz Elfert (fritz@isdn4linux.de)
+ * Copyright 1998-2000 by Armin Schindler (mac@melware.de)
+ * Copyright 1999,2000 Cytronics & Melware (info@melware.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.c,v $
+ * Revision 1.14  2000/02/22 16:26:40  armin
+ * Fixed membase error message.
+ * Fixed missing log buffer struct.
+ *
+ * Revision 1.13  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
  * Revision 1.12  1999/11/27 12:56:19  armin
  * Forgot some iomem changes for last ioremap compat.
  *
@@ -79,7 +87,7 @@
 #define release_shmem release_region
 #define request_shmem request_region
 
-char *eicon_isa_revision = "$Revision: 1.12 $";
+char *eicon_isa_revision = "$Revision: 1.14 $";
 
 #undef EICON_MCA_DEBUG
 
@@ -139,6 +147,9 @@ eicon_isa_find_card(int Mem, int Irq, char * Id)
 	unsigned long amem;
 
 	if (!strlen(Id))
+		return -1;
+
+	if (Mem == -1)
 		return -1;
 
 	/* Check for valid membase address */

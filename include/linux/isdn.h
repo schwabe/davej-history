@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.88 2000/01/20 19:59:43 keil Exp $
+/* $Id: isdn.h,v 1.95 2000/03/04 16:20:42 detabc Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,31 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.95  2000/03/04 16:20:42  detabc
+ * copy frames before rewriting frame's saddr
+ *
+ * Revision 1.94  2000/02/26 00:29:40  keil
+ * more softnet changes
+ *
+ * Revision 1.93  2000/02/25 11:29:17  paul
+ * changed chargetime to ulong from int (after about 20 days the "chargetime of
+ * ipppX is now 1234" message displays a negative number on alpha).
+ *
+ * Revision 1.92  2000/02/17 13:15:56  keil
+ * fix backward compatibility for 2.2
+ *
+ * Revision 1.91  2000/02/16 14:56:27  paul
+ * translated ISDN_MODEM_ANZREG to ISDN_MODEM_NUMREG for english speakers
+ *
+ * Revision 1.90  2000/02/06 21:50:00  detabc
+ * add rewriting of socket's and frame's saddr for udp-ipv4 dynip-connections.
+ * Include checksum-recompute of ip- and udp-header's.
+ *
+ * Revision 1.89  2000/02/05 22:11:33  detabc
+ * Add rewriting of socket's and frame's saddr adressfield for
+ * dynip-connections.  Only for tcp/ipv4 and switchable per interface.
+ * Include checksum-recompute of ip- and tcp-header's.
+ *
  * Revision 1.88  2000/01/20 19:59:43  keil
  * Add FAX Class 1 support
  *
@@ -374,6 +399,8 @@
 #undef CONFIG_ISDN_WITH_ABC_CONN_ERROR
 #undef CONFIG_ISDN_WITH_ABC_RAWIPCOMPRESS
 #undef CONFIG_ISDN_WITH_ABC_FRAME_LIMIT
+#undef CONFIG_ISDN_WITH_ABC_IPV4_RW_SOCKADDR 
+#undef CONFIG_ISDN_WITH_ABC_IPV4_RWUDP_SOCKADDR 
 
 
 /* New ioctl-codes */
@@ -433,7 +460,7 @@
 #define ISDN_USAGE_EXCLUSIVE 64 /* This bit is set, if channel is exclusive */
 #define ISDN_USAGE_OUTGOING 128 /* This bit is set, if channel is outgoing  */
 
-#define ISDN_MODEM_ANZREG    24        /* Number of Modem-Registers        */
+#define ISDN_MODEM_NUMREG    24        /* Number of Modem-Registers        */
 #define ISDN_LMSNLEN         255 /* Length of tty's Listen-MSN string */
 #define ISDN_CMSGLEN	     50	 /* Length of CONNECT-Message to add for Modem */
 
@@ -535,6 +562,7 @@ typedef struct {
 #ifdef CONFIG_ISDN_X25
 #  include <linux/concap.h>
 #endif
+
 
 #include <linux/isdnif.h>
 
@@ -657,7 +685,7 @@ typedef struct isdn_net_local_s {
                                        /*   0 = Transparent                */
   int                    huptimer;     /* Timeout-counter for auto-hangup  */
   int                    charge;       /* Counter for charging units       */
-  int                    chargetime;   /* Timer for Charging info          */
+  ulong                  chargetime;   /* Timer for Charging info          */
   int                    hupflags;     /* Flags for charge-unit-hangup:    */
 				       /* bit0: chargeint is invalid       */
 				       /* bit1: Getting charge-interval    */
@@ -762,8 +790,8 @@ typedef struct isdn_audio_skb {
 
 /* Private data of AT-command-interpreter */
 typedef struct atemu {
-	u_char       profile[ISDN_MODEM_ANZREG]; /* Modem-Regs. Profile 0              */
-	u_char       mdmreg[ISDN_MODEM_ANZREG];  /* Modem-Registers                    */
+	u_char       profile[ISDN_MODEM_NUMREG]; /* Modem-Regs. Profile 0              */
+	u_char       mdmreg[ISDN_MODEM_NUMREG];  /* Modem-Registers                    */
 	char         pmsn[ISDN_MSNLEN];          /* EAZ/MSNs Profile 0                 */
 	char         msn[ISDN_MSNLEN];           /* EAZ/MSN                            */
 	char         plmsn[ISDN_LMSNLEN];        /* Listening MSNs Profile 0           */
@@ -975,5 +1003,32 @@ extern isdn_dev *dev;
 /* Utility-Macros */
 #define MIN(a,b) ((a<b)?a:b)
 #define MAX(a,b) ((a>b)?a:b)
+/*
+ * Tell upper layers that the network device is ready to xmit more frames.
+ */
+static void __inline__ netif_wake_queue(struct device * dev)
+{
+	dev->tbusy = 0;
+	mark_bh(NET_BH);
+}
+
+/*
+ * called during net_device open()
+ */
+static void __inline__ netif_start_queue(struct device * dev)
+{
+	dev->tbusy = 0;
+	/* actually, we never use the interrupt flag at all */
+	dev->interrupt = 0;
+	dev->start = 1;
+}
+
+/*
+ * Ask upper layers to temporarily cease passing us more xmit frames.
+ */
+static void __inline__ netif_stop_queue(struct device * dev)
+{
+	dev->tbusy = 1;
+}
 #endif /* __KERNEL__ */
 #endif /* isdn_h */

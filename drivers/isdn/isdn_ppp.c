@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.61 1999/11/20 22:14:14 detabc Exp $
+/* $Id: isdn_ppp.c,v 1.63 2000/03/16 15:46:37 kai Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.63  2000/03/16 15:46:37  kai
+ * a little bugfix and cosmetic changes
+ *
+ * Revision 1.62  2000/02/12 19:26:55  kai
+ * adopted to latest 2.3 softnet changes.
+ *
+ * tested with PPP and MPPP, it works here.
+ * can somebody check raw-ip?
+ *
+ * also changed std2kern, stddiff for bash-1 compatibility,
+ * hope this doesn't break anything.
+ *
  * Revision 1.61  1999/11/20 22:14:14  detabc
  * added channel dial-skip in case of external use
  * (isdn phone or another isdn device) on the same NTBA.
@@ -322,7 +334,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.61 $";
+char *isdn_ppp_revision = "$Revision: 1.63 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 
@@ -716,7 +728,7 @@ isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 		case PPPIOCGIFNAME:
 			if(!lp)
 				return -EINVAL;
-			if ((r = set_arg((void *) arg, lp->name,strlen(lp->name))))
+			if ((r = set_arg((void *) arg, lp->name, strlen(lp->name))))
 				return r;
 			break;
 		case PPPIOCGMPFLAGS:	/* get configuration flags */
@@ -738,8 +750,8 @@ isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			if (val & SC_ENABLE_IP && !(is->pppcfg & SC_ENABLE_IP) && (is->state & IPPP_CONNECT)) {
 				if (lp) {
-					lp->netdev->dev.tbusy = 0;
-					mark_bh(NET_BH);	/* OK .. we are ready to send buffers */
+					/* OK .. we are ready to send buffers */
+					netif_wake_queue(&lp->netdev->dev);
 				}
 			}
 			is->pppcfg = val;
@@ -1508,7 +1520,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 			break;
 		default:
 			dev_kfree_skb(skb);
-			printk(KERN_ERR "isdn_ppp: skipped frame with unsupported protocoll: %#x.\n", skb->protocol);
+			printk(KERN_ERR "isdn_ppp: skipped frame with unsupported protocol: %#x.\n", skb->protocol);
 			return 0;
 	}
 
@@ -1516,7 +1528,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 
 	if (lp->sav_skb) {      /* find a non-busy device */
 		isdn_net_local *nlp = lp->next;
-		while (lp->sav_skb) {
+		while (nlp->sav_skb) {
 			if (lp == nlp)
 				return 1;
 			nlp = nd->queue = nd->queue->next;
@@ -1942,12 +1954,14 @@ isdn_ppp_cleanup_mpqueue(isdn_net_dev * dev, long min_sqno)
 #ifdef CONFIG_ISDN_PPP_VJ
 	int toss = 0;
 #endif
-/* z.z einfaches aussortieren gammeliger pakete. Fuer die Zukunft:
-   eventuell, solange vorne kein B-paket ist und sqno<=min_sqno: auch rauswerfen
-   wenn sqno<min_sqno und Luecken vorhanden sind: auch weg (die koennen nicht mehr gefuellt werden)
-   bei paketen groesser min_sqno: ueber mp_mrru: wenn summe ueber pktlen der rumhaengenden Pakete
-   groesser als mrru ist: raus damit , Pakete muessen allerdings zusammenhaengen sonst koennte
-   ja ein Paket mit B und eins mit E dazwischenpassen */
+	/* currently we just discard ancient packets. 
+	   To do: 
+	   Maybe, as long as there's no B-packet in front and sqno <= min_sqno: discard.
+	   If sqno < min_sqno and there are gaps: discard (the gaps won't be filled anyway).
+	   Packets with sqno > min_sqno: Larger than mp_mrru: If sum of all pktlen of pending
+	   packets large than mrru: discard - packets need to be consecutive, though, if not 
+	   there could be an B and an E-packet in between.
+	*/
 
 	struct mpqueue *ql,
 	*q = dev->mp_last;

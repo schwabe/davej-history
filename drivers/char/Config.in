@@ -149,6 +149,10 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   fi
   if [ "$CONFIG_PCI" != "n" ]; then
     dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
+    if [ "$CONFIG_VIDEO_BT848" != "n" ]; then
+      comment '  MSP3400 sound decoder support is in the section "additional'
+      comment '  low level sound drivers". You may need to enable it there.'
+    fi
   fi
   if [ "$CONFIG_PARPORT" != "n" ]; then
     dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT

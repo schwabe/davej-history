@@ -346,8 +346,8 @@ int dmfe_probe(struct device *dev)
 			continue;
 
 		/* read PCI IO base address and IRQ to check */
-		pci_read_config_dword(net_dev, PCI_BASE_ADDRESS_0, &pci_iobase);
-		pci_read_config_byte(net_dev, PCI_INTERRUPT_LINE, &pci_irqline);
+		pci_iobase = net_dev->base_address[0];
+		pci_irqline = net_dev->irq;
 		pci_iobase &= ~0x7f;	/* mask off bit0~6 */
 
 		/* Enable Master/IO access, Disable memory access */
@@ -360,7 +360,7 @@ int dmfe_probe(struct device *dev)
 		pci_write_config_byte(net_dev, PCI_LATENCY_TIMER, 0x80);
 
 		/* Read Chip revesion */
-		pci_read_config_dword(net_dev, 8, &dev_rev);
+		pci_read_config_dword(net_dev, PCI_REVISION_ID, &dev_rev);
 
 		/* IO range check */
 		if (check_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev))) {
@@ -570,9 +570,8 @@ static int dmfe_start_xmit(struct sk_buff *skb, struct device *dev)
 	}
 	/* No Tx resource check, it never happen normally */
 	if (db->tx_queue_cnt >= TX_FREE_DESC_CNT) {
-		dev_kfree_skb(skb);
 		dev->tbusy = 1;
-		return -EBUSY;
+		return 1;
 	}
 	/* transmit this packet */
 	txptr = db->tx_insert_ptr;

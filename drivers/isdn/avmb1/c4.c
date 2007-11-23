@@ -1,11 +1,22 @@
 /*
- * $Id: c4.c,v 1.2 2000/01/21 20:52:58 keil Exp $
+ * $Id: c4.c,v 1.5 2000/03/16 15:21:03 calle Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.5  2000/03/16 15:21:03  calle
+ * Bugfix in c4_remove: loop 5 times instead of 4 :-(
+ *
+ * Revision 1.4  2000/02/02 18:36:03  calle
+ * - Modules are now locked while init_module is running
+ * - fixed problem with memory mapping if address is not aligned
+ *
+ * Revision 1.3  2000/01/25 14:37:39  calle
+ * new message after successfull detection including card revision and
+ * used resources.
+ *
  * Revision 1.2  2000/01/21 20:52:58  keil
  * pci_find_subsys as local function for 2.2.X kernel
  *
@@ -32,7 +43,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.2 $";
+static char *revision = "$Revision: 1.5 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -896,7 +907,7 @@ static void c4_remove_ctr(struct capi_ctr *ctrl)
 
  	c4_reset(card);
 
-        for (i=0; i <= 4; i++) {
+        for (i=0; i < 4; i++) {
 		cinfo = &card->ctrlinfo[i];
 		if (cinfo->capi_ctrl)
 			di->detach_ctr(cinfo->capi_ctrl);
@@ -1085,16 +1096,19 @@ static int c4_read_proc(char *page, char **start, off_t off,
 
 static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 {
-	unsigned long page_offset, base;
+	unsigned long base, page_offset;
 	avmctrl_info *cinfo;
 	avmcard *card;
 	int retval;
 	int i;
 
+	MOD_INC_USE_COUNT;
+
 	card = (avmcard *) kmalloc(sizeof(avmcard), GFP_ATOMIC);
 
 	if (!card) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(card, 0, sizeof(avmcard));
@@ -1102,6 +1116,7 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 	if (!card->dma) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(card->dma, 0, sizeof(avmcard_dmainfo));
@@ -1111,6 +1126,7 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(cinfo, 0, sizeof(avmctrl_info)*4);
@@ -1132,12 +1148,24 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
-        base = card->membase & PAGE_MASK;
+	base = card->membase & PAGE_MASK;
 	page_offset = card->membase - base;
-	card->mbase = ioremap_nocache(base, page_offset + 64);
+	card->mbase = ioremap_nocache(base, page_offset + 128);
+	if (card->mbase) {
+		card->mbase += page_offset;
+	} else {
+		printk(KERN_NOTICE "%s: can't remap memory at 0x%lx\n",
+					driver->name, card->membase);
+	        kfree(card->ctrlinfo);
+		kfree(card->dma);
+		kfree(card);
+	        MOD_DEC_USE_COUNT;
+		return -EIO;
+	}
 
 	if ((retval = c4_detect(card)) != 0) {
 		printk(KERN_NOTICE "%s: NO card at 0x%x (%d)\n",
@@ -1146,6 +1174,7 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 	c4_reset(card);
@@ -1161,6 +1190,7 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
@@ -1181,6 +1211,7 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 	        	kfree(card->dma);
 	        	kfree(card->ctrlinfo);
 			kfree(card);
+	        	MOD_DEC_USE_COUNT;
 			return -EBUSY;
 		}
 		if (i == 0)
@@ -1189,7 +1220,9 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 
 	skb_queue_head_init(&card->dma->send_queue);
 
-	MOD_INC_USE_COUNT;
+	printk(KERN_INFO
+		"%s: AVM C4 at i/o %#x, irq %d, mem %#lx\n",
+		driver->name, card->port, card->irq, card->membase);
 
 	return 0;
 }

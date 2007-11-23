@@ -1,12 +1,12 @@
-/* $Id: eicon_mod.c,v 1.23 2000/01/20 19:55:34 keil Exp $
+/* $Id: eicon_mod.c,v 1.25 2000/02/22 16:26:40 armin Exp $
  *
- * ISDN lowlevel-module for Eicon.Diehl active cards.
+ * ISDN lowlevel-module for Eicon active cards.
  * 
- * Copyright 1997    by Fritz Elfert (fritz@isdn4linux.de)
- * Copyright 1998,99 by Armin Schindler (mac@melware.de) 
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1997      by Fritz Elfert (fritz@isdn4linux.de)
+ * Copyright 1998-2000 by Armin Schindler (mac@melware.de) 
+ * Copyright 1999,2000 Cytronics & Melware (info@melware.de)
  * 
- * Thanks to    Eicon Technology Diehl GmbH & Co. oHG for
+ * Thanks to    Eicon Technology GmbH & Co. oHG for
  *              documents, informations and hardware.
  *
  *              Deutsche Telekom AG for S2M support.
@@ -31,6 +31,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.25  2000/02/22 16:26:40  armin
+ * Fixed membase error message.
+ * Fixed missing log buffer struct.
+ *
+ * Revision 1.24  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
  * Revision 1.23  2000/01/20 19:55:34  keil
  * Add FAX Class 1 support
  *
@@ -136,7 +144,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.23 $";
+static char *eicon_revision = "$Revision: 1.25 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -157,7 +165,7 @@ static int   irq          = -1;
 #endif
 static char *id           = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
-MODULE_DESCRIPTION(             "Driver for Eicon.Diehl active ISDN cards");
+MODULE_DESCRIPTION(             "Driver for Eicon active ISDN cards");
 MODULE_AUTHOR(                  "Armin Schindler");
 MODULE_SUPPORTED_DEVICE(        "ISDN subsystem");
 MODULE_PARM_DESC(id,   		"ID-String of first card");
@@ -882,8 +890,10 @@ eicon_putstatus(eicon_card * card, char * buf)
 	u_char *p;
 	struct sk_buff *skb;
 
-	if (!card)
-		return;
+	if (!card) {
+		if (!(card = cards))
+			return;
+	}
 
 	save_flags(flags);
 	cli();

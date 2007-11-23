@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.25 1999/12/19 13:09:42 keil Exp $
+/* $Id: hfc_pci.c,v 1.27 2000/02/26 00:35:12 keil Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -23,6 +23,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_pci.c,v $
+ * Revision 1.27  2000/02/26 00:35:12  keil
+ * Fix skb freeing in interrupt context
+ *
+ * Revision 1.26  2000/02/09 20:22:55  werner
+ *
+ * Updated PCI-ID table
+ *
  * Revision 1.25  1999/12/19 13:09:42  keil
  * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
  * signal proof delays
@@ -122,7 +129,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.25 $";
+static const char *hfcpci_revision = "$Revision: 1.27 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -151,6 +158,7 @@ static const PCI_ENTRY id_list[] =
 	{0x1051, 0x0100, "Motorola MC145575", "MC145575"},
 	{0x1397, 0xB100, "Seyeon", "B100"},
 	{0x15B0, 0x2BD0, "Zoltrix", "2BD0"},
+	{0x114f, 0x71,   "Digi intl.","Digicom"}, 
 	{0, 0, NULL, NULL},
 };
 

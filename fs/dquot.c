@@ -539,7 +539,6 @@ static inline struct dquot *find_best_free(void)
 struct dquot *get_empty_dquot(void)
 {
 	struct dquot *dquot;
-	int count;
 
 repeat:
 	dquot = find_best_free();
@@ -569,10 +568,9 @@ pressure:
 	/*
 	 * Try pruning the dcache to free up some dquots ...
 	 */
-//	printk(KERN_DEBUG "get_empty_dquot: pruning %d\n", count);
 	if (prune_dcache(0, 128))
 	{
-		free_inode_memory(count);
+		free_inode_memory(10);
 		goto repeat;
 	}
 
@@ -1584,7 +1582,7 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 			break;
 		case Q_GETQUOTA:
 			if (((type == USRQUOTA && current->euid != id) ||
-			     (type == GRPQUOTA && in_group_p(id))) &&
+			     (type == GRPQUOTA && !in_egroup_p(id))) &&
 			    !capable(CAP_SYS_RESOURCE))
 				goto out;
 			break;

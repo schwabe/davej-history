@@ -270,6 +270,7 @@ static struct dev_info device_list[] =
 						 * SCSI code to reset bus.*/
 {"QUANTUM","LPS525S","3110", BLIST_NOLUN},      /* Locks sometimes if polled for lun != 0 */
 {"QUANTUM","PD1225S","3110", BLIST_NOLUN},      /* Locks sometimes if polled for lun != 0 */
+{"QUANTUM","FIREBALL ST4.3S","0F0C",BLIST_NOLUN},/* Locks sometimes if polled for lun != 0 */
 {"MEDIAVIS","CDR-H93MV","1.31", BLIST_NOLUN},   /* Locks up if polled for lun != 0 */
 {"SANKYO", "CP525","6.64", BLIST_NOLUN},        /* causes failed REQ SENSE, extra reset */
 {"HP", "C1750A", "3226", BLIST_NOLUN},          /* scanjet iic */
@@ -281,6 +282,7 @@ static struct dev_info device_list[] =
 {"YAMAHA","CRW6416S","1.0c", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"MITSUMI", "CD-R CR-2201CS", "6119", BLIST_NOLUN}, /* Locks up if polled for lun != 0 */
 {"RELISYS", "Scorpio", "*", BLIST_NOLUN},	/* responds to all LUN */
+{"MICROTEK", "ScanMaker II", "5.61", BLIST_NOLUN}, /* responds to all LUN */
 
 /*
  * Other types of devices that have special flags.

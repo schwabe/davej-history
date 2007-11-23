@@ -521,16 +521,14 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		break;
 	case IPC_SET:
 		buf = arg.buf;
-		err = copy_from_user (&tbuf, buf, sizeof (*buf));
-		if (err)
-			err = -EFAULT;
+		err = -EFAULT;
+		if(copy_from_user (&tbuf, buf, sizeof (*buf)))
+			goto out;
 		break;
 	}
 
 	err = -EIDRM;
-	if (semary[id] == IPC_UNUSED || semary[id] == IPC_NOID)
-		goto out;
-	if (sma->sem_perm.seq != (unsigned int) semid / SEMMNI)
+	if ((sma != semary[id]) || (sma->sem_perm.seq != (unsigned int) semid / SEMMNI))
 		goto out;
 
 	switch (cmd) {
@@ -540,8 +538,9 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			goto out;
 		for (i = 0; i < sma->sem_nsems; i++)
 			sem_io[i] = sma->sem_base[i].semval;
+		err = -EFAULT;
 		if (copy_to_user (array, sem_io, nsems*sizeof(ushort)))
-			err = -EFAULT;
+			goto out;
 		break;
 	case SETVAL:
 		err = -EACCES;
@@ -575,8 +574,9 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
 		tbuf.sem_nsems  = sma->sem_nsems;
+		err = -EFAULT;
 		if (copy_to_user (buf, &tbuf, sizeof(*buf)))
-			err = -EFAULT;
+			goto out;
 		break;
 	case SETALL:
 		err = -EACCES;
@@ -600,6 +600,25 @@ out:
 	unlock_kernel();
 	return err;
 }
+
+
+static struct sem_undo* freeundos(struct sem_undo* un)
+{
+	struct sem_undo* u;
+	struct sem_undo** up;
+
+	for (up = &current->semundo;(u=*up);up=&u->proc_next) {
+		if(un==u) {
+			un=u->proc_next;
+			*up=un;
+			kfree(u);
+			return un;
+		}
+	}
+	printk ("freeundos undo list error id=%d\n", un->semid);
+	return un->proc_next;
+}
+
 
 asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 {
@@ -647,9 +666,15 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 		/* Make sure we have an undo structure
 		 * for this process and this semaphore set.
 		 */
-		for (un = current->semundo; un; un = un->proc_next)
-			if (un->semid == semid)
+		un = current->semundo;
+		while(un != NULL) {
+			if(un->semid==semid)
 				break;
+			if(un->semid==-1)
+				un=freeundos(un);
+			else
+			un=un->proc_next;
+		}
 		if (!un) {
 			size = sizeof(struct sem_undo) + sizeof(short)*sma->sem_nsems;
 			un = (struct sem_undo *) kmalloc(size, GFP_ATOMIC);

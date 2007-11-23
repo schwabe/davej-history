@@ -1,12 +1,12 @@
-/* $Id: eicon_io.c,v 1.9 1999/11/18 20:55:25 armin Exp $
+/* $Id: eicon_io.c,v 1.10 2000/01/23 21:21:23 armin Exp $
  *
- * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
+ * ISDN low-level module for Eicon active ISDN-Cards.
  * Code for communicating with hardware.
  *
- * Copyright 1999    by Armin Schindler (mac@melware.de)
- * Copyright 1999    Cytronics & Melware (info@melware.de)
+ * Copyright 1999,2000  by Armin Schindler (mac@melware.de)
+ * Copyright 1999,2000  Cytronics & Melware (info@melware.de)
  *
- * Thanks to	Eicon Technology Diehl GmbH & Co. oHG for 
+ * Thanks to	Eicon Technology GmbH & Co. oHG for 
  *		documents, informations and hardware. 
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,6 +24,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_io.c,v $
+ * Revision 1.10  2000/01/23 21:21:23  armin
+ * Added new trace capability and some updates.
+ * DIVA Server BRI now supports data for ISDNLOG.
+ *
  * Revision 1.9  1999/11/18 20:55:25  armin
  * Ready_Int fix of ISA cards.
  *
