@@ -784,8 +784,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		}
 #endif		
 		/* We only route point-to-point packets. */
-		if ((skb->pkt_type != PACKET_BROADCAST) &&
-			(skb->pkt_type != PACKET_MULTICAST))
+		if (skb->pkt_type == PACKET_HOST)
 			return ipxrtr_route_skb(skb);
 		
 		kfree_skb(skb,FREE_READ);

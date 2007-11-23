@@ -501,6 +501,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->retransmit_timer.function = tcp_retransmit_timer;
 	newsk->dummy_th.source = skb->h.th->dest;
 	newsk->dummy_th.dest = skb->h.th->source;
+	newsk->users=0;
 	
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	/* 

@@ -515,7 +515,7 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 #endif
 	th =(struct tcphdr *)header;
 	
-	if(len<sizeof(struct tcphdr))
+	if (len < 8)	/* NOT sizeof(struct tcphdr) */
 		return;
 		
 	sk = get_sock(&tcp_prot, th->source, daddr, th->dest, saddr, 0, 0);
