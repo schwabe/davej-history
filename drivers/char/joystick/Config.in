@@ -16,7 +16,7 @@ if [ "$CONFIG_JOYSTICK" != "n" ]; then
    dep_tristate '  ThrustMaster DirectConnect' CONFIG_JOY_THRUSTMASTER $CONFIG_JOYSTICK
    dep_tristate '  Creative Labs Blaster' CONFIG_JOY_CREATIVE $CONFIG_JOYSTICK
    dep_tristate '  PDPI Lightning 4 card' CONFIG_JOY_LIGHTNING $CONFIG_JOYSTICK
-   dep_tristate '  Trident 4DWave and Aureal Vortex gameport' CONFIG_JOY_PCI $CONFIG_JOYSTICK
+   dep_tristate '  Trident 4DWave/Aureal Vortex/ALi 5451 gameport' CONFIG_JOY_PCI $CONFIG_JOYSTICK
    dep_tristate '  Magellan and Space Mouse' CONFIG_JOY_MAGELLAN $CONFIG_JOYSTICK
    dep_tristate '  SpaceTec SpaceOrb 360 and SpaceBall Avenger' CONFIG_JOY_SPACEORB $CONFIG_JOYSTICK
    dep_tristate '  SpaceTec SpaceBall 4000 FLX' CONFIG_JOY_SPACEBALL $CONFIG_JOYSTICK

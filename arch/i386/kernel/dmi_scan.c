@@ -15,9 +15,11 @@ struct dmi_header
 static char * __init dmi_string(struct dmi_header *dm, u8 s)
 {
 	u8 *bp=(u8 *)dm;
+	if(!s)
+		return "";
 	bp+=dm->length;
 	s--;
-	while(s>0)
+	while(s>0 && *bp)
 	{
 		bp+=strlen(bp);
 		bp++;
@@ -31,24 +33,26 @@ static int __init dmi_table(u32 base, int len, int num, void (*decode)(struct dm
 	u8 *buf;
 	struct dmi_header *dm;
 	u8 *data;
-	int i=1;
-	int last = 0;		
+	int i=0;
 		
 	buf = ioremap(base, len);
 	if(buf==NULL)
 		return -1;
 
 	data = buf;
-	while(i<num && (data-buf) < len)
+	while(i<num && data-buf+sizeof(struct dmi_header)<=len)
 	{
 		dm=(struct dmi_header *)data;
-		if(dm->type < last)
-			break;
-		last = dm->type;
-		decode(dm);		
+		/*
+		 *  We want to know the total length (formated area and strings)
+		 *  before decoding to make sure we won't run off the table in
+		 *  dmi_decode or dmi_string
+		 */
 		data+=dm->length;
-		while(*data || data[1])
+		while(data-buf<len-1 && (data[0] || data[1]))
 			data++;
+		if(data-buf<len-1)
+			decode(dm);
 		data+=2;
 		i++;
 	}
@@ -57,33 +61,48 @@ static int __init dmi_table(u32 base, int len, int num, void (*decode)(struct dm
 }
 
 
+inline int __init dmi_checksum(u8 *buf)
+{
+	u8 sum=0;
+	int a;
+	
+	for(a=0; a<15; a++)
+		sum+=buf[a];
+	return (sum==0);
+}
+
 int __init dmi_iterate(void (*decode)(struct dmi_header *))
 {
-	unsigned char buf[20];
-	long fp=0xE0000L;
-	fp -= 16;
+	u8 buf[15];
+	u32 fp=0xF0000;
 	
 	while( fp < 0xFFFFF)
 	{
-		fp+=16;
-		memcpy_fromio(buf, fp, 20);
-		if(memcmp(buf, "_DMI_", 5)==0)
+		memcpy_fromio(buf, fp, 15);
+		if(memcmp(buf, "_DMI_", 5)==0 && dmi_checksum(buf))
 		{
 			u16 num=buf[13]<<8|buf[12];
 			u16 len=buf[7]<<8|buf[6];
 			u32 base=buf[11]<<24|buf[10]<<16|buf[9]<<8|buf[8];
 #ifdef DUMP_DMI
-			printk(KERN_INFO "DMI %d.%d present.\n",
-				buf[14]>>4, buf[14]&0x0F);
+			/*
+			 * DMI version 0.0 means that the real version is taken from
+			 * the SMBIOS version, which we don't know at this point.
+			 */
+			if(buf[14]!=0)
+				printk(KERN_INFO "DMI %u.%u present.\n",
+					buf[14]>>4, buf[14]&0x0F);
+			else
+				printk(KERN_INFO "DMI present.\n");
 			printk(KERN_INFO "%d structures occupying %d bytes.\n",
-				buf[13]<<8|buf[12],
-				buf[7]<<8|buf[6]);
+				num, len);
 			printk(KERN_INFO "DMI table at 0x%08X.\n",
-				buf[11]<<24|buf[10]<<16|buf[9]<<8|buf[8]);
+				base);
 #endif				
 			if(dmi_table(base,len, num, decode)==0)
 				return 0;
 		}
+		fp+=16;
 	}
 	return -1;
 }
@@ -98,21 +117,17 @@ int __init dmi_iterate(void (*decode)(struct dmi_header *))
 static void __init dmi_decode(struct dmi_header *dm)
 {
 	u8 *data = (u8 *)dm;
-	char *p;
 	
 	switch(dm->type)
 	{
 		case  0:		
 #ifdef DUMP_DMI
-			p=dmi_string(dm,data[4]);
-			if(*p && *p!=' ')
-			{
-				printk("BIOS Vendor: %s\n", p);
-				printk("BIOS Version: %s\n", 
-					dmi_string(dm, data[5]));
-				printk("BIOS Release: %s\n",
-					dmi_string(dm, data[8]));
-			}
+			printk("BIOS Vendor: %s\n",
+				dmi_string(dm, data[4]));
+			printk("BIOS Version: %s\n", 
+				dmi_string(dm, data[5]));
+			printk("BIOS Release: %s\n",
+				dmi_string(dm, data[8]));
 #endif				
 			/*
 			 *  Check for clue free BIOS implementations who use
@@ -142,35 +157,22 @@ static void __init dmi_decode(struct dmi_header *dm)
 			break;
 #ifdef DUMP_DMI
 		case 1:
-			p=dmi_string(dm,data[4]);
-
-			if(*p && *p!=' ')
-			{
-				printk("System Vendor: %s.\n",p);
-				printk("Product Name: %s.\n",
-					dmi_string(dm, data[5]));
-				printk("Version %s.\n",
-					dmi_string(dm, data[6]));
-				printk("Serial Number %s.\n",
-					dmi_string(dm, data[7]));
-			}
+			printk("System Vendor: %s\n",
+				dmi_string(dm, data[4]));
+			printk("Product Name: %s\n",
+				dmi_string(dm, data[5]));
+			printk("Version: %s\n",
+				dmi_string(dm, data[6]));
+			printk("Serial Number: %s\n",
+				dmi_string(dm, data[7]));
 			break;
 		case 2:
-			p=dmi_string(dm,data[4]);
-
-			if(*p && *p!=' ')
-			{
-				printk("Board Vendor: %s.\n",p);
-				printk("Board Name: %s.\n",
+			printk("Board Vendor: %s\n",
+				dmi_string(dm, data[4]));
+			printk("Board Name: %s\n",
 				dmi_string(dm, data[5]));
-				printk("Board Version: %s.\n",
-					dmi_string(dm, data[6]));
-			}
-			break;
-		case 3:
-			p=dmi_string(dm,data[8]);
-			if(*p && *p!=' ')
-				printk("Asset Tag: %s.\n", p);
+			printk("Board Version: %s\n",
+				dmi_string(dm, data[6]));
 			break;
 #endif			
 	}

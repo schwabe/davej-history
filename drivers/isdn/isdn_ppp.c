@@ -1148,7 +1148,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 	if (slot < 0 || slot > ISDN_MAX_CHANNELS) {
 		printk(KERN_ERR "isdn_ppp_xmit: lp->ppp_slot %d\n", lp->ppp_slot);
 		kfree_skb(skb);
-		return 0;
+		goto unlock;
 	}
 	ipt = ippp_table[slot];
 	lp->huptimer = 0;

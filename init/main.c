@@ -995,7 +995,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "soundmodem=", sm_setup },
 #endif
 #ifdef CONFIG_COMPUTONE
-	{ "ip2=", ip2_setup };
+	{ "ip2=", ip2_setup },
 #endif
 #ifdef CONFIG_WDT
 	{ "wdt=", wdt_setup },

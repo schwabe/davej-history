@@ -366,7 +366,8 @@ int fat__get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 			return -1; /* beyond EOF */
 		*pos += sizeof(struct msdos_dir_entry);
 		if (!(*bh = fat_bread(sb, sector))) {
-			printk("Directory sread (sector 0x%x) failed\n",sector);
+			printk("Directory sread (sector 0x%lx) failed\n",
+				(unsigned long)sector);
 			continue;
 		}
 		break;

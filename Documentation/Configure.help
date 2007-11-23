@@ -11678,12 +11678,13 @@ CONFIG_JOY_LIGHTNING
   joystick or gamepad connected to it. For more information on how to
   use the driver please read Documentation/joystick.txt
 
-Trident 4DWave and Aureal Vortex gameport
+Trident 4DWave/Aureal Vortex/ALi 5451 gameport
 CONFIG_JOY_PCI
   Say Y here if you have a Trident 4DWave DX/NX or Aureal Vortex 1/2
-  card and want to use its gameport in its enhanced digital mode
-  with and ordinary analog joystick. For more information on how to
-  use the driver please read Documentation/joystick.txt
+  card or an ALi 5451 chip on your motherboard and want to use its
+  gameport in its enhanced digital mode with an ordinary analog
+  joystick. For more information on how to use the driver please read
+  Documentation/joystick.txt
 
 Magellan and Space Mouse
 CONFIG_JOY_MAGELLAN
