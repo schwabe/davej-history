@@ -68,7 +68,7 @@
 
 int sg_big_buff = SG_DEF_RESERVED_SIZE; /* sg_big_buff is ro through sysctl */
 /* N.B. This global is here to keep existing software happy. It now holds
-   the size of the reserve buffer of the most recent sucessful sg_open(). 
+   the size of the reserve buffer of the most recent successful sg_open(). 
    Only available when 'sg' compiled into kernel (rather than a module). 
    This is deprecated (use SG_GET_RESERVED_SIZE ioctl() instead). */
 

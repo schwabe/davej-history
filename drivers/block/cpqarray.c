@@ -455,7 +455,8 @@ int cpqarray_init(void)
 
 		hba[i]->access.set_intr_mask(hba[i], 0);
 		if (request_irq(hba[i]->intr, do_ida_intr,
-			SA_INTERRUPT|SA_SHIRQ, hba[i]->devname, hba[i])) {
+				SA_INTERRUPT|SA_SHIRQ|SA_SAMPLE_RANDOM,
+				hba[i]->devname, hba[i])) {
 
 			printk(KERN_ERR "cpqarray: Unable to get irq %d for %s\n", 
 				hba[i]->intr, hba[i]->devname);

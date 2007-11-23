@@ -380,19 +380,19 @@ static int kaweth_set_sofs_wait(struct kaweth_device *kaweth, __u16 sofs_wait)
 }
 
 /****************************************************************
- *     kaweth_set_recieve_filter
+ *     kaweth_set_receive_filter
  ****************************************************************/
-static int kaweth_set_recieve_filter(struct kaweth_device *kaweth, __u16 recieve_filter)
+static int kaweth_set_receive_filter(struct kaweth_device *kaweth, __u16 receive_filter)
 {
 	int retval;
 
-	printk("Set recieve filter to %d\n", (unsigned)recieve_filter);
+	printk("Set receive filter to %d\n", (unsigned)receive_filter);
 
 	retval = kaweth_control(kaweth,
 									usb_sndctrlpipe(kaweth->dev, 0),
 									KAWETH_COMMAND_SET_PACKET_FILTER,
 									USB_TYPE_VENDOR | USB_DIR_OUT | USB_RECIP_DEVICE,
-									recieve_filter,
+									receive_filter,
 									0,
 									(void *)&kaweth->firmware_buf,
 									0,
@@ -480,7 +480,7 @@ static int kaweth_reset(struct kaweth_device *kaweth)
 	return result;
 }
 
-static void kaweth_usb_recieve(struct urb *);
+static void kaweth_usb_receive(struct urb *);
 
 /****************************************************************
  *     kaweth_resubmit_rx_urb
@@ -498,7 +498,7 @@ static inline void kaweth_resubmit_rx_urb(struct kaweth_device *kaweth)
 								usb_rcvbulkpipe(kaweth->dev, 1),
 								kaweth->rx_buf,
 								KAWETH_BUF_SIZE,
-								kaweth_usb_recieve,
+								kaweth_usb_receive,
 								kaweth);
 
 //	kaweth->rx_urb->transfer_flags = USB_DISABLE_SPD | USB_URB_EARLY_COMPLETE;
@@ -510,9 +510,9 @@ static inline void kaweth_resubmit_rx_urb(struct kaweth_device *kaweth)
 }
 
 /****************************************************************
- *     kaweth_usb_recieve
+ *     kaweth_usb_receive
  ****************************************************************/
-static void kaweth_usb_recieve(struct urb *urb)
+static void kaweth_usb_receive(struct urb *urb)
 {
 	struct kaweth_device *kaweth = urb->context;
 	struct net_device *net = kaweth->net;
@@ -927,13 +927,13 @@ static void *kaweth_probe(struct usb_device *dev, unsigned int ifnum)
 		return kaweth;
 	}
 
-	result = kaweth_set_recieve_filter(kaweth, KAWETH_PACKET_FILTER_DIRECTED |
+	result = kaweth_set_receive_filter(kaweth, KAWETH_PACKET_FILTER_DIRECTED |
 															 KAWETH_PACKET_FILTER_BROADCAST |
 															 KAWETH_PACKET_FILTER_MULTICAST);
 
 	if(result < 0)
 	{
-		printk("Error setting recieve filter\n");
+		printk("Error setting receive filter\n");
 
 		return kaweth;
 	}

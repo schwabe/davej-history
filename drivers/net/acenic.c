@@ -2,7 +2,7 @@
  * acenic.c: Linux driver for the Alteon AceNIC Gigabit Ethernet card
  *           and other Tigon based cards.
  *
- * Copyright 1998-2000 by Jes Sorensen, <Jes.Sorensen@cern.ch>.
+ * Copyright 1998-2000 by Jes Sorensen, <jes@linuxcare.com>.
  *
  * Thanks to Alteon and 3Com for providing hardware and documentation
  * enabling me to write this driver.
@@ -35,6 +35,11 @@
  *   Ken Aaker <kdaaker@rchland.vnet.ibm.com>: Correct check for whether
  *                                       memory mapped IO is enabled to
  *                                       make the driver work on RS/6000.
+ *   Stephen Hack <stephen_hack@hp.com>: Fixed ace_set_mac_addr for little
+ *                                       endian systems.
+ *   Val Hensson <vhenson@esscom.com>:   Reset Jumbo skb producer and
+ *                                       rx producer index when
+ *                                       flushing the Jumbo ring.
  */
 
 #include <linux/config.h>
@@ -607,7 +612,7 @@ int __init acenic_probe (struct net_device *dev)
 }
 
 
-MODULE_AUTHOR("Jes Sorensen <Jes.Sorensen@cern.ch>");
+MODULE_AUTHOR("Jes Sorensen <Jes.Sorensen@linuxcare.com>");
 MODULE_DESCRIPTION("AceNIC/3C985/GA620 Gigabit Ethernet driver");
 MODULE_PARM(link, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(trace, "1-" __MODULE_STRING(8) "i");
@@ -1073,7 +1078,7 @@ static int __init ace_init(struct net_device *dev)
 			default:
 				printk(KERN_INFO "  Cache line size %i not "
 				       "supported, PCI write and invalidate "
-				       "disabled\n", L1_CACHE_BYTES);
+				       "disabled\n", SMP_CACHE_BYTES);
 				ap->pci_command &= ~PCI_COMMAND_INVALIDATE;
 				pci_write_config_word(ap->pdev, PCI_COMMAND,
 						      ap->pci_command);
@@ -1827,7 +1832,20 @@ static u32 ace_handle_event(struct net_device *dev, u32 evtcsm, u32 evtprd)
 					ap->skb->rx_jumbo_skbuff[i].skb = NULL;
 				}
 			}
+
+ 			if (ACE_IS_TIGON_I(ap)) {
+ 				struct cmd cmd;
+ 				cmd.evt = C_SET_RX_JUMBO_PRD_IDX;
+ 				cmd.code = 0;
+ 				cmd.idx = 0;
+ 				ace_issue_cmd(ap->regs, &cmd);
+ 			} else {
+ 				writel(0, &((ap->regs)->RxJumboPrd));
+ 				wmb();
+ 			}
+
 			ap->jumbo = 0;
+			ap->rx_jumbo_skbprd = 0;
 			printk(KERN_INFO "%s: Jumbo ring flushed\n",
 			       dev->name);
 			if (!ap->tx_full)
@@ -2553,7 +2571,7 @@ static int ace_set_mac_addr(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr=p;
 	struct ace_regs *regs;
-	u16 *da;
+	u8 *da;
 	struct cmd cmd;
 
 	if(netif_running(dev))
@@ -2561,11 +2579,11 @@ static int ace_set_mac_addr(struct net_device *dev, void *p)
 
 	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
 
-	da = (u16 *)dev->dev_addr;
+	da = (u8 *)dev->dev_addr;
 
 	regs = ((struct ace_private *)dev->priv)->regs;
-	writel(da[0], &regs->MacAddrHi);
-	writel((da[1] << 16) | da[2], &regs->MacAddrLo);
+	writel(da[0] << 8 | da[1], &regs->MacAddrHi);
+	writel((da[2] << 24) | (da[3] << 16) | (da[4] << 8) | da[5] , &regs->MacAddrLo);
 
 	cmd.evt = C_SET_MAC_ADDR;
 	cmd.code = 0;

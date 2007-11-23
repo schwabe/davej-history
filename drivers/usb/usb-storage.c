@@ -458,7 +458,7 @@ static unsigned int us_transfer_length(Scsi_Cmnd *srb, struct us_data *us)
 /* Invoke the transport and basic error-handling/recovery methods
  *
  * This is used by the protocol layers to actually send the message to
- * the device and recieve the response.
+ * the device and receive the response.
  */
 static void invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 {
@@ -611,7 +611,7 @@ static void CBI_irq(struct urb *urb)
 {
 	struct us_data *us = (struct us_data *)urb->context;
 
-	US_DEBUGP("USB IRQ recieved for device on host %d\n", us->host_no);
+	US_DEBUGP("USB IRQ received for device on host %d\n", us->host_no);
 	US_DEBUGP("-- IRQ data length is %d\n", urb->actual_length);
 	US_DEBUGP("-- IRQ state is %d\n", urb->status);
 
@@ -1615,7 +1615,7 @@ static int usb_stor_control_thread(void * __us)
 
 		/* exit if we get a signal to exit */
 		if (action == US_ACT_EXIT) {
-			US_DEBUGP("-- US_ACT_EXIT command recieved\n");
+			US_DEBUGP("-- US_ACT_EXIT command received\n");
 			break;
 		}
 	} /* for (;;) */

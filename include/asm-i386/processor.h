@@ -327,4 +327,10 @@ extern void free_task_struct(struct task_struct *);
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
+/* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
+extern inline void rep_nop(void)
+{
+	__asm__ __volatile__("rep;nop");
+}
+
 #endif /* __ASM_I386_PROCESSOR_H */

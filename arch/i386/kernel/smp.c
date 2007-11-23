@@ -220,6 +220,8 @@ static char *mpc_family(int family,int model)
 		return("Pentium(tm)");
 	if (family==0x0F && model==0x0F)
 		return("Special controller");
+	if (family==0x0F && model==0x00)
+		return("Pentium 4(tm)");
 	if (family==0x04 && model<9)
 		return model_defs[model];
 	sprintf(n,"Unknown CPU [%d:%d]",family, model);
@@ -1120,7 +1122,8 @@ int __init start_secondary(void *unused)
 	 */
 	smp_callin();
 	while (!atomic_read(&smp_commenced))
-		/* nothing */ ;
+		rep_nop() /* bus friendly nothing */ ;
+		
 	return cpu_idle(NULL);
 }
 

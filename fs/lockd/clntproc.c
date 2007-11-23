@@ -309,14 +309,38 @@ nlmclnt_call(struct nlm_rqst *req, u32 proc)
 /*
  * Generic NLM call, async version.
  */
-static int
-_nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback,
-		    struct rpc_cred *cred)
+int
+nlmsvc_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
 {
 	struct nlm_host	*host = req->a_host;
 	struct rpc_clnt	*clnt;
 	struct nlm_args	*argp = &req->a_args;
 	struct nlm_res	*resp = &req->a_res;
+	struct rpc_message msg;
+
+	dprintk("lockd: call procedure %s on %s (async)\n",
+			nlm_procname(proc), host->h_name);
+
+	/* If we have no RPC client yet, create one. */
+	if ((clnt = nlm_bind_host(host)) == NULL)
+		return -ENOLCK;
+
+	/* bootstrap and kick off the async RPC call */
+	msg.rpc_proc = proc;
+	msg.rpc_argp = argp;
+	msg.rpc_resp =resp;
+	msg.rpc_cred = NULL;	
+	return rpc_call_async(clnt, &msg, RPC_TASK_ASYNC, callback, req);
+}
+
+int
+nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
+{
+	struct nlm_host	*host = req->a_host;
+	struct rpc_clnt	*clnt;
+	struct nlm_args	*argp = &req->a_args;
+	struct nlm_res	*resp = &req->a_res;
+	struct file	*file = argp->lock.fl.fl_file;
 	struct rpc_message msg;
 	int		status;
 
@@ -327,41 +351,21 @@ _nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback,
 	if ((clnt = nlm_bind_host(host)) == NULL)
 		return -ENOLCK;
 
-	/* Increment host refcount */
-        nlm_get_host(host);
-
-        /* bootstrap and kick off the async RPC call */
+	/* bootstrap and kick off the async RPC call */
 	msg.rpc_proc = proc;
 	msg.rpc_argp = argp;
 	msg.rpc_resp =resp;
-	msg.rpc_cred = cred;
-        status = rpc_call_async(clnt, &msg, RPC_TASK_ASYNC, callback, req);
-
+	if (file)
+		msg.rpc_cred = nfs_file_cred(file);
+	else
+		msg.rpc_cred = NULL;
+	/* Increment host refcount */
+	nlm_get_host(host);
+	status = rpc_call_async(clnt, &msg, RPC_TASK_ASYNC, callback, req);
 	if (status < 0)
 		nlm_release_host(host);
 	return status;
 }
-
-
-int
-nlmclnt_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
-{
-	struct nlm_args	*argp = &req->a_args;
-	struct file	*filp = argp->lock.fl.fl_file;
-	struct rpc_cred *cred = NULL;
-
-	if (filp)
-		cred = nfs_file_cred(filp);
-
-	return _nlmclnt_async_call(req, proc, callback, cred);
-}
-
-int
-nlmsvc_async_call(struct nlm_rqst *req, u32 proc, rpc_action callback)
-{
-	return _nlmclnt_async_call(req, proc, callback, NULL);
-}
-
 
 /*
  * TEST for the presence of a conflicting lock

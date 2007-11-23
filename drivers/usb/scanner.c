@@ -378,7 +378,7 @@ write_scanner(struct file * file, const char * buffer,
 		dbg("write stats(%d): result:%d this_write:%d partial:%d", scn_minor, result, this_write, partial);
 
 		if (result == USB_ST_TIMEOUT) {	/* NAK -- shouldn't happen */
-			warn("write_scanner: NAK recieved.");
+			warn("write_scanner: NAK received.");
 			ret = -ETIME;
 			break;
 		} else if (result < 0) { /* We should not get any I/O errors */

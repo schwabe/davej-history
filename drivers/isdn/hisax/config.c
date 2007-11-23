@@ -619,7 +619,7 @@ HiSax_setup(char *str, int *ints))
 		}
 		i++;
 	}
-	if (strlen(str)) {
+	if (str && *str) {
 		strcpy(HiSaxID, str);
 		HiSax_id = HiSaxID;
 	} else {

@@ -183,7 +183,7 @@ struct dmfe_board_info {
 	u8 link_failed;		/* Ever link failed */
 	u8 wait_reset;		/* Hardware failed, need to reset */
 	u8 in_reset_state;	/* Now driver in reset routine */
-	u8 rx_error_cnt;	/* recievd abnormal case count */
+	u8 rx_error_cnt;	/* received abnormal case count */
 	u8 dm910x_chk_mode;	/* Operating mode check */
 	struct timer_list timer;
 	struct enet_statistics stats;	/* statistic counter */

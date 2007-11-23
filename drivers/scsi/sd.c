@@ -1775,6 +1775,8 @@ static void sd_detach(Scsi_Device * SDp)
 	    dpnt->device = NULL;
 	    dpnt->capacity = 0;
 	    SDp->attached--;
+            if (SDp->scsi_request_fn == do_sd_request)
+         	SDp->scsi_request_fn = NULL;
 	    sd_template.dev_noticed--;
 	    sd_template.nr_dev--;
 	    SD_GENDISK(i).nr_real--;

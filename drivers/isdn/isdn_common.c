@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.111 2000/08/20 07:40:14 keil Exp $
+/* $Id: isdn_common.c,v 1.113 2000/11/01 17:54:00 detabc Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -44,9 +44,9 @@
 /* Debugflags */
 #undef ISDN_DEBUG_STATCALLB
 
-isdn_dev *dev = (isdn_dev *) 0;
+isdn_dev *dev;
 
-static char *isdn_revision = "$Revision: 1.111 $";
+static char *isdn_revision = "$Revision: 1.113 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -63,7 +63,7 @@ static char *isdn_audio_revision = ": none $";
 extern char *isdn_v110_revision;
 
 #ifdef CONFIG_ISDN_DIVERSION
-isdn_divert_if *divert_if = NULL; /* interface to diversion module */
+isdn_divert_if *divert_if; /* interface to diversion module */
 #endif CONFIG_ISDN_DIVERSION
 
 

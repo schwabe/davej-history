@@ -968,20 +968,114 @@ M:	axboe@suse.de
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
-USB HUB AND UHCI DRIVERS
+USB SUBSYSTEM
+P:	Johannes Erdfelt
+M	jerdfelt@valinux.com
+M:	johannes@erdfelt.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+W:	http://www.linux-usb.org
+S:	Supported
+
+USB ACM DRIVER
+P:	Vojtech Pavlik
+M:	vojtech@suse.cz
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Supported
+
+USB BLUETOOTH DRIVER
+P:	Greg Kroah-Hartman
+M:	greg@kroah.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+W:	http://www.kroah.com/linux-usb/
+
+USB HID/HIDBP/INPUT DRIVERS
+P:	Vojtech Pavlik
+M:	vojtech@suse.cz
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+W:	http://www.suse.cz/development/input/
+S:	Supported
+
+USB HUB
 P:	Johannes Erdfelt
 M:	jerdfelt@sventech.com
-L:	linux-usb@suse.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained
 
 USB OHCI DRIVER
-P:	Gregory P. Smith
-M:	greg@electricrain.com
-M:	greg@suitenine.com
-L:	linux-usb@suse.com
-S:	Maintained (not yet usable)
-W:	http://suitenine.com/usb/
+P:	Roman Weissgaerber
+M:	weissg@vienna.at
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
 
+USB OV511 DRIVER
+P:     Mark McClelland
+M:     mmcclelland@delphi.com
+L:     linux-usb-users@lists.sourceforge.net
+L:     linux-usb-devel@lists.sourceforge.net
+W:     http://alpha.dyndns.org/ov511/
+S:     Maintained
+
+USB PEGASUS DRIVER
+P:	Petko Manolov
+M:	petkan@dce.bg
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+
+USB PRINTER DRIVER
+P:	Vojtech Pavlik
+M:	vojtech@suse.cz
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Supported
+
+USB SERIAL DIGI ACCELEPORT DRIVER
+P:	Peter Berger and Al Borchers
+M:	pberger@brimson.com
+M:	alborchers@steinerpoint.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Supported
+
+USB SERIAL KEYSPAN DRIVER
+P:	Hugh Blemings
+M:	hugh@linuxcare.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+W:	http://www.linuxcare.com.au/hugh/keyspan.html
+
+USB SERIAL DRIVER
+P:	Greg Kroah-Hartman
+M:	greg@kroah.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+W:	http://www.kroah.com/linux-usb/
+
+USB MASS STORAGE DRIVER
+P:	Matthew Dharm
+M:	mdharm-usb@one-eyed-alien.net
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Maintained
+W:	http://www.one-eyed-alien.net/~mdharm/linux-usb/
+
+USB UHCI DRIVER
+P:	Georg Acher
+M:	usb@in.tum.de
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+W:	http://usb.in.tum.de
+S:	Maintained
+	
 VFAT FILESYSTEM:
 P:	Gordon Chaffee
 M:	chaffee@cs.berkeley.edu

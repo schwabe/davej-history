@@ -7,6 +7,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/user.h>
+#include <linux/utsname.h>
 
 typedef unsigned long elf_greg_t;
 
@@ -93,7 +94,7 @@ typedef struct user_i387_struct elf_fpregset_t;
    For the moment, we have only optimizations for the Intel generations,
    but that could change... */
 
-#define ELF_PLATFORM  ("i386\0i486\0i586\0i686"+((boot_cpu_data.x86-3)*5))
+#define ELF_PLATFORM (system_utsname.machine)
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex, ibcs2) \

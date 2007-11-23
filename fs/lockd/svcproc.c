@@ -463,8 +463,8 @@ nlmsvc_proc_sm_notify(struct svc_rqst *rqstp, struct nlm_reboot *argp,
 		if ((clnt = nlmsvc_ops->exp_getclient(&saddr)) != NULL 
 		 && (host = nlm_lookup_host(clnt, &saddr, 0, 0)) != NULL) {
 			nlmsvc_free_host_resources(host);
+			nlm_release_host(host);
 		}
-		nlm_release_host(host);
 	}
 
 	return rpc_success;
@@ -494,9 +494,13 @@ nlmsvc_callback(struct svc_rqst *rqstp, u32 proc, struct nlm_res *resp)
 	memcpy(&call->a_args, resp, sizeof(*resp));
 
 	if (nlmsvc_async_call(call, proc, nlmsvc_callback_exit) < 0)
-		return rpc_system_err;
+		goto error;
 
 	return rpc_success;
+ error:
+	nlm_release_host(host);
+	kfree(call);
+	return rpc_system_err;
 }
 
 static void

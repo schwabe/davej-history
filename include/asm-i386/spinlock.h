@@ -153,6 +153,7 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 	"jc 2f\n" \
 	".section .text.lock,\"ax\"\n" \
 	"2:\t" \
+	"rep; nop\n\t" \
 	"testb $1,%0\n\t" \
 	"jne 2b\n\t" \
 	"jmp 1b\n" \
@@ -214,7 +215,8 @@ typedef struct {
 		     "js 2f\n" \
 		     ".section .text.lock,\"ax\"\n" \
 		     "2:\tlock ; decl %0\n" \
-		     "3:\tcmpl $0,%0\n\t" \
+		     "3:\trep; nop\n\t" \
+		     "cmpl $0,%0\n\t" \
 		     "js 3b\n\t" \
 		     "jmp 1b\n" \
 		     ".previous" \
@@ -232,7 +234,8 @@ typedef struct {
 		     "jne 3f\n" \
 		     ".section .text.lock,\"ax\"\n" \
 		     "3:\tlock ; btrl $31,%0\n" \
-		     "4:\tcmp $0,%0\n\t" \
+		     "4:\trep; nop\n\t" \
+		     "cmp $0,%0\n\t" \
 		     "jne 4b\n\t" \
 		     "jmp 1b\n" \
 		     ".previous" \

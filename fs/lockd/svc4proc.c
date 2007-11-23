@@ -450,8 +450,8 @@ nlm4svc_proc_sm_notify(struct svc_rqst *rqstp, struct nlm_reboot *argp,
 		if ((clnt = nlmsvc_ops->exp_getclient(&saddr)) != NULL 
 		 && (host = nlm_lookup_host(clnt, &saddr, 0, 0)) != NULL) {
 			nlmsvc_free_host_resources(host);
+			nlm_release_host(host);
 		}
-		nlm_release_host(host);
 	}
 
 	return rpc_success;
@@ -472,7 +472,7 @@ nlm4svc_callback(struct svc_rqst *rqstp, u32 proc, struct nlm_res *resp)
 	host = nlmclnt_lookup_host(&rqstp->rq_addr,
 				rqstp->rq_prot, rqstp->rq_vers);
 	if (!host) {
-		rpc_free(call);
+		kfree(call);
 		return rpc_system_err;
 	}
 
@@ -481,9 +481,13 @@ nlm4svc_callback(struct svc_rqst *rqstp, u32 proc, struct nlm_res *resp)
 	memcpy(&call->a_args, resp, sizeof(*resp));
 
 	if (nlmsvc_async_call(call, proc, nlm4svc_callback_exit) < 0)
-		return rpc_system_err;
+		goto error;
 
 	return rpc_success;
+ error:
+	kfree(call);
+	nlm_release_host(host);
+	return rpc_system_err;
 }
 
 static void
@@ -496,7 +500,7 @@ nlm4svc_callback_exit(struct rpc_task *task)
 					task->tk_pid, -task->tk_status);
 	}
 	nlm_release_host(call->a_host);
-	rpc_free(call);
+	kfree(call);
 }
 
 /*

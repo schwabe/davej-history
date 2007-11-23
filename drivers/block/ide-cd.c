@@ -324,41 +324,50 @@ static void cdrom_saw_media_change (ide_drive_t *drive)
 	info->nsectors_buffered = 0;
 }
 
+static int cdrom_log_sense(ide_drive_t *drive, struct packet_command *pc,
+			   struct request_sense *sense)
+{
+	int log = 0;
+
+	if (sense == NULL)
+		return 0;
+
+	switch (sense->sense_key) {
+		case NO_SENSE: case RECOVERED_ERROR:
+			break;
+		case NOT_READY:
+			/*
+			 * don't care about tray state messages for
+			 * e.g. capacity commands or in-progress or
+			 * becoming ready
+			 */
+			if (sense->asc == 0x3a || sense->asc == 0x04)
+				break;
+			log = 1;
+			break;
+		case UNIT_ATTENTION:
+			/*
+			 * Make good and sure we've seen this potential media
+			 * change. Some drives (i.e. Creative) fail to present
+			 * the correct sense key in the error register.
+			 */
+			cdrom_saw_media_change(drive);
+			break;
+		default:
+			log = 1;
+			break;
+	}
+	return log;
+}
 
 static
 void cdrom_analyze_sense_data(ide_drive_t *drive,
 			      struct packet_command *failed_command,
 			      struct request_sense *sense)
 {
-	if (sense->sense_key == NOT_READY ||
-	    sense->sense_key == UNIT_ATTENTION) {
-		/* Make good and sure we've seen this potential media change.
-		   Some drives (i.e. Creative) fail to present the correct
-		   sense key in the error register. */
-		cdrom_saw_media_change (drive);
 
-
-		/* Don't print not ready or unit attention errors for
-		   READ_SUBCHANNEL.  Workman (and probably other programs)
-		   uses this command to poll the drive, and we don't want
-		   to fill the syslog with useless errors. */
-		if (failed_command &&
-		    (failed_command->c[0] == GPCMD_READ_SUBCHANNEL ||
-		     failed_command->c[0] == GPCMD_TEST_UNIT_READY))
-			return;
-	}
-
-	if (sense->error_code == 0x70 && sense->sense_key  == 0x02
-	 && ((sense->asc      == 0x3a && sense->ascq       == 0x00) ||
-	     (sense->asc      == 0x04 && sense->ascq       == 0x01)))
-	{
-		/*
-		 * Suppress the following errors:
-		 * "Medium not present", "in progress of becoming ready",
-		 * and "writing" to keep the noise level down to a dull roar.
-		 */
+	if (!cdrom_log_sense(drive, failed_command, sense))
 		return;
-	}
 
 #if VERBOSE_IDE_CD_ERRORS
 	{
@@ -1105,7 +1114,13 @@ static ide_startstop_t cdrom_seek_intr (ide_drive_t *drive)
 
 	if (retry && jiffies - info->start_seek > IDECD_SEEK_TIMER) {
 		if (--retry == 0) {
+			/*
+			 * this condition is far too common, to bother
+			 * users about it
+			 */
+#if 0
 			printk("%s: disabled DSC seek overlap\n", drive->name);
+#endif
 			drive->dsc_overlap = 0;
 		}
 	}
@@ -1329,8 +1344,12 @@ static ide_startstop_t cdrom_do_packet_command (ide_drive_t *drive)
 static
 void cdrom_sleep (int time)
 {
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(time);
+	int sleep = time;
+
+	do {
+		set_current_state(TASK_INTERRUPTIBLE);
+		sleep = schedule_timeout(sleep);
+	} while (sleep);
 }
 
 static
@@ -1848,6 +1867,9 @@ static int cdrom_get_toc_entry(ide_drive_t *drive, int track,
 	struct cdrom_info *info = drive->driver_data;
 	struct atapi_toc *toc = info->toc;
 	int ntracks;
+
+	if (!CDROM_STATE_FLAGS(drive)->toc_valid)
+		return -EINVAL;
 
 	/* Check validity of requested track number. */
 	ntracks = toc->hdr.last_track - toc->hdr.first_track + 1;

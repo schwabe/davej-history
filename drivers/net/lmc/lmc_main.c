@@ -640,7 +640,7 @@ static void lmc_watchdog (unsigned long data) /*fold00*/
 
 
     /* Make sure the tx jabber and rx watchdog are off,
-     * and the transmit and recieve processes are running.
+     * and the transmit and receive processes are running.
      */
 
     LMC_CSR_WRITE (sc, csr_15, cpu_to_le32(0x00000011));
@@ -2139,7 +2139,7 @@ static void lmc_softreset (lmc_softc_t * const sc) /*fold00*/
 
     lmc_trace(sc->lmc_device, "lmc_softreset in");
 
-    /* Initialize the recieve rings and buffers. */
+    /* Initialize the receive rings and buffers. */
     sc->lmc_txfull = 0;
     sc->lmc_next_rx = 0;
     sc->lmc_next_tx = 0;

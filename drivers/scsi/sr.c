@@ -1213,6 +1213,8 @@ static void sr_detach(Scsi_Device * SDp)
 			cpnt->device = NULL;
 			cpnt->capacity = 0;
 			SDp->attached--;
+                        if (SDp->scsi_request_fn == do_sr_request)
+                                SDp->scsi_request_fn = NULL;
 			sr_template.nr_dev--;
 			sr_template.dev_noticed--;
 			sr_sizes[i] = 0;

@@ -648,7 +648,7 @@ void usb_hub_cleanup(void)
 	ret = kill_proc(khubd_pid, SIGTERM, 1);
 	if (!ret) {
 		/* Wait 10 seconds */
-		int count = 10 * 100;
+		int count = 10 * HZ;
 
 		while (khubd_running && --count) {
 			current->state = TASK_INTERRUPTIBLE;

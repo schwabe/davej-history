@@ -803,7 +803,7 @@ virtual_midi_disable (void)
 	return 0;
 }
 
-__initfunc (static int detect_wf_mpu (int irq, int io_base))
+__initfunc (int detect_wf_mpu (int irq, int io_base))
 
 {
 	if (check_region (io_base, 2)) {

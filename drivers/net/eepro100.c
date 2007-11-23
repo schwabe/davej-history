@@ -1,5 +1,3 @@
-#define USE_IO
-
 /* drivers/net/eepro100.c: An Intel i82557-559 Ethernet driver for Linux. */
 /*
    NOTICE: this version of the driver is supposed to work with 2.2 kernels.
@@ -37,18 +35,28 @@
 	2000 May 30  Dragan Stancevic <visitor@valinux.com> and
 				 Andrey Moruga <moruga@sw.com.sg>
 		Honor PortReset timing specification.
+	2000 Jul 25  Dragan Stancevic <visitor@valinux.com>
+		Changed to MMIO, resized FIFOs, resized rings, changed ISR timeout
+		Problem reported by:
+		Marc MERLIN <merlin@valinux.com>
+	2000 Nov 15  Dragan Stancevic <visitor@valinux.com>
+		Changed command completion time and added debug info as to which
+		CMD timed out. Problem reported by:
+		"Ulrich Windl" <Ulrich.Windl@rz.uni-regensburg.de>
 */
 
+/*#define USE_IO*/
 static const char *version =
 "eepro100.c:v1.09j-t 9/29/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n"
-"eepro100.c: $Revision: 1.20.2.10 $ 2000/05/31 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n";
+"eepro100.c: $Revision: 1.20.2.10 $ 2000/05/31 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n"
+"eepro100.c: VA Linux custom, Dragan Stancevic <visitor@valinux.com> 2000/11/15\n";
 
 /* A few user-configurable values that apply to all boards.
    First set is undocumented and spelled per Intel recommendations. */
 
 static int congenb = 0;		/* Enable congestion control in the DP83840. */
-static int txfifo = 8;		/* Tx FIFO threshold in 4 byte units, 0-15 */
-static int rxfifo = 8;		/* Rx FIFO threshold, default 32 bytes. */
+static int txfifo = 0;		/* Tx FIFO threshold in 4 byte units, 0-15 */
+static int rxfifo = 0xF;		/* Rx FIFO threshold, default 32 bytes. */
 /* Tx/Rx DMA burst length, 0-127, 0 == no preemption, tx==128 -> disabled. */
 static int txdmacount = 128;
 static int rxdmacount = 0;
@@ -63,7 +71,7 @@ static int rx_copybreak = 200;
 #endif
 
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 20;
+static int max_interrupt_work = 200;
 
 /* Maximum number of multicast addresses to filter (vs. rx-all-multicast) */
 static int multicast_filter_limit = 64;
@@ -78,8 +86,8 @@ static int debug = -1;			/* The debug level */
 
 /* A few values that may be tweaked. */
 /* The ring sizes should be a power of two for efficiency. */
-#define TX_RING_SIZE	32
-#define RX_RING_SIZE	32
+#define TX_RING_SIZE	64
+#define RX_RING_SIZE	64
 /* How much slots multicast filter setup may take.
    Do not descrease without changing set_rx_mode() implementaion. */
 #define TX_MULTICAST_SIZE   2
@@ -364,13 +372,21 @@ static inline void io_outw(unsigned int val, unsigned long port)
    Typically this takes 0 ticks. */
 static inline void wait_for_cmd_done(long cmd_ioaddr)
 {
-	int wait = 1000;
+	int wait = 20000;
+	char cmd_reg1, cmd_reg2;
 	do   ;
-	while(inb(cmd_ioaddr) && --wait >= 0);
-#ifndef final_version
-	if (wait < 0)
-		printk(KERN_ALERT "eepro100: wait_for_cmd_done timeout!\n");
-#endif
+	while((cmd_reg1 = inb(cmd_ioaddr)) && (--wait >= 0));
+
+	/* Last chance to change your mind --Dragan*/
+	if (wait < 0){
+		cmd_reg2 = inb(cmd_ioaddr);
+		if(cmd_reg2){
+			printk(KERN_ALERT "eepro100: cmd_wait for(%#2.2x) timedout with(%#2.2x)!\n",
+				cmd_reg1, cmd_reg2);
+		
+		}
+	}
+
 }
 
 /* Offsets to the various registers.
@@ -1147,8 +1163,10 @@ static void speedo_timer(unsigned long data)
 static void speedo_show_state(struct net_device *dev)
 {
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
+#if 0
 	long ioaddr = dev->base_addr;
 	int phy_num = sp->phy[0] & 0x1f;
+#endif
 	int i;
 
 	/* Print a few items for debugging. */
@@ -1508,7 +1526,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		   FCP and ER interrupts --Dragan */
 		outw(status & 0xfc00, ioaddr + SCBStatus);
 
-		if (speedo_debug > 4)
+		if (speedo_debug > 3)
 			printk(KERN_DEBUG "%s: interrupt  status=%#4.4x.\n",
 				   dev->name, status);
 

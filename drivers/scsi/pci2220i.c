@@ -1655,7 +1655,7 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
     spin_lock_irqsave (&io_request_lock, flags);
 #endif /* version >= v2.1.95 */
 
-//	DEB (printk ("\npci2220i recieved interrupt\n"));
+//	DEB (printk ("\npci2220i received interrupt\n"));
 
 	for ( z = 0; z < NumAdapters;  z++ )								// scan for interrupt to process
 		{

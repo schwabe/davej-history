@@ -957,7 +957,7 @@ scsi_tape_flush(struct file * filp)
 	   ((SCpnt->sense_buffer[0] & 0x80) != 0 &&
 	    (SCpnt->sense_buffer[3] | SCpnt->sense_buffer[4] |
 	     SCpnt->sense_buffer[5] |
-	     SCpnt->sense_buffer[6]) == 0))) {
+	     SCpnt->sense_buffer[6]) != 0))) {
 	  /* Filter out successful write at EOM */
 	  scsi_release_command(SCpnt);
 	  SCpnt = NULL;
@@ -2460,7 +2460,7 @@ st_int_ioctl(struct inode * inode,
        STps->eof = ST_NOEOF;
      }
      else if ( (cmd_in == MTBSF) || (cmd_in == MTBSFM) ) {
-       if (fileno >= 0)
+       if (STps->drv_file >= 0)
          STps->drv_file = fileno + undone ;
        else
 	 STps->drv_file = fileno;
@@ -2488,7 +2488,7 @@ st_int_ioctl(struct inode * inode,
 	 STps->drv_block = (-1);
        }
        else {
-	 if (blkno >= 0)
+	 if (STps->drv_block >= 0)
 	   STps->drv_block = blkno + undone;
 	 else
 	   STps->drv_block = (-1);

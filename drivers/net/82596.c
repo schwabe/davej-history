@@ -27,6 +27,9 @@
    should be stored as 0x56781234.  This is a real pain, when
    you have linked lists which are shared by the 680x0 and the
    i596.
+   NOTE: This was fixed in Stepping C of the chip. That again
+   means that big-endian should not be used at all: Steppings
+   A1, B and C of the 82596 each have a different big-endian behaviour.
 
    Driver skeleton
    Written 1993 by Donald Becker.

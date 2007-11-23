@@ -589,7 +589,7 @@ smb_retry(struct smb_sb_info *server)
 #else
 	/*
 	 * We don't want to be interrupted. For example, what if 'current'
-	 * already has recieved a signal? sleep_on would terminate immediately
+	 * already has received a signal? sleep_on would terminate immediately
 	 * and smbmount would not be able to re-establish connection.
 	 *
 	 * smbmount should be able to reconnect later, but it can't because

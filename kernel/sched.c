@@ -1744,8 +1744,8 @@ static int setscheduler(pid_t pid, int policy,
 	/*
 	 * We play safe to avoid deadlocks.
 	 */
-	spin_lock_irq(&runqueue_lock);
-	read_lock(&tasklist_lock);
+	read_lock_irq(&tasklist_lock);
+	spin_lock(&runqueue_lock);
 
 	p = find_process_by_pid(pid);
 
@@ -1789,8 +1789,8 @@ static int setscheduler(pid_t pid, int policy,
 	current->need_resched = 1;
 
 out_unlock:
-	read_unlock(&tasklist_lock);
-	spin_unlock_irq(&runqueue_lock);
+	spin_unlock(&runqueue_lock);
+	read_unlock_irq(&tasklist_lock);
 
 out_nounlock:
 	return retval;
