@@ -1,19 +1,24 @@
 /* toshiba.c -- Linux driver for accessing the SMM on Toshiba laptops
  *
- * Copyright (c) 1996-2000  Jonathan A. Buzzard (jonathan@buzzard.org.uk)
+ * Copyright (c) 1996-2001  Jonathan A. Buzzard (jonathan@buzzard.org.uk)
  *
  * Valuable assistance and patches from:
  *     Tom May <tom@you-bastards.com>
  *     Rob Napier <rnapier@employees.org>
  *
  * Fn status port numbers for machine ID's courtesy of
+ *     0xfc02: Scott Eisert <scott.e@sky-eye.com>
+ *     0xfc04: Steve VanDevender <stevev@efn.org>
  *     0xfc08: Garth Berry <garth@itsbruce.net>
+ *     0xfc0a: Egbert Eich <eich@xfree86.org>
+ *     0xfc10: Andrew Lofthouse <Andrew.Lofthouse@robins.af.mil>
  *     0xfc11: Spencer Olson <solson@novell.com>
  *     0xfc13: Claudius Frankewitz <kryp@gmx.de>
  *     0xfc15: Tom May <tom@you-bastards.com>
  *     0xfc17: Dave Konrad <konrad@xenia.it>
  *     0xfc1a: George Betzos <betzos@engr.colostate.edu>
  *     0xfc1d: Arthur Liu <armie@slap.mine.nu>
+ *     0xfcd1: Mr. Dave Konrad <konrad@xenia.it>
  *
  * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
  *
@@ -46,11 +51,19 @@
  *
  */
 
-#define TOSH_VERSION "1.7 22/6/2000"
+/* this appears to be needed for gcc 2.9.5 and upwards */
+/*
+#define KERNEL_STRICT_NAMES
+*/
+
+
+#define TOSH_VERSION "1.9 22/3/2001"
 #define TOSH_DEBUG 0
 
+#ifdef MODULE
 #include<linux/module.h>
 #include<linux/version.h>
+#endif
 #include<linux/kernel.h>
 #include<linux/sched.h>
 #include<linux/types.h>
@@ -59,11 +72,13 @@
 #include<linux/ioport.h>
 #include<asm/io.h>
 #include<asm/uaccess.h>
-#include<asm/init.h>
+#include<linux/init.h>
+#ifdef CONFIG_PROC_FS
 #include<linux/stat.h>
 #include<linux/proc_fs.h>
+#endif
 
-#include<linux/toshiba.h>
+#include"toshiba.h"
 
 #define TOSH_MINOR_DEV 181
 
@@ -72,10 +87,8 @@ static int tosh_bios = 0x0000;
 static int tosh_date = 0x0000;
 static int tosh_sci = 0x0000;
 static int tosh_fan = 0;
-static int tosh_start = 0;
-static int tosh_extent = 0;
 
-static int tosh_fn = 0;
+int tosh_fn = 0;
 
 MODULE_PARM(tosh_fn, "i");
 
@@ -108,9 +121,12 @@ static struct miscdevice tosh_device = {
 	&tosh_fops
 };
 
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry tosh_proc_entry = {
 	0, 7, "toshiba", S_IFREG|S_IRUGO, 1, 0, 0, 33, NULL, tosh_get_info, NULL
 };
+#endif       
+
 
 /*
  * Read the Fn key status
@@ -132,27 +148,6 @@ static int tosh_fn_status(void)
 
         return (int) scan;
 }
-
-
-/*
- * At some point we need to emulate setting the HDD auto off times for
- * the new laptops. We can do this by calling the ide_ioctl on /dev/hda.
- * The values we need for the various times are
- *
- *    Disabled   0x00
- *    1 minute   0x0c
- *    3 minutes  0x24
- *    5 minutes  0x3c
- *   10 minutes  0x78
- *   15 minutes  0xb4
- *   20 minutes  0xf0
- *   30 minutes  0xf1
- *
- */
-/*static int tosh_emulate_hdd(SMMRegisters *regs)
-{
-	return 0;
-}*/
 
 
 /*
@@ -312,8 +307,7 @@ static int tosh_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 	if (!arg)
 		return -EINVAL;
 
-	if(copy_from_user(&regs, (SMMRegisters *) arg, sizeof(SMMRegisters)))
-		return -EFAULT;
+	copy_from_user(&regs, (SMMRegisters *) arg, sizeof(SMMRegisters));
 
 	switch (cmd) {
 		case TOSH_SMM:
@@ -336,8 +330,7 @@ static int tosh_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 			return -EINVAL;
 	}
 
-        if(copy_to_user((SMMRegisters *) arg, &regs, sizeof(SMMRegisters)))
-        	return -EFAULT;
+        copy_to_user((SMMRegisters *) arg, &regs, sizeof(SMMRegisters));
 
 	return (err==0) ? 0:-EINVAL;
 }
@@ -346,6 +339,7 @@ static int tosh_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 /*
  * Print the information for /proc/toshiba
  */
+#ifdef CONFIG_PROC_FS
 int tosh_get_info(char *buffer, char **start, off_t fpos, int length, int dummy)
 {
 	char *temp;
@@ -374,6 +368,7 @@ int tosh_get_info(char *buffer, char **start, off_t fpos, int length, int dummy)
 
 	return temp-buffer;
 }
+#endif
 
 
 /*
@@ -382,11 +377,12 @@ int tosh_get_info(char *buffer, char **start, off_t fpos, int length, int dummy)
 static void tosh_set_fn_port(void)
 {
 	switch (tosh_id) {
+		case 0xfc02: case 0xfc04: case 0xfc09: case 0xfc0a: case 0xfc10:
 		case 0xfc11: case 0xfc13: case 0xfc15: case 0xfc1a:
 			tosh_fn = 0x62;
 			break;
-		case 0xfc08: case 0xfc17: case 0xfc1d: case 0xfcd1:
-		case 0xfce0: case 0xfce2:
+		case 0xfc08: case 0xfc17: case 0xfc1d: case 0xfcd1: case 0xfce0:
+		case 0xfce2:
 			tosh_fn = 0x68;
 			break;
 		default:
@@ -506,7 +502,6 @@ int tosh_probe(void)
 	   0xa0-0xbf we can't. We just have to live dangerously and use the
 	   ports anyway, oh boy! */
 
-
 	/* do we need to emulate the fan? */
 
 	if ((tosh_id==0xfccb) || (tosh_id==0xfccc))
@@ -515,7 +510,7 @@ int tosh_probe(void)
 	return 0;
 }
 
-int __init tosh_init(void)
+__initfunc(int tosh_init(void))
 {
 	/* are we running on a Toshiba laptop */
 
@@ -535,7 +530,11 @@ int __init tosh_init(void)
 	misc_register(&tosh_device);
 
 	/* register the proc entry */
+
+#ifdef CONFIG_PROC_FS
 	proc_register(&proc_root, &tosh_proc_entry);
+#endif
+	
 	return 0;
 }
 
@@ -548,13 +547,14 @@ int init_module(void)
 void cleanup_module(void)
 {
 	/* remove the proc entry */
+
+#ifdef CONFIG_PROC_FS
 	proc_unregister(&proc_root, tosh_proc_entry.low_ino);
+#endif
 
 	/* unregister the device file */
-	misc_deregister(&tosh_device);
 
-	/* release ports */
-	release_region(tosh_start, tosh_extent);
+	misc_deregister(&tosh_device);
 
 	return;
 }

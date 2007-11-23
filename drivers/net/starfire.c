@@ -1561,7 +1561,7 @@ static void netdev_error(struct net_device *dev, int intr_status)
 	if (intr_status & IntrTxDataLow) {
 		writel(++np->tx_threshold, dev->base_addr + TxThreshold);
 		printk(KERN_NOTICE "%s: Increasing Tx FIFO threshold to %d bytes\n",
-		       np->tx_threshold * 16);
+		       dev->name, np->tx_threshold * 16);
 	}
 	if ((intr_status & ~(IntrNormalMask | IntrAbnormalSummary | IntrLinkChange | IntrStatsMax | IntrTxDataLow | IntrPCIPad)) && debug)
 		printk(KERN_ERR "%s: Something Wicked happened! %4.4x.\n",

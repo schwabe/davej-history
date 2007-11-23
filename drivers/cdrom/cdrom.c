@@ -1942,6 +1942,9 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 
 		while (ra.nframes > 0) {
+			if (frames > ra.nframes)
+				frames = ra.nframes;
+
 			ret = cdrom_read_block(cdi, &cgc, lba, frames, 1, CD_FRAMESIZE_RAW);
 			if (ret) break;
 			__copy_to_user(ra.buf, cgc.buffer,
