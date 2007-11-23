@@ -34,6 +34,7 @@ extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 
 extern void flush_icache_range(unsigned long, unsigned long);
 extern void flush_page_to_ram(unsigned long);
+#define flush_dcache_page(page)			do { } while (0)
 
 extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);

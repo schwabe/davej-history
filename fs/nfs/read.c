@@ -29,6 +29,7 @@
 
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/pgtable.h>
 
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
@@ -111,6 +112,7 @@ nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 	} while (count);
 
 	memset(buffer, 0, count);
+	flush_dcache_page(page_address(page));
 	set_bit(PG_uptodate, &page->flags);
 	result = 0;
 
@@ -146,6 +148,7 @@ nfs_readpage_result(struct rpc_task *task)
 			memset((char *) address + result, 0, PAGE_SIZE - result);
 		}
 		nfs_refresh_inode(req->ra_inode, &req->ra_fattr);
+		flush_dcache_page(address);
 		set_bit(PG_uptodate, &page->flags);
 		succ++;
 	} else {

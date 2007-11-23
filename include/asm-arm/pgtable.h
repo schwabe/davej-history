@@ -9,6 +9,8 @@
 
 extern int do_check_pgt_cache(int, int);
 
+#define flush_dcache_page(page)			do { } while (0)
+
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)			(0)
 #define kern_addr_valid(addr)		(1)

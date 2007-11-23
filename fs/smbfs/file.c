@@ -17,6 +17,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/pgtable.h>
 
 #include <linux/smbno.h>
 #include <linux/smb_fs.h>
@@ -93,6 +94,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 	} while (count);
 
 	memset(buffer, 0, count);
+	flush_dcache_page(page_address(page));
 	set_bit(PG_uptodate, &page->flags);
 	result = 0;
 

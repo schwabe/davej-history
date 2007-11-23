@@ -1,7 +1,7 @@
 #undef	BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.3.2.4 $$Date: 2000/01/17 09:19:40 $";
+"$Revision: 2.3.2.5 $$Date: 2000/01/19 14:35:33 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,9 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.3.2.5   2000/01/19 14:35:33 ivan
+ * Fixed bug in cy_set_termios on CRTSCTS flag turnoff.
+ *
  * Revision 2.3.2.4   2000/01/17 09:19:40 ivan
  * Fixed SMP locking in Cyclom-Y interrupt handler.
  *

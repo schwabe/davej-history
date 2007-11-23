@@ -989,13 +989,11 @@ void prom_reload_locked(void)
 
 void __flush_dcache_range(unsigned long start, unsigned long end)
 {
-	unsigned long va;
-	int n = 0;
-
-	for (va = start; va < end; va += 32) {
-		spitfire_put_dcache_tag(va & 0x3fe0, 0x0);
-		if (++n >= 512)
-			break;
+	start &= PAGE_MASK;
+	end = PAGE_ALIGN(end);
+	while (start < end) {
+		flush_dcache_page(start);
+		start += PAGE_SIZE;
 	}
 }
 

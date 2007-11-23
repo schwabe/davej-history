@@ -571,6 +571,6 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds = NULL;
 	ppc_md.kbd_init_hw = NULL;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.ppc_kbd_sysrq_xlate = NULL;
+	ppc_md.kbd_sysrq_xlate = NULL;
 #endif
 }

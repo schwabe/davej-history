@@ -461,6 +461,7 @@ BTFIXUPDEF_CALL(void, flush_cache_page, struct vm_area_struct *, unsigned long)
 #define flush_cache_range(mm,start,end) BTFIXUP_CALL(flush_cache_range)(mm,start,end)
 #define flush_cache_page(vma,addr) BTFIXUP_CALL(flush_cache_page)(vma,addr)
 #define flush_icache_range(start, end)		do { } while (0)
+#define flush_dcache_page(page)			do { } while (0)
 
 BTFIXUPDEF_CALL(void, flush_tlb_all, void)
 BTFIXUPDEF_CALL(void, flush_tlb_mm, struct mm_struct *)

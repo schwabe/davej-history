@@ -120,16 +120,14 @@ static __inline__ unsigned int read_user_int(unsigned long kvaddr)
 
 static __inline__ void write_user_long(unsigned long kvaddr, unsigned long val)
 {
-	__asm__ __volatile__("stxa %0, [%1] %2"
-			     : /* no outputs */
-			     : "r" (val), "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
+	*(unsigned long *)kvaddr = val;
+	flush_dcache_page(kvaddr & PAGE_MASK);
 }
 
 static __inline__ void write_user_int(unsigned long kvaddr, unsigned int val)
 {
-	__asm__ __volatile__("stwa %0, [%1] %2"
-			     : /* no outputs */
-			     : "r" (val), "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
+	*(unsigned int *)kvaddr = val;
+	flush_dcache_page(kvaddr & PAGE_MASK);
 }
 
 static inline unsigned long get_long(struct task_struct * tsk,
@@ -164,11 +162,6 @@ static inline void put_long(struct task_struct * tsk, struct vm_area_struct * vm
 
 		pgaddr = page + (addr & ~PAGE_MASK);
 		write_user_long(pgaddr, data);
-
-		__asm__ __volatile__("
-		membar	#StoreStore
-		flush	%0
-"		: : "r" (pgaddr & ~7) : "memory");
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
@@ -209,11 +202,6 @@ static inline void put_int(struct task_struct * tsk, struct vm_area_struct * vma
 
 		pgaddr = page + (addr & ~PAGE_MASK);
 		write_user_int(pgaddr, data);
-
-		__asm__ __volatile__("
-		membar	#StoreStore
-		flush	%0
-"		: : "r" (pgaddr & ~7) : "memory");
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */

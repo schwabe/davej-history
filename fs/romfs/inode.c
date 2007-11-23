@@ -59,6 +59,7 @@
 #include <linux/init.h>
 
 #include <asm/uaccess.h>
+#include <asm/pgtable.h>
 
 static int inline min(int a, int b)
 {
@@ -403,6 +404,7 @@ romfs_readpage(struct file * file, struct page * page)
 			if (readlen < PAGE_SIZE) {
 				memset((void *)(buf+readlen),0,PAGE_SIZE-readlen);
 			}
+			flush_dcache_page(page_address(page));
 			set_bit(PG_uptodate, &page->flags);
 			result = 0;
 		}

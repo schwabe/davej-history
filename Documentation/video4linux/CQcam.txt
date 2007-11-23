@@ -76,7 +76,7 @@ parameters.  Do read ../modules.txt, and understand that entries
 in /etc/modules.conf of:
 
    alias parport_lowlevel parport_pc
-   alias parport_pc io=0x378 irq=none
+   options parport_pc io=0x378 irq=none
    alias char-major-81 videodev
    alias char-major-81-0 c-qcam
 

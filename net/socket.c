@@ -521,6 +521,7 @@ static int sock_fasync(int fd, struct file *filp, int on)
 		if(fa!=NULL)
 		{
 			fa->fa_fd=fd;
+			synchronize_irq();
 			kfree_s(fna,sizeof(struct fasync_struct));
 			release_sock(sock->sk); 
 			return 0;
@@ -536,6 +537,7 @@ static int sock_fasync(int fd, struct file *filp, int on)
 		if (fa!=NULL)
 		{
 			*prev=fa->fa_next;
+			synchronize_irq();
 			kfree_s(fa,sizeof(struct fasync_struct));
 		}
 	}

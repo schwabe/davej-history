@@ -612,6 +612,8 @@ bad_ctc:
 	return 0;
 }
 
+extern int x86_udelay_tsc;
+
 __initfunc(void time_init(void))
 {
 	xtime.tv_sec = get_cmos_time();
@@ -649,6 +651,11 @@ __initfunc(void time_init(void))
 		if (tsc_quotient) {
 			fast_gettimeoffset_quotient = tsc_quotient;
 			use_tsc = 1;
+			/*
+			 *	We should be more selective here I suspect
+			 *	and just enable this for the new intel chips ?
+			 */
+			x86_udelay_tsc = 1;
 #ifndef do_gettimeoffset
 			do_gettimeoffset = do_fast_gettimeoffset;
 #endif

@@ -29,7 +29,7 @@
 
 static const char *version =
 "eepro100.c:v1.09j-t 9/29/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n"
-"eepro100.c: $Revision: 1.18 $ 1999/12/29 Modified by Andrey V. Savochkin <saw@msu.ru>\n";
+"eepro100.c: $Revision: 1.20 $ 1999/12/29 Modified by Andrey V. Savochkin <saw@msu.ru>\n";
 
 /* A few user-configurable values that apply to all boards.
    First set is undocumented and spelled per Intel recommendations. */
@@ -360,19 +360,16 @@ enum commands {
 	CmdIntr = 0x20000000,		/* Interrupt after completion. */
 	CmdTxFlex = 0x00080000,		/* Use "Flexible mode" for CmdTx command. */
 };
-/* Clear CmdSuspend (1<<30) atomically.
-   Otherwise the command status in the lower 16 bits may be reset after
-   an asynchronous change.  Previous driver version used separate 16 bit fields
-   for commands and statuses.  --SAW
+/* Clear CmdSuspend (1<<30) avoiding interference with the card access to the
+   status bits.  Previous driver versions used separate 16 bit fields for
+   commands and statuses.  --SAW
  */
-#ifdef __i386__
-#define speedo_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
-#define speedo_clear_mask(mask, addr) \
-__asm__ __volatile__("lock; andl %0,%1" \
-: : "r" (~(mask)),"m" (speedo_fool_gcc(addr)) : "memory")
-#define clear_suspend(cmd)  speedo_clear_mask(CmdSuspend, &(cmd)->cmd_status)
+#if defined(__LITTLE_ENDIAN)
+#define clear_suspend(cmd)  ((__u16 *)&(cmd)->cmd_status)[1] &= ~0x4000
+#elif defined(__BIG_ENDIAN)
+#define clear_suspend(cmd)  ((__u16 *)&(cmd)->cmd_status)[0] &= ~0x4000
 #else
-#define clear_suspend(cmd)	(cmd)->cmd_status &= cpu_to_le32(~CmdSuspend)
+#error Unsupported byteorder
 #endif
 
 enum SCBCmdBits {

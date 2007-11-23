@@ -161,6 +161,7 @@ extern inline void flush_icache_range (unsigned long address,
     }
 }
 
+#define flush_dcache_page(page)			do { } while (0)
 
 /*
  * flush all user-space atc entries.

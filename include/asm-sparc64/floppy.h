@@ -183,6 +183,8 @@ static void sun_fd_disable_dma(void)
 	doing_pdma = 0;
 	if (pdma_base) {
 		mmu_unlockarea(pdma_base, pdma_areasize);
+		__flush_dcache_range((unsigned long)pdma_base,
+				     (unsigned long)pdma_base + pdma_areasize);
 		pdma_base = 0;
 	}
 }

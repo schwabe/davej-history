@@ -13,11 +13,36 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 
+#include <asm/delay.h>
 #ifdef __SMP__
 #include <asm/smp.h>
 #endif
 
-void __delay(unsigned long loops)
+int x86_udelay_tsc;
+	
+/*
+ *	Do a udelay using the TSC for any CPU that happens
+ *	to have one that we trust. This could be optimised to avoid
+ *	the multiply per loop but its a delay loop so who are we kidding...
+ */
+
+static void __rdtsc_delay(unsigned long loops)
+{
+	unsigned long bclock, now;
+	
+	rdtscl(bclock);
+	do
+	{
+		rdtscl(now);
+	}
+	while((now-bclock) < loops);
+}
+
+/*
+ *	Non TSC based delay loop for 386, 486, MediaGX
+ */
+ 
+static void __loop_delay(unsigned long loops)
 {
 	int d0;
 	__asm__ __volatile__(
@@ -30,7 +55,15 @@ void __delay(unsigned long loops)
 		:"0" (loops));
 }
 
-inline void __const_udelay(unsigned long xloops)
+void __delay(unsigned long loops)
+{
+	if(x86_udelay_tsc)
+		__rdtsc_delay(loops);
+	else
+		__loop_delay(loops);
+}
+
+void __const_udelay(unsigned long xloops)
 {
 	int d0;
 	__asm__("mull %0"
@@ -39,7 +72,15 @@ inline void __const_udelay(unsigned long xloops)
         __delay(xloops);
 }
 
+/*
+ *	Do a udelay using the delay/jump loop. This won't work on 
+ *	the next intel CPU's and isnt ideal on anything with APM
+ */
+ 
+
 void __udelay(unsigned long usecs)
 {
 	__const_udelay(usecs * 0x000010c6);  /* 2**32 / 1000000 */
 }
+
+

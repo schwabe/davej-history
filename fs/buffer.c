@@ -43,6 +43,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/bitops.h>
+#include <asm/pgtable.h>
 
 #define NR_SIZES 7
 static char buffersize_index[65] =
@@ -1258,7 +1259,7 @@ bad_count:
 int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 {
 	struct buffer_head *bh, *prev, *next, *arr[MAX_BUF_PER_PAGE];
-	int block, nr;
+	int block, nr, need_dcache_flush;
 
 	if (!PageLocked(page))
 		panic("brw_page: page not locked for I/O");
@@ -1277,6 +1278,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 		return -ENOMEM;
 	}
 	nr = 0;
+	need_dcache_flush = 0;
 	next = bh;
 	do {
 		struct buffer_head * tmp;
@@ -1303,9 +1305,10 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 					ll_rw_block(READ, 1, &tmp);
 				wait_on_buffer(tmp);
 			}
-			if (rw == READ) 
+			if (rw == READ) {
 				memcpy(next->b_data, tmp->b_data, size);
-			else {
+				need_dcache_flush = 1;
+			} else {
 				memcpy(tmp->b_data, next->b_data, size);
 				mark_buffer_dirty(tmp, 0);
 			}
@@ -1319,6 +1322,8 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 			set_bit(BH_Dirty, &next->b_state);
 		arr[nr++] = next;
 	} while (prev = next, (next = next->b_this_page) != NULL);
+	if (need_dcache_flush)
+		flush_dcache_page(page_address(page));
 	prev->b_this_page = bh;
 	
 	if (nr) {

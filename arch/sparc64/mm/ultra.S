@@ -167,6 +167,29 @@ iflush2:stxa		%g0, [%o1 + %o2] ASI_IC_TAG
 	ba,pt		%xcc, 3b
 	 flush		%g6
 
+	.align		64
+	.globl		flush_dcache_page
+flush_dcache_page:
+	sub		%o0, %g4, %o0
+	clr		%o1
+	srlx		%o0, 11, %o0
+	sethi		%hi(1 << 14), %o2
+1:	ldxa		[%o1] ASI_DCACHE_TAG, %o3
+	andn		%o3, 0x3, %o3
+	cmp		%o0, %o3
+	bne,pt		%xcc, 2f
+	 nop
+	stxa		%g0, [%o1] ASI_DCACHE_TAG
+2:	add		%o1, (1 << 5), %o1
+	cmp		%o1, %o2
+	bne,pt		%xcc, 1b
+	 nop
+	/* The I-cache does not snoop local stores so we
+	 * better flush that too.
+	 */
+	ba,pt		%xcc, flush_icache_page
+	 sllx		%o0, 11, %o0
+
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at
 	 * trap level 1, with interrupts fully disabled.

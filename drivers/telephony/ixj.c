@@ -507,7 +507,7 @@ static void ixj_timeout(unsigned long ptr)
 					j->flags.cringing = 0;
 					ixj_ring_off(board);
 				} else {
-					if (jiffies - j->ring_cadence_jif >= (.5 * hertz)) {
+					if (jiffies - j->ring_cadence_jif >= (hertz/2)) {
 						j->ring_cadence_t--;
 						if (j->ring_cadence_t == -1)
 							j->ring_cadence_t = 15;

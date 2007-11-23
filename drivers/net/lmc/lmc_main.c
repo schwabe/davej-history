@@ -1410,7 +1410,7 @@ static int lmc_rx (struct device *dev) /*fold00*/
          * them into a new buffer??
          */
         
-        if(len > LMC_MTU * 0.75){
+        if(len > (3*LMC_MTU)/4){
             /*
              * If it's a large packet don't copy it just hand it up
              */

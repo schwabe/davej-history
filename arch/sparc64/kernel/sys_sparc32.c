@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107.2.7 2000/01/24 11:36:50 jj Exp $
+/* $Id: sys_sparc32.c,v 1.107.2.8 2000/02/28 04:09:49 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3687,6 +3687,10 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 		break;
 	case NFSCTL_GETFH:
 		err = nfs_getfh32_trans(karg, arg32);
+		break;
+	case NFSCTL_LOCKD:
+		/* No arguments, no translations... */
+		err = 0;
 		break;
 	default:
 		err = -EINVAL;

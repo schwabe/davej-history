@@ -33,6 +33,7 @@ extern void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page);
 extern void (*flush_cache_sigtramp)(unsigned long addr);
 extern void (*flush_page_to_ram)(unsigned long page);
 #define flush_icache_range(start, end) flush_cache_all()
+#define flush_dcache_page(page)			do { } while (0)
 
 /* TLB flushing:
  *

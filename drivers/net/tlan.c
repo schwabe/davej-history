@@ -42,7 +42,8 @@
  * 				  to overwrite timers like TLAN_TIMER_ACTIVITY
  * 				  Patch from John Cagle <john.cagle@compaq.com>
  * 				- Removed dependency of HZ being 100.
- *
+ *				- Statistics is now fixed.
+ *				- Minor stuff.
  ********************************************************************************/
 
 
@@ -304,7 +305,7 @@ extern int init_module(void)
 	u8		irq;
 	u8		rev;
 
-	printk( "TLAN driver, v%d.%d, (C) 1997-8 Caldera, Inc.\n",
+	printk(KERN_INFO "TLAN driver, v%d.%d, (C) 1997-8 Caldera, Inc.\n",
 		TLanVersionMajor,
 		TLanVersionMinor
 	      );
@@ -360,7 +361,7 @@ extern int init_module(void)
 			priv->nextDevice = TLanDevices;
 			TLanDevices = dev;
 			TLanDevicesInstalled++;
-			printk("TLAN:  %s irq=%2d io=%04x, %s, Rev. %d\n",
+			printk(KERN_INFO "TLAN:  %s irq=%2d io=%04x, %s, Rev. %d\n",
 				dev->name,
 				(int) dev->irq,
 				(int) dev->base_addr,
@@ -499,7 +500,7 @@ extern int tlan_probe( struct device *dev )
 	priv->debug =      dev->mem_end;
 
 
-	printk("TLAN %d.%d:  %s irq=%2d io=%04x, %s, Rev. %d\n",
+	printk(KERN_INFO "TLAN %d.%d:  %s irq=%2d io=%04x, %s, Rev. %d\n",
 		TLanVersionMajor,
 		TLanVersionMinor,
 		dev->name, 
@@ -1990,13 +1991,13 @@ TLan_FinishReset( struct device *dev )
 
 	if ( ( priv->adapter->flags & TLAN_ADAPTER_UNMANAGED_PHY ) || ( priv->aui ) ) {
 		status = MII_GS_LINK;
-		printk( "TLAN:  %s: Link forced.\n", dev->name );
+		printk(KERN_INFO "TLAN:  %s: Link forced.\n", dev->name );
 	} else {
 		TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
 		udelay( 1000 );
 		TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
 		if ( status & MII_GS_LINK ) {
-			printk( "TLAN:  %s: Link active.\n", dev->name );
+			printk(KERN_INFO "TLAN:  %s: Link active.\n", dev->name );
 			TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK );
 		}
 	}
@@ -2020,7 +2021,7 @@ TLan_FinishReset( struct device *dev )
 		outl( virt_to_bus( priv->rxList ), dev->base_addr + TLAN_CH_PARM );
 		outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
 	} else {
-		printk( "TLAN:  %s: Link inactive, will retry in 10 secs...\n", dev->name );
+		printk(KERN_INFO "TLAN:  %s: Link inactive, will retry in 10 secs...\n", dev->name );
 		TLan_SetTimer( dev, (10*HZ), TLAN_TIMER_FINISH_RESET );
 		return;
 	}
@@ -2304,7 +2305,7 @@ void TLan_PhyStartLink( struct device *dev )
 		 * but the card need additional time to start AN.
 		 * .5 sec should be plenty extra.
 		 */
-		printk( "TLAN:  %s: Starting autonegotiation.\n", dev->name );
+		printk(KERN_INFO "TLAN:  %s: Starting autonegotiation.\n", dev->name );
 		TLan_SetTimer( dev, (4*HZ), TLAN_TIMER_PHY_FINISH_AN );
 		return;
 	}
@@ -2313,7 +2314,7 @@ void TLan_PhyStartLink( struct device *dev )
 		priv->phyNum = 0;
 		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
 		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
-		TLan_SetTimer( dev, (4*(HZ/1000)), TLAN_TIMER_PHY_PDOWN );
+		TLan_SetTimer( dev, (40*HZ/1000), TLAN_TIMER_PHY_PDOWN );
 		return;
 	} else if ( priv->phyNum == 0 ) {
         	TLan_MiiReadReg( dev, phy, TLAN_TLPHY_CTL, &tctl );
@@ -2361,12 +2362,12 @@ void TLan_PhyFinishAutoNeg( struct device *dev )
 		/* Wait for 8 sec to give the process
 		 * more time.  Perhaps we should fail after a while.
 		 */
-		printk( "TLAN:  Giving autonegotiation more time.\n" );
+		printk(KERN_INFO "TLAN:  Giving autonegotiation more time.\n" );
 		TLan_SetTimer( dev, (8*HZ), TLAN_TIMER_PHY_FINISH_AN );
 		return;
 	}
 
-	printk( "TLAN:  %s: Autonegotiation complete.\n", dev->name );
+	printk(KERN_INFO "TLAN:  %s: Autonegotiation complete.\n", dev->name );
 	TLan_MiiReadReg( dev, phy, MII_AN_ADV, &an_adv );
 	TLan_MiiReadReg( dev, phy, MII_AN_LPA, &an_lpa );
 	mode = an_adv & an_lpa & 0x03E0;
@@ -2380,17 +2381,17 @@ void TLan_PhyFinishAutoNeg( struct device *dev )
 		priv->phyNum = 0;
 		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
 		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
-		TLan_SetTimer( dev, (400*(HZ/1000)), TLAN_TIMER_PHY_PDOWN );
+		TLan_SetTimer( dev, (400*HZ/1000), TLAN_TIMER_PHY_PDOWN );
 		return;
 	}
 
 	if ( priv->phyNum == 0 ) {
 		if ( ( priv->duplex == TLAN_DUPLEX_FULL ) || ( an_adv & an_lpa & 0x0040 ) ) {
 			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, MII_GC_AUTOENB | MII_GC_DUPLEX );
-			printk( "TLAN:  Starting internal PHY with DUPLEX\n" );
+			printk(KERN_INFO "TLAN:  Starting internal PHY with DUPLEX\n" );
 		} else {
 			TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, MII_GC_AUTOENB );
-			printk( "TLAN:  Starting internal PHY with HALF-DUPLEX\n" );
+			printk(KERN_INFO "TLAN:  Starting internal PHY with HALF-DUPLEX\n" );
 		}
 	}
 
