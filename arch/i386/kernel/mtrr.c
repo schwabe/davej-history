@@ -201,7 +201,17 @@
     19990512   Richard Gooch <rgooch@atnf.csiro.au>
 	       Minor cleanups.
   v1.35
+    19990812   Zoltan Boszormenyi <zboszor@mol.hu>
+               PRELIMINARY CHANGES!!! ONLY FOR TESTING!!!
+               Rearrange switch() statements so the driver accomodates to
+               the fact that the AMD Athlon handles its MTRRs the same way
+               as Intel does.
+               
+    19990819   Alan Cox <alan@redhat.com>
+    	       Tested Zoltan's changes on a pre production Athlon - 100%
+    	       success. Fixed one fall through check to be Intel only.
 */
+
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -237,7 +247,7 @@
 #include <asm/hardirq.h>
 #include "irq.h"
 
-#define MTRR_VERSION            "1.35 (19990512)"
+#define MTRR_VERSION            "1.35a (19990819)"
 
 #define TRUE  1
 #define FALSE 0
@@ -321,6 +331,8 @@ static void set_mtrr_prepare (struct set_mtrr_context *ctxt)
     switch (boot_cpu_data.x86_vendor)
     {
       case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 >= 6) break; /* Athlon and post-Athlon CPUs */
+	/* else fall through */
       case X86_VENDOR_CENTAUR:
 	return;
 	/*break;*/
@@ -344,6 +356,7 @@ static void set_mtrr_prepare (struct set_mtrr_context *ctxt)
 
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
       case X86_VENDOR_INTEL:
 	/*  Disable MTRRs, and set the default type to uncached  */
 	rdmsr (MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
@@ -365,6 +378,8 @@ static void set_mtrr_done (struct set_mtrr_context *ctxt)
     switch (boot_cpu_data.x86_vendor)
     {
       case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 >= 6) break; /* Athlon and post-Athlon CPUs */
+	/* else fall through */
       case X86_VENDOR_CENTAUR:
 	__restore_flags (ctxt->flags);
 	return;
@@ -376,6 +391,7 @@ static void set_mtrr_done (struct set_mtrr_context *ctxt)
     /*  Restore MTRRdefType  */
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
       case X86_VENDOR_INTEL:
 	wrmsr (MTRRdefType_MSR, ctxt->deftype_lo, ctxt->deftype_hi);
 	break;
@@ -406,6 +422,9 @@ static unsigned int get_num_var_ranges (void)
 
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 < 6) return 2; /* pre-Athlon CPUs */
+	/* else fall through */
       case X86_VENDOR_INTEL:
 	rdmsr (MTRRcap_MSR, config, dummy);
 	return (config & 0xff);
@@ -415,9 +434,6 @@ static unsigned int get_num_var_ranges (void)
       case X86_VENDOR_CENTAUR:
         /*  and Centaur has 8 MCR's  */
 	return 8;
-	/*break;*/
-      case X86_VENDOR_AMD:
-	return 2;
 	/*break;*/
     }
     return 0;
@@ -430,12 +446,14 @@ static int have_wrcomb (void)
 
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 < 6) return 1; /* pre-Athlon CPUs */
+	/* else fall through */
       case X86_VENDOR_INTEL:
 	rdmsr (MTRRcap_MSR, config, dummy);
 	return (config & (1<<10));
 	/*break;*/
       case X86_VENDOR_CYRIX:
-      case X86_VENDOR_AMD:
       case X86_VENDOR_CENTAUR:
 	return 1;
 	/*break;*/
@@ -1062,9 +1080,23 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 < 6) { /* pre-Athlon CPUs */
+	  /* Apply the K6 block alignment and size rules
+	     In order
+		o Uncached or gathering only
+		o 128K or bigger block
+		o Power of 2 block
+		o base suitably aligned to the power
+	    */
+	  if (type > MTRR_TYPE_WRCOMB || size < (1 << 17) ||
+	      (size & ~(size-1))-size || (base & (size-1)))
+	      return -EINVAL;
+	  break;
+	} /* else fall through */
       case X86_VENDOR_INTEL:
 	/*  For Intel PPro stepping <= 7, must be 4 MiB aligned  */
-	if ( (boot_cpu_data.x86 == 6) && (boot_cpu_data.x86_model == 1) &&
+	if ( boot_cpu_data.x86_vendor == X86_VENDOR_INTEL && (boot_cpu_data.x86 == 6) && (boot_cpu_data.x86_model == 1) &&
 	     (boot_cpu_data.x86_mask <= 7) && ( base & ( (1 << 22) - 1 ) ) )
 	{
 	    printk ("mtrr: base(0x%lx) is not 4 MiB aligned\n", base);
@@ -1104,18 +1136,6 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 		    base, size);
 	    return -EINVAL;
 	}
-	break;
-      case X86_VENDOR_AMD:
-    	/* Apply the K6 block alignment and size rules
-    	   In order
-    	      o Uncached or gathering only
-    	      o 128K or bigger block
-    	      o Power of 2 block
-    	      o base suitably aligned to the power
-    	  */
-    	if (type > MTRR_TYPE_WRCOMB || size < (1 << 17) ||
-	    (size & ~(size-1))-size || (base & (size-1)))
-	    return -EINVAL;
 	break;
       default:
 	return -EINVAL;
@@ -1657,6 +1677,12 @@ __initfunc(static void mtrr_setup (void))
     printk ("mtrr: v%s Richard Gooch (rgooch@atnf.csiro.au)\n", MTRR_VERSION);
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 < 6) { /* pre-Athlon CPUs */
+	  get_mtrr = amd_get_mtrr;
+	  set_mtrr_up = amd_set_mtrr_up;
+	  break;
+	} /* else fall through */
       case X86_VENDOR_INTEL:
 	get_mtrr = intel_get_mtrr;
 	set_mtrr_up = intel_set_mtrr_up;
@@ -1665,10 +1691,6 @@ __initfunc(static void mtrr_setup (void))
 	get_mtrr = cyrix_get_arr;
 	set_mtrr_up = cyrix_set_arr_up;
 	get_free_region = cyrix_get_free_region;
-	break;
-      case X86_VENDOR_AMD:
-	get_mtrr = amd_get_mtrr;
-	set_mtrr_up = amd_set_mtrr_up;
 	break;
      case X86_VENDOR_CENTAUR:
         get_mtrr = centaur_get_mcr;
@@ -1688,6 +1710,8 @@ __initfunc(void mtrr_init_boot_cpu (void))
     mtrr_setup ();
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 < 6) break; /* pre-Athlon CPUs */
       case X86_VENDOR_INTEL:
 	get_mtrr_state (&smp_mtrr_state);
 	break;
@@ -1724,6 +1748,9 @@ __initfunc(void mtrr_init_secondary_cpu (void))
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return;
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	/* Just for robustness: pre-Athlon CPUs cannot do SMP. */
+	if (boot_cpu_data.x86 < 6) break;
       case X86_VENDOR_INTEL:
 	intel_mtrr_init_secondary_cpu ();
 	break;
@@ -1749,6 +1776,8 @@ __initfunc(int mtrr_init(void))
 #  ifdef __SMP__
     switch (boot_cpu_data.x86_vendor)
     {
+      case X86_VENDOR_AMD:
+	if (boot_cpu_data.x86 < 6) break; /* pre-Athlon CPUs */
       case X86_VENDOR_INTEL:
 	finalize_mtrr_state (&smp_mtrr_state);
 	mtrr_state_warn (smp_changes_mask);

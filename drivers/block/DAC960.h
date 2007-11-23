@@ -672,6 +672,57 @@ DAC960_DCDB_T;
 
 
 /*
+  Define the SCSI INQUIRY Standard Data reply structure.
+*/
+
+typedef struct DAC960_SCSI_Inquiry
+{
+  unsigned char PeripheralDeviceType:5;			/* Byte 0 Bits 0-4 */
+  unsigned char PeripheralQualifier:3;			/* Byte 0 Bits 5-7 */
+  unsigned char DeviceTypeModifier:7;			/* Byte 1 Bits 0-6 */
+  boolean RMB:1;					/* Byte 1 Bit 7 */
+  unsigned char ANSI_ApprovedVersion:3;			/* Byte 2 Bits 0-2 */
+  unsigned char ECMA_Version:3;				/* Byte 2 Bits 3-5 */
+  unsigned char ISO_Version:2;				/* Byte 2 Bits 6-7 */
+  unsigned char ResponseDataFormat:4;			/* Byte 3 Bits 0-3 */
+  unsigned char :2;					/* Byte 3 Bits 4-5 */
+  boolean TrmIOP:1;					/* Byte 3 Bit 6 */
+  boolean AENC:1;					/* Byte 3 Bit 7 */
+  unsigned char AdditionalLength;			/* Byte 4 */
+  unsigned char :8;					/* Byte 5 */
+  unsigned char :8;					/* Byte 6 */
+  boolean SftRe:1;					/* Byte 7 Bit 0 */
+  boolean CmdQue:1;					/* Byte 7 Bit 1 */
+  boolean :1;						/* Byte 7 Bit 2 */
+  boolean Linked:1;					/* Byte 7 Bit 3 */
+  boolean Sync:1;					/* Byte 7 Bit 4 */
+  boolean WBus16:1;					/* Byte 7 Bit 5 */
+  boolean WBus32:1;					/* Byte 7 Bit 6 */
+  boolean RelAdr:1;					/* Byte 7 Bit 7 */
+  unsigned char VendorIdentification[8];		/* Bytes 8-15 */
+  unsigned char ProductIdentification[16];		/* Bytes 16-31 */
+  unsigned char ProductRevisionLevel[4];		/* Bytes 32-35 */
+}
+DAC960_SCSI_Inquiry_T;
+
+
+/*
+  Define the SCSI INQUIRY Unit Serial Number reply structure.
+*/
+
+typedef struct DAC960_SCSI_Inquiry_UnitSerialNumber
+{
+  unsigned char PeripheralDeviceType:5;			/* Byte 0 Bits 0-4 */
+  unsigned char PeripheralQualifier:3;			/* Byte 0 Bits 5-7 */
+  unsigned char PageCode;				/* Byte 1 */
+  unsigned char :8;					/* Byte 2 */
+  unsigned char PageLength;				/* Byte 3 */
+  unsigned char ProductSerialNumber[28];		/* Bytes 4 - 31 */
+}
+DAC960_SCSI_Inquiry_UnitSerialNumber_T;
+
+
+/*
   Define the Scatter/Gather List Type 1 32 Bit Address 32 Bit Byte Count
   structure.
 */
@@ -977,12 +1028,12 @@ static inline void *Bus_to_Virtual(DAC960_BusAddress_T BusAddress)
 
 
 /*
-  Define the Controller Line, Status Buffer, Rebuild Progress, and
-  User Message Sizes.
+  Define the Controller Line Buffer, Status Buffer, Rebuild Progress,
+  and User Message Sizes.
 */
 
 #define DAC960_LineBufferSize			100
-#define DAC960_StatusBufferSize			5000
+#define DAC960_StatusBufferSize			16384
 #define DAC960_RebuildProgressSize		200
 #define DAC960_UserMessageSize			200
 
@@ -1183,6 +1234,7 @@ typedef struct DAC960_Controller
   unsigned long MonitoringTimerCount;
   unsigned long SecondaryMonitoringTime;
   unsigned long LastProgressReportTime;
+  unsigned long LastCurrentStatusTime;
   boolean DualModeMemoryMailboxInterface;
   boolean SAFTE_EnclosureManagementEnabled;
   boolean ControllerInitialized;
@@ -1190,6 +1242,8 @@ typedef struct DAC960_Controller
   boolean NeedLogicalDriveInformation;
   boolean NeedErrorTableInformation;
   boolean NeedDeviceStateInformation;
+  boolean NeedDeviceInquiryInformation;
+  boolean NeedDeviceSerialNumberInformation;
   boolean NeedRebuildProgress;
   boolean NeedConsistencyCheckProgress;
   boolean EphemeralProgressMessage;
@@ -1209,6 +1263,7 @@ typedef struct DAC960_Controller
   PROC_DirectoryEntry_T CurrentStatusProcEntry;
   PROC_DirectoryEntry_T UserCommandProcEntry;
   WaitQueue_T *CommandWaitQueue;
+  DAC960_DCDB_T MonitoringDCDB;
   DAC960_Enquiry_T Enquiry[2];
   DAC960_ErrorTable_T ErrorTable[2];
   DAC960_EventLogEntry_T EventLogEntry;
@@ -1219,12 +1274,17 @@ typedef struct DAC960_Controller
   DAC960_LogicalDriveState_T LogicalDriveInitialState[DAC960_MaxLogicalDrives];
   DAC960_DeviceState_T DeviceState[2][DAC960_MaxChannels][DAC960_MaxTargets];
   DAC960_Command_T Commands[DAC960_MaxDriverQueueDepth];
+  DAC960_SCSI_Inquiry_T
+    InquiryStandardData[DAC960_MaxChannels][DAC960_MaxTargets];
+  DAC960_SCSI_Inquiry_UnitSerialNumber_T
+    InquiryUnitSerialNumber[DAC960_MaxChannels][DAC960_MaxTargets];
   DiskPartition_T DiskPartitions[DAC960_MinorCount];
   int LogicalDriveUsageCount[DAC960_MaxLogicalDrives];
   int PartitionSizes[DAC960_MinorCount];
   int BlockSizes[DAC960_MinorCount];
   int MaxSectorsPerRequest[DAC960_MinorCount];
   int MaxSegmentsPerRequest[DAC960_MinorCount];
+  int DeviceResetCount[DAC960_MaxChannels][DAC960_MaxTargets];
   boolean DirectCommandActive[DAC960_MaxChannels][DAC960_MaxTargets];
   char InitialStatusBuffer[DAC960_StatusBufferSize];
   char CurrentStatusBuffer[DAC960_StatusBufferSize];

@@ -19,8 +19,8 @@
 */
 
 
-#define DAC960_DriverVersion			"2.2.2"
-#define DAC960_DriverDate			"3 July 1999"
+#define DAC960_DriverVersion			"2.2.4"
+#define DAC960_DriverDate			"23 August 1999"
 
 
 #include <linux/version.h>
@@ -478,6 +478,7 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
       unsigned long BaseAddress0 = PCI_Device->base_address[0];
       unsigned long BaseAddress1 = PCI_Device->base_address[1];
       unsigned short SubsystemVendorID, SubsystemDeviceID;
+      int CommandIdentifier;
       pci_read_config_word(PCI_Device, PCI_SUBSYSTEM_VENDOR_ID,
 			   &SubsystemVendorID);
       pci_read_config_word(PCI_Device, PCI_SUBSYSTEM_ID,
@@ -584,9 +585,15 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
 	  break;
 	}
       DAC960_ActiveControllerCount++;
-      Controller->Commands[0].Controller = Controller;
-      Controller->Commands[0].Next = NULL;
-      Controller->FreeCommands = &Controller->Commands[0];
+      for (CommandIdentifier = 0;
+	   CommandIdentifier < DAC960_MaxChannels;
+	   CommandIdentifier++)
+	{
+	  Controller->Commands[CommandIdentifier].Controller = Controller;
+	  Controller->Commands[CommandIdentifier].Next =
+	    Controller->FreeCommands;
+	  Controller->FreeCommands = &Controller->Commands[CommandIdentifier];
+	}
       continue;
     Failure:
       if (IO_Address == 0)
@@ -754,14 +761,13 @@ static boolean DAC960_ReadControllerConfiguration(DAC960_Controller_T
 
 
 /*
-  DAC960_ReportControllerConfiguration reports the configuration of
+  DAC960_ReportControllerConfiguration reports the Configuration Information of
   Controller.
 */
 
 static boolean DAC960_ReportControllerConfiguration(DAC960_Controller_T
 						    *Controller)
 {
-  int LogicalDriveNumber, Channel, TargetID;
   DAC960_Info("Configuring Mylex %s PCI RAID Controller\n",
 	      Controller, Controller->ModelName);
   DAC960_Info("  Firmware Version: %s, Channels: %d, Memory Size: %dMB\n",
@@ -793,40 +799,199 @@ static boolean DAC960_ReportControllerConfiguration(DAC960_Controller_T
 	      Controller->GeometryTranslationSectors);
   if (Controller->SAFTE_EnclosureManagementEnabled)
     DAC960_Info("  SAF-TE Enclosure Management Enabled\n", Controller);
+  return true;
+}
+
+
+/*
+  DAC960_ReadDeviceConfiguration reads the Device Configuration Information by
+  requesting the SCSI Inquiry and SCSI Inquiry Unit Serial Number information
+  for each device connected to Controller.
+*/
+
+static boolean DAC960_ReadDeviceConfiguration(DAC960_Controller_T *Controller)
+{
+  DAC960_DCDB_T DCDBs[DAC960_MaxChannels], *DCDB;
+  Semaphore_T Semaphores[DAC960_MaxChannels], *Semaphore;
+  unsigned long ProcessorFlags;
+  int Channel, TargetID;
+  for (TargetID = 0; TargetID < DAC960_MaxTargets; TargetID++)
+    {
+      for (Channel = 0; Channel < Controller->Channels; Channel++)
+	{
+	  DAC960_Command_T *Command = &Controller->Commands[Channel];
+	  DAC960_SCSI_Inquiry_T *InquiryStandardData =
+	    &Controller->InquiryStandardData[Channel][TargetID];
+	  InquiryStandardData->PeripheralDeviceType = 0x1F;
+	  Semaphore = &Semaphores[Channel];
+	  *Semaphore = MUTEX_LOCKED;
+	  DCDB = &DCDBs[Channel];
+	  DAC960_ClearCommand(Command);
+	  Command->CommandType = DAC960_ImmediateCommand;
+	  Command->Semaphore = Semaphore;
+	  Command->CommandMailbox.Type3.CommandOpcode = DAC960_DCDB;
+	  Command->CommandMailbox.Type3.BusAddress = Virtual_to_Bus(DCDB);
+	  DCDB->Channel = Channel;
+	  DCDB->TargetID = TargetID;
+	  DCDB->Direction = DAC960_DCDB_DataTransferDeviceToSystem;
+	  DCDB->EarlyStatus = false;
+	  DCDB->Timeout = DAC960_DCDB_Timeout_10_seconds;
+	  DCDB->NoAutomaticRequestSense = false;
+	  DCDB->DisconnectPermitted = true;
+	  DCDB->TransferLength = sizeof(DAC960_SCSI_Inquiry_T);
+	  DCDB->BusAddress = Virtual_to_Bus(InquiryStandardData);
+	  DCDB->CDBLength = 6;
+	  DCDB->TransferLengthHigh4 = 0;
+	  DCDB->SenseLength = sizeof(DCDB->SenseData);
+	  DCDB->CDB[0] = 0x12; /* INQUIRY */
+	  DCDB->CDB[1] = 0; /* EVPD = 0 */
+	  DCDB->CDB[2] = 0; /* Page Code */
+	  DCDB->CDB[3] = 0; /* Reserved */
+	  DCDB->CDB[4] = sizeof(DAC960_SCSI_Inquiry_T);
+	  DCDB->CDB[5] = 0; /* Control */
+	  DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
+	  DAC960_QueueCommand(Command);
+	  DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
+	}
+      for (Channel = 0; Channel < Controller->Channels; Channel++)
+	{
+	  DAC960_Command_T *Command = &Controller->Commands[Channel];
+	  DAC960_SCSI_Inquiry_UnitSerialNumber_T *InquiryUnitSerialNumber =
+	    &Controller->InquiryUnitSerialNumber[Channel][TargetID];
+	  InquiryUnitSerialNumber->PeripheralDeviceType = 0x1F;
+	  Semaphore = &Semaphores[Channel];
+	  down(Semaphore);
+	  if (Command->CommandStatus != DAC960_NormalCompletion) continue;
+	  Command->Semaphore = Semaphore;
+	  DCDB = &DCDBs[Channel];
+	  DCDB->TransferLength = sizeof(DAC960_SCSI_Inquiry_UnitSerialNumber_T);
+	  DCDB->BusAddress = Virtual_to_Bus(InquiryUnitSerialNumber);
+	  DCDB->SenseLength = sizeof(DCDB->SenseData);
+	  DCDB->CDB[0] = 0x12; /* INQUIRY */
+	  DCDB->CDB[1] = 1; /* EVPD = 1 */
+	  DCDB->CDB[2] = 0x80; /* Page Code */
+	  DCDB->CDB[3] = 0; /* Reserved */
+	  DCDB->CDB[4] = sizeof(DAC960_SCSI_Inquiry_UnitSerialNumber_T);
+	  DCDB->CDB[5] = 0; /* Control */
+	  DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
+	  DAC960_QueueCommand(Command);
+	  DAC960_ReleaseControllerLock(Controller, &ProcessorFlags);
+	  down(Semaphore);
+	}
+    }
+  return true; 
+}
+
+
+/*
+  DAC960_ReportDeviceConfiguration reports the Device Configuration Information
+  of Controller.
+*/
+
+static boolean DAC960_ReportDeviceConfiguration(DAC960_Controller_T *Controller)
+{
+  int LogicalDriveNumber, Channel, TargetID;
   DAC960_Info("  Physical Devices:\n", Controller);
   for (Channel = 0; Channel < Controller->Channels; Channel++)
     for (TargetID = 0; TargetID < DAC960_MaxTargets; TargetID++)
       {
+	DAC960_SCSI_Inquiry_T *InquiryStandardData =
+	  &Controller->InquiryStandardData[Channel][TargetID];
+	DAC960_SCSI_Inquiry_UnitSerialNumber_T *InquiryUnitSerialNumber =
+	  &Controller->InquiryUnitSerialNumber[Channel][TargetID];
 	DAC960_DeviceState_T *DeviceState =
 	  &Controller->DeviceState[Controller->DeviceStateIndex]
 				  [Channel][TargetID];
-	if (!DeviceState->Present) continue;
-	switch (DeviceState->DeviceType)
+	DAC960_ErrorTable_T *ErrorTable =
+	  &Controller->ErrorTable[Controller->ErrorTableIndex];
+	DAC960_ErrorTableEntry_T *ErrorEntry =
+	  &ErrorTable->ErrorTableEntries[Channel][TargetID];
+	char Vendor[1+sizeof(InquiryStandardData->VendorIdentification)];
+	char Model[1+sizeof(InquiryStandardData->ProductIdentification)];
+	char Revision[1+sizeof(InquiryStandardData->ProductRevisionLevel)];
+	char SerialNumber[1+sizeof(InquiryUnitSerialNumber
+				   ->ProductSerialNumber)];
+	int i;
+	if (InquiryStandardData->PeripheralDeviceType == 0x1F) continue;
+	for (i = 0; i < sizeof(Vendor)-1; i++)
 	  {
-	  case DAC960_OtherType:
-	    DAC960_Info("    %d:%d - Other\n", Controller, Channel, TargetID);
-	    break;
-	  case DAC960_DiskType:
-	    DAC960_Info("    %d:%d - Disk: %s, %d blocks\n", Controller,
-			Channel, TargetID,
-			(DeviceState->DeviceState == DAC960_Device_Dead
-			 ? "Dead"
-			 : DeviceState->DeviceState == DAC960_Device_WriteOnly
+	    unsigned char VendorCharacter =
+	      InquiryStandardData->VendorIdentification[i];
+	    Vendor[i] = (VendorCharacter >= ' ' && VendorCharacter <= '~'
+			 ? VendorCharacter : ' ');
+	  }
+	Vendor[sizeof(Vendor)-1] = '\0';
+	for (i = 0; i < sizeof(Model)-1; i++)
+	  {
+	    unsigned char ModelCharacter =
+	      InquiryStandardData->ProductIdentification[i];
+	    Model[i] = (ModelCharacter >= ' ' && ModelCharacter <= '~'
+			? ModelCharacter : ' ');
+	  }
+	Model[sizeof(Model)-1] = '\0';
+	for (i = 0; i < sizeof(Revision)-1; i++)
+	  {
+	    unsigned char RevisionCharacter =
+	      InquiryStandardData->ProductRevisionLevel[i];
+	    Revision[i] = (RevisionCharacter >= ' ' && RevisionCharacter <= '~'
+			   ? RevisionCharacter : ' ');
+	  }
+	Revision[sizeof(Revision)-1] = '\0';
+	DAC960_Info("    %d:%d%s Vendor: %s  Model: %s  Revision: %s\n",
+		    Controller, Channel, TargetID, (TargetID < 10 ? " " : ""),
+		    Vendor, Model, Revision);
+	if (InquiryUnitSerialNumber->PeripheralDeviceType != 0x1F)
+	  {
+	    int SerialNumberLength = InquiryUnitSerialNumber->PageLength;
+	    if (SerialNumberLength >
+		sizeof(InquiryUnitSerialNumber->ProductSerialNumber))
+	      SerialNumberLength =
+		sizeof(InquiryUnitSerialNumber->ProductSerialNumber);
+	    for (i = 0; i < SerialNumberLength; i++)
+	      {
+		unsigned char SerialNumberCharacter =
+		  InquiryUnitSerialNumber->ProductSerialNumber[i];
+		SerialNumber[i] =
+		  (SerialNumberCharacter >= ' ' && SerialNumberCharacter <= '~'
+		   ? SerialNumberCharacter : ' ');
+	      }
+	    SerialNumber[SerialNumberLength] = '\0';
+	    DAC960_Info("         Serial Number: %s\n",
+			Controller, SerialNumber);
+	  }
+	if (DeviceState->Present && DeviceState->DeviceType == DAC960_DiskType)
+	  {
+	    if (Controller->DeviceResetCount[Channel][TargetID] > 0)
+	      DAC960_Info("         Disk Status: %s, %d blocks, %d resets\n",
+			  Controller,
+			  (DeviceState->DeviceState == DAC960_Device_Dead
+			   ? "Dead"
+			   : DeviceState->DeviceState == DAC960_Device_WriteOnly
 			   ? "Write-Only"
 			   : DeviceState->DeviceState == DAC960_Device_Online
-			     ? "Online" : "Standby"),
-			DeviceState->DiskSize);
-	    break;
-	  case DAC960_SequentialType:
-	    DAC960_Info("    %d:%d - Sequential\n", Controller,
-			Channel, TargetID);
-	    break;
-	  case DAC960_CDROM_or_WORM_Type:
-	    DAC960_Info("    %d:%d - CD-ROM or WORM\n", Controller,
-			Channel, TargetID);
-	    break;
+			   ? "Online" : "Standby"),
+			  DeviceState->DiskSize,
+			  Controller->DeviceResetCount[Channel][TargetID]);
+	    else
+	      DAC960_Info("         Disk Status: %s, %d blocks\n", Controller,
+			  (DeviceState->DeviceState == DAC960_Device_Dead
+			   ? "Dead"
+			   : DeviceState->DeviceState == DAC960_Device_WriteOnly
+			   ? "Write-Only"
+			   : DeviceState->DeviceState == DAC960_Device_Online
+			   ? "Online" : "Standby"),
+			  DeviceState->DiskSize);
 	  }
-
+	if (ErrorEntry->ParityErrorCount > 0 ||
+	    ErrorEntry->SoftErrorCount > 0 ||
+	    ErrorEntry->HardErrorCount > 0 ||
+	    ErrorEntry->MiscErrorCount > 0)
+	  DAC960_Info("         Errors - Parity: %d, Soft: %d, "
+		      "Hard: %d, Misc: %d\n", Controller,
+		      ErrorEntry->ParityErrorCount,
+		      ErrorEntry->SoftErrorCount,
+		      ErrorEntry->HardErrorCount,
+		      ErrorEntry->MiscErrorCount);
       }
   DAC960_Info("  Logical Drives:\n", Controller);
   for (LogicalDriveNumber = 0;
@@ -982,6 +1147,8 @@ static void DAC960_InitializeController(DAC960_Controller_T *Controller)
 {
   if (DAC960_ReadControllerConfiguration(Controller) &&
       DAC960_ReportControllerConfiguration(Controller) &&
+      DAC960_ReadDeviceConfiguration(Controller) &&
+      DAC960_ReportDeviceConfiguration(Controller) &&
       DAC960_RegisterBlockDevice(Controller))
     {
       /*
@@ -1625,7 +1792,7 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 	      Controller->NeedErrorTableInformation = true;
 	      Controller->NeedDeviceStateInformation = true;
 	      Controller->DeviceStateChannel = 0;
-	      Controller->DeviceStateTargetID = 0;
+	      Controller->DeviceStateTargetID = -1;
 	      Controller->SecondaryMonitoringTime = jiffies;
 	    }
 	  if (NewEnquiry->RebuildFlag == DAC960_StandbyRebuildInProgress ||
@@ -1705,13 +1872,17 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 				EventLogEntry->TargetID,
 				DAC960_EventMessages[
 				  AdditionalSenseCodeQualifier]);
+	      else if (SenseKey == 6 && AdditionalSenseCode == 0x29)
+		{
+		  if (Controller->MonitoringTimerCount > 0)
+		    Controller->DeviceResetCount[EventLogEntry->Channel]
+						[EventLogEntry->TargetID]++;
+		}
 	      else if (!(SenseKey == 0 ||
 			 (SenseKey == 2 &&
 			  AdditionalSenseCode == 0x04 &&
 			  (AdditionalSenseCodeQualifier == 0x01 ||
-			   AdditionalSenseCodeQualifier == 0x02)) ||
-			 (SenseKey == 6 && AdditionalSenseCode == 0x29 &&
-			  Controller->MonitoringTimerCount == 0)))
+			   AdditionalSenseCodeQualifier == 0x02))))
 		{
 		  DAC960_Critical("Physical Drive %d:%d Error Log: "
 				  "Sense Key = %d, ASC = %02X, ASCQ = %02X\n",
@@ -1793,10 +1964,11 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 			       : NewDeviceState->DeviceState
 				 == DAC960_Device_Online
 				 ? "ONLINE" : "STANDBY"));
-	  if (++Controller->DeviceStateTargetID == DAC960_MaxTargets)
+	  if (OldDeviceState->DeviceState == DAC960_Device_Dead &&
+	      NewDeviceState->DeviceState != DAC960_Device_Dead)
 	    {
-	      Controller->DeviceStateChannel++;
-	      Controller->DeviceStateTargetID = 0;
+	      Controller->NeedDeviceInquiryInformation = true;
+	      Controller->NeedDeviceSerialNumberInformation = true;
 	    }
 	}
       else if (CommandOpcode == DAC960_GetLogicalDriveInformation)
@@ -1948,6 +2120,76 @@ static void DAC960_ProcessCompletedCommand(DAC960_Command_T *Command)
 	}
       if (Controller->NeedDeviceStateInformation)
 	{
+	  if (Controller->NeedDeviceInquiryInformation)
+	    {
+	      DAC960_DCDB_T *DCDB = &Controller->MonitoringDCDB;
+	      DAC960_SCSI_Inquiry_T *InquiryStandardData =
+		&Controller->InquiryStandardData
+			       [Controller->DeviceStateChannel]
+			       [Controller->DeviceStateTargetID];
+	      InquiryStandardData->PeripheralDeviceType = 0x1F;
+	      Command->CommandMailbox.Type3.CommandOpcode = DAC960_DCDB;
+	      Command->CommandMailbox.Type3.BusAddress = Virtual_to_Bus(DCDB);
+	      DCDB->Channel = Controller->DeviceStateChannel;
+	      DCDB->TargetID = Controller->DeviceStateTargetID;
+	      DCDB->Direction = DAC960_DCDB_DataTransferDeviceToSystem;
+	      DCDB->EarlyStatus = false;
+	      DCDB->Timeout = DAC960_DCDB_Timeout_10_seconds;
+	      DCDB->NoAutomaticRequestSense = false;
+	      DCDB->DisconnectPermitted = true;
+	      DCDB->TransferLength = sizeof(DAC960_SCSI_Inquiry_T);
+	      DCDB->BusAddress = Virtual_to_Bus(InquiryStandardData);
+	      DCDB->CDBLength = 6;
+	      DCDB->TransferLengthHigh4 = 0;
+	      DCDB->SenseLength = sizeof(DCDB->SenseData);
+	      DCDB->CDB[0] = 0x12; /* INQUIRY */
+	      DCDB->CDB[1] = 0; /* EVPD = 0 */
+	      DCDB->CDB[2] = 0; /* Page Code */
+	      DCDB->CDB[3] = 0; /* Reserved */
+	      DCDB->CDB[4] = sizeof(DAC960_SCSI_Inquiry_T);
+	      DCDB->CDB[5] = 0; /* Control */
+	      DAC960_QueueCommand(Command);
+	      Controller->NeedDeviceInquiryInformation = false;
+	      return;
+	    }
+	  if (Controller->NeedDeviceSerialNumberInformation)
+	    {
+	      DAC960_DCDB_T *DCDB = &Controller->MonitoringDCDB;
+	      DAC960_SCSI_Inquiry_UnitSerialNumber_T *InquiryUnitSerialNumber =
+		&Controller->InquiryUnitSerialNumber
+			       [Controller->DeviceStateChannel]
+			       [Controller->DeviceStateTargetID];
+	      InquiryUnitSerialNumber->PeripheralDeviceType = 0x1F;
+	      Command->CommandMailbox.Type3.CommandOpcode = DAC960_DCDB;
+	      Command->CommandMailbox.Type3.BusAddress = Virtual_to_Bus(DCDB);
+	      DCDB->Channel = Controller->DeviceStateChannel;
+	      DCDB->TargetID = Controller->DeviceStateTargetID;
+	      DCDB->Direction = DAC960_DCDB_DataTransferDeviceToSystem;
+	      DCDB->EarlyStatus = false;
+	      DCDB->Timeout = DAC960_DCDB_Timeout_10_seconds;
+	      DCDB->NoAutomaticRequestSense = false;
+	      DCDB->DisconnectPermitted = true;
+	      DCDB->TransferLength =
+		sizeof(DAC960_SCSI_Inquiry_UnitSerialNumber_T);
+	      DCDB->BusAddress = Virtual_to_Bus(InquiryUnitSerialNumber);
+	      DCDB->CDBLength = 6;
+	      DCDB->TransferLengthHigh4 = 0;
+	      DCDB->SenseLength = sizeof(DCDB->SenseData);
+	      DCDB->CDB[0] = 0x12; /* INQUIRY */
+	      DCDB->CDB[1] = 1; /* EVPD = 1 */
+	      DCDB->CDB[2] = 0x80; /* Page Code */
+	      DCDB->CDB[3] = 0; /* Reserved */
+	      DCDB->CDB[4] = sizeof(DAC960_SCSI_Inquiry_UnitSerialNumber_T);
+	      DCDB->CDB[5] = 0; /* Control */
+	      DAC960_QueueCommand(Command);
+	      Controller->NeedDeviceSerialNumberInformation = false;
+	      return;
+	    }
+	  if (++Controller->DeviceStateTargetID == DAC960_MaxTargets)
+	    {
+	      Controller->DeviceStateChannel++;
+	      Controller->DeviceStateTargetID = 0;
+	    }
 	  while (Controller->DeviceStateChannel < Controller->Channels)
 	    {
 	      DAC960_DeviceState_T *OldDeviceState =
@@ -3078,9 +3320,8 @@ static boolean DAC960_ExecuteUserCommand(DAC960_Controller_T *Controller,
   DAC960_ProcReadStatus implements reading /proc/rd/status.
 */
 
-static ssize_t DAC960_ProcReadStatus(char *Page, char **Start,
-				     off_t Offset, int Count,
-				     int *EOF, void *Data)
+static int DAC960_ProcReadStatus(char *Page, char **Start, off_t Offset,
+				 int Count, int *EOF, void *Data)
 {
   char *StatusMessage = "OK\n";
   int ControllerNumber, BytesAvailable;
@@ -3107,6 +3348,7 @@ static ssize_t DAC960_ProcReadStatus(char *Page, char **Start,
       *EOF = true;
     }
   if (Count <= 0) return 0;
+  *Start = Page;
   memcpy(Page, &StatusMessage[Offset], Count);
   return Count;
 }
@@ -3116,9 +3358,8 @@ static ssize_t DAC960_ProcReadStatus(char *Page, char **Start,
   DAC960_ProcReadInitialStatus implements reading /proc/rd/cN/initial_status.
 */
 
-static ssize_t DAC960_ProcReadInitialStatus(char *Page, char **Start,
-					    off_t Offset, int Count,
-					    int *EOF, void *Data)
+static int DAC960_ProcReadInitialStatus(char *Page, char **Start, off_t Offset,
+					int Count, int *EOF, void *Data)
 {
   DAC960_Controller_T *Controller = (DAC960_Controller_T *) Data;
   int BytesAvailable = Controller->InitialStatusLength - Offset;
@@ -3128,6 +3369,7 @@ static ssize_t DAC960_ProcReadInitialStatus(char *Page, char **Start,
       *EOF = true;
     }
   if (Count <= 0) return 0;
+  *Start = Page;
   memcpy(Page, &Controller->InitialStatusBuffer[Offset], Count);
   return Count;
 }
@@ -3137,29 +3379,35 @@ static ssize_t DAC960_ProcReadInitialStatus(char *Page, char **Start,
   DAC960_ProcReadCurrentStatus implements reading /proc/rd/cN/current_status.
 */
 
-static ssize_t DAC960_ProcReadCurrentStatus(char *Page, char **Start,
-					    off_t Offset, int Count,
-					    int *EOF, void *Data)
+static int DAC960_ProcReadCurrentStatus(char *Page, char **Start, off_t Offset,
+					int Count, int *EOF, void *Data)
 {
   DAC960_Controller_T *Controller = (DAC960_Controller_T *) Data;
   int BytesAvailable;
-  Controller->CurrentStatusLength = 0;
-  DAC960_AnnounceDriver(Controller);
-  DAC960_ReportControllerConfiguration(Controller);
-  Controller->CurrentStatusBuffer[Controller->CurrentStatusLength++] = ' ';
-  Controller->CurrentStatusBuffer[Controller->CurrentStatusLength++] = ' ';
-  if (Controller->RebuildProgressLength > 0)
+  if (jiffies != Controller->LastCurrentStatusTime)
     {
-      strcpy(&Controller->CurrentStatusBuffer[Controller->CurrentStatusLength],
-	     Controller->RebuildProgressBuffer);
-      Controller->CurrentStatusLength += Controller->RebuildProgressLength;
-    }
-  else
-    {
-      char *StatusMessage = "No Rebuild or Consistency Check in Progress\n";
-      strcpy(&Controller->CurrentStatusBuffer[Controller->CurrentStatusLength],
-	     StatusMessage);
-      Controller->CurrentStatusLength += strlen(StatusMessage);
+      Controller->CurrentStatusLength = 0;
+      DAC960_AnnounceDriver(Controller);
+      DAC960_ReportControllerConfiguration(Controller);
+      DAC960_ReportDeviceConfiguration(Controller);
+      Controller->CurrentStatusBuffer[Controller->CurrentStatusLength++] = ' ';
+      Controller->CurrentStatusBuffer[Controller->CurrentStatusLength++] = ' ';
+      if (Controller->RebuildProgressLength > 0)
+	{
+	  strcpy(&Controller->CurrentStatusBuffer
+			      [Controller->CurrentStatusLength],
+		 Controller->RebuildProgressBuffer);
+	  Controller->CurrentStatusLength += Controller->RebuildProgressLength;
+	}
+      else
+	{
+	  char *StatusMessage = "No Rebuild or Consistency Check in Progress\n";
+	  strcpy(&Controller->CurrentStatusBuffer
+			      [Controller->CurrentStatusLength],
+		 StatusMessage);
+	  Controller->CurrentStatusLength += strlen(StatusMessage);
+	}
+      Controller->LastCurrentStatusTime = jiffies;
     }
   BytesAvailable = Controller->CurrentStatusLength - Offset;
   if (Count >= BytesAvailable)
@@ -3168,6 +3416,7 @@ static ssize_t DAC960_ProcReadCurrentStatus(char *Page, char **Start,
       *EOF = true;
     }
   if (Count <= 0) return 0;
+  *Start = Page;
   memcpy(Page, &Controller->CurrentStatusBuffer[Offset], Count);
   return Count;
 }
@@ -3177,9 +3426,8 @@ static ssize_t DAC960_ProcReadCurrentStatus(char *Page, char **Start,
   DAC960_ProcReadUserCommand implements reading /proc/rd/cN/user_command.
 */
 
-static ssize_t DAC960_ProcReadUserCommand(char *Page, char **Start,
-					  off_t Offset, int Count,
-					  int *EOF, void *Data)
+static int DAC960_ProcReadUserCommand(char *Page, char **Start, off_t Offset,
+				      int Count, int *EOF, void *Data)
 {
   DAC960_Controller_T *Controller = (DAC960_Controller_T *) Data;
   int BytesAvailable = Controller->UserStatusLength - Offset;
@@ -3189,6 +3437,7 @@ static ssize_t DAC960_ProcReadUserCommand(char *Page, char **Start,
       *EOF = true;
     }
   if (Count <= 0) return 0;
+  *Start = Page;
   memcpy(Page, &Controller->UserStatusBuffer[Offset], Count);
   return Count;
 }
@@ -3198,8 +3447,8 @@ static ssize_t DAC960_ProcReadUserCommand(char *Page, char **Start,
   DAC960_ProcWriteUserCommand implements writing /proc/rd/cN/user_command.
 */
 
-static ssize_t DAC960_ProcWriteUserCommand(File_T *File, const char *Buffer,
-					   unsigned long Count, void *Data)
+static int DAC960_ProcWriteUserCommand(File_T *File, const char *Buffer,
+				       unsigned long Count, void *Data)
 {
   DAC960_Controller_T *Controller = (DAC960_Controller_T *) Data;
   char CommandBuffer[80];

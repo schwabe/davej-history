@@ -1,8 +1,9 @@
 #ifndef _RAID5_H
 #define _RAID5_H
 
-#include <linux/raid/md.h>
-#include <linux/raid/xor.h>
+#ifdef __KERNEL__
+#include <linux/md.h>
+#include <asm/atomic.h>
 
 struct disk_info {
 	kdev_t	dev;
@@ -11,16 +12,14 @@ struct disk_info {
 	int	raid_disk;
 	int	write_only;
 	int	spare;
-	int	used_slot;
 };
 
 struct stripe_head {
-	md_spinlock_t		stripe_lock;
 	struct stripe_head	*hash_next, **hash_pprev; /* hash pointers */
 	struct stripe_head	*free_next;		/* pool of free sh's */
 	struct buffer_head	*buffer_pool;		/* pool of free buffers */
 	struct buffer_head	*bh_pool;		/* pool of free bh's */
-	struct raid5_private_data	*raid_conf;
+	struct raid5_data	*raid_conf;
 	struct buffer_head	*bh_old[MD_SB_DISKS];	/* disk image */
 	struct buffer_head	*bh_new[MD_SB_DISKS];	/* buffers of the MD device (present in buffer cache) */
 	struct buffer_head	*bh_copy[MD_SB_DISKS];	/* copy on write of bh_new (bh_new can change from under us) */
@@ -30,7 +29,7 @@ struct stripe_head {
 	unsigned long		sector;			/* sector of this row */
 	int			size;			/* buffers size */
 	int			pd_idx;			/* parity disk index */
-	atomic_t		nr_pending;		/* nr of pending cmds */
+	int			nr_pending;		/* nr of pending cmds */
 	unsigned long		state;			/* state flags */
 	int			cmd;			/* stripe cmd */
 	int			count;			/* nr of waiters */
@@ -68,10 +67,10 @@ struct stripe_head {
 #define	STRIPE_WRITE		1
 #define STRIPE_READ		2
 
-struct raid5_private_data {
+struct raid5_data {
 	struct stripe_head	**stripe_hashtbl;
-	mddev_t			*mddev;
-	mdk_thread_t		*thread, *resync_thread;
+	struct md_dev		*mddev;
+	struct md_thread	*thread, *resync_thread;
 	struct disk_info	disks[MD_SB_DISKS];
 	struct disk_info	*spare;
 	int			buffer_size;
@@ -98,9 +97,7 @@ struct raid5_private_data {
 	struct wait_queue	*wait_for_stripe;
 };
 
-typedef struct raid5_private_data raid5_conf_t;
-
-#define mddev_to_conf(mddev) ((raid5_conf_t *) mddev->private)
+#endif
 
 /*
  * Our supported algorithms

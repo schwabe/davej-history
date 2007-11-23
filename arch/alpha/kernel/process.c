@@ -88,6 +88,7 @@ cpu_idle(void *unused)
 
 		/* Although we are an idle CPU, we do not want to 
 		   get into the scheduler unnecessarily.  */
+		barrier();
 		if (current->need_resched) {
 			schedule();
 			check_pgt_cache();

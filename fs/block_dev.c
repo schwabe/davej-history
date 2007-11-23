@@ -14,8 +14,7 @@ extern int *blk_size[];
 extern int *blksize_size[];
 
 #define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
-#define NBUF 128
-#define READAHEAD_SECTORS      (128 * 4 * 2)
+#define NBUF 64
 
 ssize_t block_write(struct file * filp, const char * buf,
 		    size_t count, loff_t *ppos)
@@ -153,13 +152,12 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 	size_t blocks, rblocks, left;
 	int bhrequest, uptodate;
 	struct buffer_head ** bhb, ** bhe;
-	struct buffer_head ** buflist;
-	struct buffer_head ** bhreq;
+	struct buffer_head * buflist[NBUF];
+	struct buffer_head * bhreq[NBUF];
 	unsigned int chars;
 	loff_t size;
 	kdev_t dev;
 	ssize_t read;
-	int nbuf;
 
 	dev = inode->i_rdev;
 	blocksize = BLOCK_SIZE;
@@ -189,18 +187,6 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 		left = count;
 	if (left <= 0)
 		return 0;
-
-	if ((buflist = (struct buffer_head **) __get_free_page(GFP_KERNEL)) == NULL)
-		return -ENOMEM;
-	if ((bhreq = (struct buffer_head **) __get_free_page(GFP_KERNEL)) == NULL) {
-		free_page((unsigned long) buflist);
-		return -ENOMEM;
-	}
-
-	nbuf = READAHEAD_SECTORS / (blocksize >> 9);
-	if (nbuf > PAGE_SIZE / sizeof(struct buffer_head *))
-		nbuf = PAGE_SIZE / sizeof(struct buffer_head *);
-		
 	read = 0;
 	block = offset >> blocksize_bits;
 	offset &= blocksize-1;
@@ -208,12 +194,8 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 	rblocks = blocks = (left + offset + blocksize - 1) >> blocksize_bits;
 	bhb = bhe = buflist;
 	if (filp->f_reada) {
-#if 0
 	        if (blocks < read_ahead[MAJOR(dev)] / (blocksize >> 9))
 			blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9);
-#else
-		blocks += read_ahead[MAJOR(dev)] / (blocksize >> 9);
-#endif
 		if (rblocks > blocks)
 			blocks = rblocks;
 		
@@ -245,7 +227,7 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 				bhreq[bhrequest++] = *bhb;
 			}
 
-			if (++bhb == &buflist[nbuf])
+			if (++bhb == &buflist[NBUF])
 				bhb = buflist;
 
 			/* If the block we have on hand is uptodate, go ahead
@@ -266,7 +248,7 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 				wait_on_buffer(*bhe);
 				if (!buffer_uptodate(*bhe)) {	/* read error? */
 				        brelse(*bhe);
-					if (++bhe == &buflist[nbuf])
+					if (++bhe == &buflist[NBUF])
 					  bhe = buflist;
 					left = 0;
 					break;
@@ -288,7 +270,7 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 					put_user(0,buf++);
 			}
 			offset = 0;
-			if (++bhe == &buflist[nbuf])
+			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
 		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
 		if (bhe == bhb && !blocks)
@@ -298,12 +280,9 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 /* Release the read-ahead blocks */
 	while (bhe != bhb) {
 		brelse(*bhe);
-		if (++bhe == &buflist[nbuf])
+		if (++bhe == &buflist[NBUF])
 			bhe = buflist;
 	};
-
-	free_page((unsigned long) buflist);
-	free_page((unsigned long) bhreq);
 	if (!read)
 		return -EIO;
 	filp->f_reada = 1;

@@ -100,7 +100,7 @@
  * of writing 0x00 to 0x7f (which should be done by reset): The ES1887 moves
  * into ES1888 mode. This means that it claims IRQ 11, which happens to be my
  * ISDN adapter. Needless to say it no longer worked. I now understand why
- * after rebooting 0x7f already was 0x05, the value of my choise: the BIOS
+ * after rebooting 0x7f already was 0x05, the value of my choice: the BIOS
  * did it.
  *
  * Oh, and this is another trap: in ES1887 docs mixer register 0x70 is decribed
@@ -1200,10 +1200,10 @@ FKS_test (devc);
 
 	/* AAS: info stolen from ALSA: these boards have different clocks */
 	switch(devc->submodel) {
-/* APPARENTLY NOT 1869 
+/* APPARENTLY NOT 1869 AND 1887
 		case SUBMDL_ES1869:
-*/		
 		case SUBMDL_ES1887:
+*/		
 		case SUBMDL_ES1888:
 			devc->caps |= SB_CAP_ES18XX_RATE;
 			break;

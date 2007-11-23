@@ -62,9 +62,8 @@ extern void unplug_device(void * data);
 extern void make_request(int major,int rw, struct buffer_head * bh);
 
 /* md needs this function to remap requests */
-extern int md_map (kdev_t dev, kdev_t *rdev,
-				 unsigned long *rsector, unsigned long size);
-extern int md_make_request (struct buffer_head * bh, int rw);
+extern int md_map (int minor, kdev_t *rdev, unsigned long *rsector, unsigned long size);
+extern int md_make_request (int minor, int rw, struct buffer_head * bh);
 extern int md_error (kdev_t mddev, kdev_t rdev);
 
 extern int * blk_size[MAX_BLKDEV];

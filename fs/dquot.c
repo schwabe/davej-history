@@ -641,6 +641,8 @@ static struct dquot *dqduplicate(struct dquot *dquot)
 		dquot->dq_count--;
 		return NODQUOT;
 	}
+	dquot->dq_referenced++;
+	dqstats.lookups++;
 	return dquot;
 }
 

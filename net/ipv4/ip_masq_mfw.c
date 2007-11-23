@@ -3,7 +3,7 @@
  *
  *	Does (reverse-masq) forwarding based on skb->fwmark value
  *
- *	$Id: ip_masq_mfw.c,v 1.3.2.2 1999/08/13 18:26:26 davem Exp $
+ *	$Id: ip_masq_mfw.c,v 1.3.2.1 1999/07/02 10:10:03 davem Exp $
  *
  * Author:	Juan Jose Ciarlante   <jjciarla@raiz.uncu.edu.ar>
  *		  based on Steven Clarke's portfw
@@ -216,7 +216,6 @@ static int mfw_delhost(struct ip_masq_mfw *mfw, struct ip_mfw_user *mu)
 			(!mu->rport || h->port == mu->rport)) {
 			/* HIT */
 			atomic_dec(&mfw->nhosts);
-			e = h->list.prev;
 			list_del(&h->list);
 			kfree_s(h, sizeof(*h));
 			MOD_DEC_USE_COUNT;

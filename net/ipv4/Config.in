@@ -52,14 +52,6 @@ if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
           tristate 'IP: ipportfw masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPPORTFW
           tristate 'IP: ip fwmark masq-forwarding support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_MFW
 	fi
-	bool 'IP: masquerading virtual server support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_VS
-	if [ "$CONFIG_IP_MASQUERADE_VS" = "y" ]; then
-	  int 'IP masquerading VS table size (the Nth power of 2)' CONFIG_IP_MASQUERADE_VS_TAB_BITS 12
-          tristate 'IPVS: round-robin scheduling' CONFIG_IP_MASQUERADE_VS_RR
-          tristate 'IPVS: weighted round-robin scheduling' CONFIG_IP_MASQUERADE_VS_WRR
-          tristate 'IPVS: weighted least-connection scheduling' CONFIG_IP_MASQUERADE_VS_WLC
-          tristate 'IPVS: persistent client connection scheduling' CONFIG_IP_MASQUERADE_VS_PCC
-	fi
       fi
     fi
   fi

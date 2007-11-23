@@ -280,8 +280,8 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 	 
 	if (n < 0)
 		goto out_nofds;
-	if (n > current->files->max_fdset + 1)
-		n = current->files->max_fdset + 1;
+	if (n > current->files->max_fdset)
+		n = current->files->max_fdset;
 		
 	/*
 	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),

@@ -1471,10 +1471,10 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 /*      This doesn´t work like this for NTSC anyway.
         So, better check the total image size ...
 */
-/*
-	if(mp->height>576 || mp->width>768+BURSTOFFSET)
+
+	if(mp->height>576 || mp->width>768+BURSTOFFSET || mp->height < 32 || mp->width <32)
 		return -EINVAL;
-*/
+
 	if (mp->format >= PALETTEFMT_MAX)
 		return -EINVAL;
 	if (mp->height*mp->width*fmtbppx2[palette2fmt[mp->format]&0x0f]/2
@@ -1977,7 +1977,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		{
 			struct video_buffer v;
 #if LINUX_VERSION_CODE >= 0x020100
-			if(!capable(CAP_SYS_ADMIN))
+			if(!capable(CAP_SYS_ADMIN)
+			|| !capable(CAP_SYS_RAWIO))
 #else
 			if(!suser())
 #endif
@@ -1989,12 +1990,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				v.height > 16 && v.bytesperline > 16)
 				return -EINVAL;
                         if (v.base)
-                        {
-                                if ((unsigned long)v.base&1)
-                                        btv->win.vidadr=(unsigned long)(PAGE_OFFSET|uvirt_to_bus((unsigned long)v.base));
-                                else
-                                        btv->win.vidadr=(unsigned long)v.base;
-                        }
+				btv->win.vidadr=(unsigned long)v.base;
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
 			btv->win.bpp=((v.depth+7)&0x38)/8;
@@ -2216,6 +2212,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
                         struct video_mmap vm;
 			if(copy_from_user((void *) &vm, (void *) arg, sizeof(vm)))
 				return -EFAULT;
+			if (vm.frame < 0 || vm.frame >= MAX_GBUFFERS)
+				return -EIO;
                         if (btv->frame_stat[vm.frame] == GBUFFER_GRABBING)
                                 return -EBUSY;
 		        return vgrab(btv, &vm);

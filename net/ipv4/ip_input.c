@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.37.2.1 1999/08/13 18:26:08 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.37 1999/04/22 10:38:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -266,15 +266,6 @@ int ip_local_deliver(struct sk_buff *skb)
 		}
 
 		ret = ip_fw_demasquerade(&skb);
-#ifdef CONFIG_IP_MASQUERADE_VS
-		if (ret == -3) {
-			/* packet had been tunneled */
-			return(0);
-		}
-		if (ret == -2) {
-		  	return skb->dst->input(skb);
-		}
-#endif
 		if (ret < 0) {
 			kfree_skb(skb);
 			return 0;

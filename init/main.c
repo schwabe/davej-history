@@ -19,7 +19,6 @@
 #include <linux/utsname.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
-#include <linux/raid/md.h>
 #include <linux/smp_lock.h>
 #include <linux/blk.h>
 #include <linux/hdreg.h>
@@ -471,7 +470,7 @@ static struct dev_name_struct {
 #ifdef CONFIG_BLK_DEV_FD
 	{ "fd",      0x0200 },
 #endif
-#if CONFIG_MD_BOOT || CONFIG_AUTODETECT_RAID
+#ifdef CONFIG_MD_BOOT
 	{ "md",      0x0900 },	     
 #endif     
 #ifdef CONFIG_BLK_DEV_XD
@@ -882,9 +881,6 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_MD_BOOT
 	{ "md=", md_setup},
-#endif
-#if CONFIG_BLK_DEV_MD
-	{ "raid=", raid_setup},
 #endif
 #ifdef CONFIG_ADBMOUSE
 	{ "adb_buttons=", adb_mouse_setup },
@@ -1371,9 +1367,6 @@ static void __init do_basic_setup(void)
 			while (pid != wait(&i));
 		if (MAJOR(real_root_dev) != RAMDISK_MAJOR
 		     || MINOR(real_root_dev) != 0) {
-#ifdef CONFIG_BLK_DEV_MD
-			autodetect_raid();
-#endif
 			error = change_root(real_root_dev,"/initrd");
 			if (error)
 				printk(KERN_ERR "Change root to /initrd: "

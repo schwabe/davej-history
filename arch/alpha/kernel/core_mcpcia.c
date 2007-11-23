@@ -568,65 +568,65 @@ mcpcia_print_uncorrectable(struct el_MCPCIA_uncorrected_frame_mcheck *logout)
 
 	/* Print PAL fields */
 	for (i = 0; i < 24; i += 2) {
-		printk("\tpal temp[%d-%d]\t\t= %16lx %16lx\n\r",
+		printk("\tpal temp[%d-%d]\t\t= %16lx %16lx\n",
 		       i, i+1, frame->paltemp[i], frame->paltemp[i+1]);
 	}
 	for (i = 0; i < 8; i += 2) {
-		printk("\tshadow[%d-%d]\t\t= %16lx %16lx\n\r",
+		printk("\tshadow[%d-%d]\t\t= %16lx %16lx\n",
 		       i, i+1, frame->shadow[i], 
 		       frame->shadow[i+1]);
 	}
-	printk("\tAddr of excepting instruction\t= %16lx\n\r",
+	printk("\tAddr of excepting instruction\t= %16lx\n",
 	       frame->exc_addr);
-	printk("\tSummary of arithmetic traps\t= %16lx\n\r",
+	printk("\tSummary of arithmetic traps\t= %16lx\n",
 	       frame->exc_sum);
-	printk("\tException mask\t\t\t= %16lx\n\r",
+	printk("\tException mask\t\t\t= %16lx\n",
 	       frame->exc_mask);
-	printk("\tBase address for PALcode\t= %16lx\n\r",
+	printk("\tBase address for PALcode\t= %16lx\n",
 	       frame->pal_base);
-	printk("\tInterrupt Status Reg\t\t= %16lx\n\r",
+	printk("\tInterrupt Status Reg\t\t= %16lx\n",
 	       frame->isr);
-	printk("\tCURRENT SETUP OF EV5 IBOX\t= %16lx\n\r",
+	printk("\tCURRENT SETUP OF EV5 IBOX\t= %16lx\n",
 	       frame->icsr);
-	printk("\tI-CACHE Reg %s parity error\t= %16lx\n\r",
+	printk("\tI-CACHE Reg %s parity error\t= %16lx\n",
 	       (frame->ic_perr_stat & 0x800L) ? 
 	       "Data" : "Tag", 
 	       frame->ic_perr_stat); 
-	printk("\tD-CACHE error Reg\t\t= %16lx\n\r",
+	printk("\tD-CACHE error Reg\t\t= %16lx\n",
 	       frame->dc_perr_stat);
 	if (frame->dc_perr_stat & 0x2) {
 		switch (frame->dc_perr_stat & 0x03c) {
 		case 8:
-			printk("\t\tData error in bank 1\n\r");
+			printk("\t\tData error in bank 1\n");
 			break;
 		case 4:
-			printk("\t\tData error in bank 0\n\r");
+			printk("\t\tData error in bank 0\n");
 			break;
 		case 20:
-			printk("\t\tTag error in bank 1\n\r");
+			printk("\t\tTag error in bank 1\n");
 			break;
 		case 10:
-			printk("\t\tTag error in bank 0\n\r");
+			printk("\t\tTag error in bank 0\n");
 			break;
 		}
 	}
-	printk("\tEffective VA\t\t\t= %16lx\n\r",
+	printk("\tEffective VA\t\t\t= %16lx\n",
 	       frame->va);
-	printk("\tReason for D-stream\t\t= %16lx\n\r",
+	printk("\tReason for D-stream\t\t= %16lx\n",
 	       frame->mm_stat);
-	printk("\tEV5 SCache address\t\t= %16lx\n\r",
+	printk("\tEV5 SCache address\t\t= %16lx\n",
 	       frame->sc_addr);
-	printk("\tEV5 SCache TAG/Data parity\t= %16lx\n\r",
+	printk("\tEV5 SCache TAG/Data parity\t= %16lx\n",
 	       frame->sc_stat);
-	printk("\tEV5 BC_TAG_ADDR\t\t\t= %16lx\n\r",
+	printk("\tEV5 BC_TAG_ADDR\t\t\t= %16lx\n",
 	       frame->bc_tag_addr);
-	printk("\tEV5 EI_ADDR: Phys addr of Xfer\t= %16lx\n\r",
+	printk("\tEV5 EI_ADDR: Phys addr of Xfer\t= %16lx\n",
 	       frame->ei_addr);
-	printk("\tFill Syndrome\t\t\t= %16lx\n\r",
+	printk("\tFill Syndrome\t\t\t= %16lx\n",
 	       frame->fill_syndrome);
-	printk("\tEI_STAT reg\t\t\t= %16lx\n\r",
+	printk("\tEI_STAT reg\t\t\t= %16lx\n",
 	       frame->ei_stat);
-	printk("\tLD_LOCK\t\t\t\t= %16lx\n\r",
+	printk("\tLD_LOCK\t\t\t\t= %16lx\n",
 	       frame->ld_lock);
 }
 
@@ -657,7 +657,8 @@ mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 	process_mcheck_info(vector, la_ptr, regs, "MCPCIA",
 			    DEBUG_MCHECK, MCPCIA_mcheck_expected[cpu]);
 
-	if (vector != 0x620 && vector != 0x630) {
+	if (vector != 0x620 && vector != 0x630
+	    && ! MCPCIA_mcheck_expected[cpu]) {
 		mcpcia_print_uncorrectable(mchk_logout);
 	}
 

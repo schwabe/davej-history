@@ -340,8 +340,11 @@ find_end_memory(void)
 	high = (high + PAGE_SIZE) & (PAGE_MASK*2);
 
 	/* Enforce maximum of 2GB even if there is more.  Blah.  */
-	if (high > 0x80000000UL)
+	if (high > 0x80000000UL) {
+		printk("Cropping memory from %luMB to 2048MB\n", high);
 		high = 0x80000000UL;
+	}
+
 	return PAGE_OFFSET + high;
 }
 

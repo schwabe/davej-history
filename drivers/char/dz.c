@@ -902,7 +902,7 @@ static void send_break (struct dz_serial *info, int duration)
   
   dz_out (info, DZ_TCR, tmp);
   
-  schedule_timeout(jiffies + duration);
+  schedule_timeout(duration);
   
   tmp &= ~mask;
   dz_out (info, DZ_TCR, tmp);
@@ -1093,7 +1093,7 @@ static void dz_close (struct tty_struct *tty, struct file *filp)
   if (info->blocked_open) {
     if (info->close_delay) {
       current->state = TASK_INTERRUPTIBLE;
-      schedule_timeout(jiffies + info->close_delay);
+      schedule_timeout(info->close_delay);
     }
     wake_up_interruptible (&info->open_wait);
   }

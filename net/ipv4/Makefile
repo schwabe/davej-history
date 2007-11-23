@@ -91,42 +91,6 @@ ifeq ($(CONFIG_IP_MASQUERADE_MOD),y)
 
 endif
 
-ifeq ($(CONFIG_IP_MASQUERADE_VS),y)
-  IPV4X_OBJS += ip_vs.o
-  
-  ifeq ($(CONFIG_IP_MASQUERADE_VS_RR),y)
-  IPV4_OBJS += ip_vs_rr.o
-  else
-    ifeq ($(CONFIG_IP_MASQUERADE_VS_RR),m)
-    M_OBJS += ip_vs_rr.o
-    endif
-  endif
-  
-  ifeq ($(CONFIG_IP_MASQUERADE_VS_WRR),y)
-  IPV4_OBJS += ip_vs_wrr.o
-  else
-    ifeq ($(CONFIG_IP_MASQUERADE_VS_WRR),m)
-    M_OBJS += ip_vs_wrr.o
-    endif
-  endif
-  
-  ifeq ($(CONFIG_IP_MASQUERADE_VS_WLC),y)
-  IPV4_OBJS += ip_vs_wlc.o
-  else
-    ifeq ($(CONFIG_IP_MASQUERADE_VS_WLC),m)
-    M_OBJS += ip_vs_wlc.o
-    endif
-  endif
-
-  ifeq ($(CONFIG_IP_MASQUERADE_VS_PCC),y)
-  IPV4_OBJS += ip_vs_pcc.o
-  else
-    ifeq ($(CONFIG_IP_MASQUERADE_VS_PCC),m)
-    M_OBJS += ip_vs_pcc.o
-    endif
-  endif
-endif
-
 M_OBJS += ip_masq_user.o
 M_OBJS += ip_masq_ftp.o ip_masq_irc.o ip_masq_raudio.o ip_masq_quake.o
 M_OBJS += ip_masq_vdolive.o ip_masq_cuseeme.o

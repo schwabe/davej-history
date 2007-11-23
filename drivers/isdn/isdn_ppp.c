@@ -1352,7 +1352,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 			{
 				struct sk_buff *skb_old = skb;
 				int pkt_len;
-				skb = dev_alloc_skb(skb_old->len + 40);
+				skb = dev_alloc_skb(skb_old->len + 128);
 
 				if (!skb) {
 					printk(KERN_WARNING "%s: Memory squeeze, dropping packet.\n", dev->name);
@@ -1361,7 +1361,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 					return;
 				}
 				skb->dev = dev;
-				skb_put(skb, skb_old->len + 40);
+				skb_put(skb, skb_old->len + 128);
 				memcpy(skb->data, skb_old->data, skb_old->len);
 				skb->mac.raw = skb->data;
 				pkt_len = slhc_uncompress(ippp_table[net_dev->local->ppp_slot]->slcomp,
@@ -1413,16 +1413,22 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 static unsigned char *isdn_ppp_skb_push(struct sk_buff **skb_p,int len)
 {
 	struct sk_buff *skb = *skb_p;
-
+	
 	if(skb_headroom(skb) < len) {
-		printk(KERN_ERR "isdn_ppp_skb_push:under %d %d\n",skb_headroom(skb),len);
+		struct sk_buff *nskb = skb_realloc_headroom(skb, len);
+		
+		if (!nskb) {
+			printk(KERN_INFO "isdn_ppp_skb_push: can't realloc headroom!\n");
+			dev_kfree_skb(skb);
+			return NULL;
+		}
 		dev_kfree_skb(skb);
-		return NULL;
+		*skb_p = nskb;
+		return skb_push(nskb, len);
 	}
 	return skb_push(skb,len);
 }
-
-
+	
 /*
  * send ppp frame .. we expect a PIDCOMPressable proto --
  *  (here: currently always PPP_IP,PPP_VJC_COMP,PPP_VJC_UNCOMP)

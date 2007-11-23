@@ -165,7 +165,7 @@ static int try_to_fill_dentry(struct dentry *dentry, struct super_block *sb, str
  * yet completely filled in, and revalidate has to delay such
  * lookups..
  */
-static int autofs_do_revalidate(struct dentry * dentry, int flags)
+static int autofs_revalidate(struct dentry * dentry, int flags)
 {
 	struct inode * dir = dentry->d_parent->d_inode;
 	struct autofs_sb_info *sbi = autofs_sbi(dir->i_sb);
@@ -198,15 +198,6 @@ static int autofs_do_revalidate(struct dentry * dentry, int flags)
 			autofs_update_usage(&sbi->dirhash,ent);
 	}
 	return 1;
-}
-
-static int autofs_revalidate(struct dentry * dentry, int flags)
-{
-	int r;
-	up(&dentry->d_parent->d_inode->i_sem);
-	r = autofs_do_revalidate(dentry, flags);
-	down(&dentry->d_parent->d_inode->i_sem);
-	return r;
 }
 
 static struct dentry_operations autofs_dentry_operations = {
@@ -246,7 +237,9 @@ static struct dentry *autofs_root_lookup(struct inode *dir, struct dentry *dentr
 	dentry->d_flags |= DCACHE_AUTOFS_PENDING;
 	d_add(dentry, NULL);
 
+	up(&dir->i_sem);
 	autofs_revalidate(dentry, 0);
+	down(&dir->i_sem);
 
 	/*
 	 * If we are still pending, check if we had to handle

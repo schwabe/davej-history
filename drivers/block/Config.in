@@ -101,16 +101,13 @@ if [ "$CONFIG_NET" = "y" ]; then
 fi
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
-  bool 'Autodetect RAID partitions' CONFIG_AUTODETECT_RAID
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR
   tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
   tristate '   RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
   tristate '   RAID-4/RAID-5 mode' CONFIG_MD_RAID5
-  tristate '   Translucent mode' CONFIG_MD_TRANSLUCENT
-  tristate '   Logical Volume Manager support' CONFIG_MD_LVM
-  if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
-    bool '      Boot support (linear, striped)' CONFIG_MD_BOOT
-  fi
+fi
+if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
+  bool '      Boot support (linear, striped)' CONFIG_MD_BOOT
 fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then

@@ -600,7 +600,6 @@ unsigned int get_hardblocksize(kdev_t dev)
 	return 0;
 }
 
-#if 0
 void set_blocksize(kdev_t dev, int size)
 {
 	extern int *blksize_size[];
@@ -646,111 +645,8 @@ void set_blocksize(kdev_t dev, int size)
 				clear_bit(BH_Req, &bh->b_state);
 				bh->b_flushtime = 0;
 			}
-			remove_from_queues(bh);
-			bh->b_dev=B_FREE;
-			insert_into_queues(bh);
+			remove_from_hash_queue(bh);
 		}
-	}
-}
-
-#else
-void set_blocksize(kdev_t dev, int size)
-{
-	extern int *blksize_size[];
-	int i, nlist;
-	struct buffer_head * bh, *bhnext;
-
-	if (!blksize_size[MAJOR(dev)])
-		return;
-
-	/* Size must be a power of two, and between 512 and PAGE_SIZE */
-	if (size > PAGE_SIZE || size < 512 || (size & (size-1)))
-		panic("Invalid blocksize passed to set_blocksize");
-
-	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {
-		blksize_size[MAJOR(dev)][MINOR(dev)] = size;
-		return;
-	}
-	if (blksize_size[MAJOR(dev)][MINOR(dev)] == size)
-		return;
-	sync_buffers(dev, 2);
-	blksize_size[MAJOR(dev)][MINOR(dev)] = size;
-
-	/* We need to be quite careful how we do this - we are moving entries
-	 * around on the free list, and we can get in a loop if we are not careful.
-	 */
-	for(nlist = 0; nlist < NR_LIST; nlist++) {
-		bh = lru_list[nlist];
-		for (i = nr_buffers_type[nlist]*2 ; --i > 0 ; bh = bhnext) {
-			if(!bh)
-				break;
-
-			bhnext = bh->b_next_free; 
-			if (bh->b_dev != dev)
-				 continue;
-			if (bh->b_size == size)
-				 continue;
-			if (bhnext)
-				bhnext->b_count++;
-			wait_on_buffer(bh);
-			if (bh->b_dev == dev && bh->b_size != size) {
-				clear_bit(BH_Dirty, &bh->b_state);
-				clear_bit(BH_Uptodate, &bh->b_state);
-				clear_bit(BH_Req, &bh->b_state);
-				bh->b_flushtime = 0;
-			}
-
-			/*
-			 * lets be mega-conservative about what to free:
-			 */
-			if (!(bh->b_dev != dev) && 
-				!(bh->b_size == size) &&
-				!bh->b_count &&
-				!buffer_protected(bh) &&
-				!buffer_dirty(bh) &&
-				!buffer_locked(bh) &&
-				!waitqueue_active(&bh->b_wait)) {
-					remove_from_hash_queue(bh);
-					bh->b_dev = NODEV;
-					refile_buffer(bh);
-					try_to_free_buffers(buffer_page(bh));
-			} else {
-				remove_from_queues(bh);
-				bh->b_dev=B_FREE;
-				insert_into_queues(bh);
-			}
-			if (bhnext)
-				bhnext->b_count--;
-		}
-	}
-}
-#endif
-
-/*
-* This function knows that we do a linear pass over the whole array,
-* so we can drop all unused buffers. Careful, bforget alone is
-* unsafe, we must be 100% sure that at the end of bforget() we will
-* really have no (new) users of this buffer.
-*
-* this logic improves overall system performance greatly during array
-* resync or reconstruction. Actually, the reconstruction is basically
-* seemless.
-*/
-void cache_drop_behind(struct buffer_head *bh)
-{
-	/*
-	 * We are up to something dangerous ... rather be careful
-	 */
-	if ((bh->b_count != 1) || buffer_protected(bh) ||
-			buffer_dirty(bh) || buffer_locked(bh) ||
-			!buffer_lowprio(bh) || waitqueue_active(&bh->b_wait)) {
-		brelse(bh);
-	} else {
-		bh->b_count--;
-		remove_from_hash_queue(bh);
-		bh->b_dev = NODEV;
-		refile_buffer(bh);
-		try_to_free_buffers(buffer_page(bh));
 	}
 }
 
@@ -958,20 +854,21 @@ struct buffer_head * bread(kdev_t dev, int block, int size)
  * Ok, breada can be used as bread, but additionally to mark other
  * blocks for reading as well. End the argument list with a negative
  * number.
- *
- * __breada does the same but with block arguments. This is handy if a
- * device is bigger than 2G on a 32-bit architecture.
  */
 
 #define NBUF 16
 
-struct buffer_head * breada_blocks(kdev_t dev, int block,
-			 int bufsize, int blocks)
+struct buffer_head * breada(kdev_t dev, int block, int bufsize,
+	unsigned int pos, unsigned int filesize)
 {
 	struct buffer_head * bhlist[NBUF];
+	unsigned int blocks;
 	struct buffer_head * bh;
 	int index;
 	int i, j;
+
+	if (pos >= filesize)
+		return NULL;
 
 	if (block < 0)
 		return NULL;
@@ -981,13 +878,17 @@ struct buffer_head * breada_blocks(kdev_t dev, int block,
 
 	if (buffer_uptodate(bh))
 		return(bh);   
-	else
-		ll_rw_block(READ, 1, &bh);
+	else ll_rw_block(READ, 1, &bh);
+
+	blocks = (filesize - pos) >> (9+index);
 
 	if (blocks < (read_ahead[MAJOR(dev)] >> index))
 		blocks = read_ahead[MAJOR(dev)] >> index;
 	if (blocks > NBUF) 
 		blocks = NBUF;
+
+/*	if (blocks) printk("breada (new) %d blocks\n",blocks); */
+
 
 	bhlist[0] = bh;
 	j = 1;
@@ -1013,22 +914,6 @@ struct buffer_head * breada_blocks(kdev_t dev, int block,
 		return bh;
 	brelse(bh);
 	return NULL;
-}
-
-struct buffer_head * breada(kdev_t dev, int block, int bufsize,
-	unsigned int pos, unsigned int filesize)
-{
-	unsigned int blocks;
-	int index;
-
-	if (pos >= filesize)
-		return NULL;
-
-	index = BUFSIZE_INDEX(bufsize);
-
-	blocks = (filesize - pos) >> (9+index);
-
-	return (breada_blocks(dev,block,bufsize,blocks));
 }
 
 /*
