@@ -193,6 +193,14 @@ static void locks_insert_block(struct file_lock *blocker,
 {
 	struct file_lock *prevblock;
 
+	if (waiter->fl_prevblock) {
+		printk(KERN_ERR "locks_insert_block: remove duplicated lock "
+			"(pid=%d %ld-%ld type=%d)\n",
+			waiter->fl_pid, waiter->fl_start,
+			waiter->fl_end, waiter->fl_type);
+		locks_delete_block(waiter->fl_prevblock, waiter);
+	}
+
 	if (blocker->fl_prevblock == NULL)
 		/* No previous waiters - list is empty */
 		prevblock = blocker;

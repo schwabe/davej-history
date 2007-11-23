@@ -727,7 +727,8 @@ int get_cpuinfo(char *buffer)
 		      "BogoMIPS\t\t: %lu.%02lu\n"
 		      "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
 		      "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
-		      "platform string\t\t: %s\n",
+		      "platform string\t\t: %s\n"
+		      "cpus detected\t\t: %ld\n",
 		       cpu_name, cpu->variation, cpu->revision,
 		       (char*)cpu->serial_no,
 		       systype_name, sysvariation_name, hwrpb->sys_revision,
@@ -742,7 +743,7 @@ int get_cpuinfo(char *buffer)
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
 		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
-		       platform_string());
+		       platform_string(), hwrpb->nr_processors);
 
 #ifdef __SMP__
 	len += smp_info(buffer+len);

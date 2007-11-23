@@ -28,6 +28,10 @@
 #include <linux/apm_bios.h>
 #endif
 
+#ifdef CONFIG_MAGIC_SYSRQ
+int sysrq_enabled = 1;
+#endif
+
 extern void wakeup_bdflush(int);
 extern void reset_vc(unsigned int);
 extern int console_loglevel;
