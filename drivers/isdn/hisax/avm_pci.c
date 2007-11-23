@@ -269,18 +269,26 @@ modehdlc(struct BCState *bcs, int mode, int bc)
 	int hdlc = bcs->channel;
 
 	if (cs->debug & L1_DEB_HSCX)
-		debugl1(cs, "hdlc %c mode %d ichan %d",
-			'A' + hdlc, mode, bc);
-	bcs->mode = mode;
-	bcs->channel = bc;
+		debugl1(cs, "hdlc %c mode %d --> %d ichan %d --> %d",
+			'A' + hdlc, bcs->mode, mode, hdlc, bc);
 	bcs->hw.hdlc.ctrl.ctrl = 0;
 	switch (mode) {
+		case (-1): /* used for init */
+			bcs->mode = 1;
+			bcs->channel = bc;
+			bc = 0;
 		case (L1_MODE_NULL):
+			if (bcs->mode == L1_MODE_NULL)
+				return;
 			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bcs, 5);
+			bcs->mode = L1_MODE_NULL;
+			bcs->channel = bc;
 			break;
 		case (L1_MODE_TRANS):
+			bcs->mode = mode;
+			bcs->channel = bc;
 			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
 			write_ctrl(bcs, 5);
@@ -290,6 +298,8 @@ modehdlc(struct BCState *bcs, int mode, int bc)
 			hdlc_sched_event(bcs, B_XMTBUFREADY);
 			break;
 		case (L1_MODE_HDLC):
+			bcs->mode = mode;
+			bcs->channel = bc;
 			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
 			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_ITF_FLG;
 			write_ctrl(bcs, 5);
@@ -695,8 +705,8 @@ inithdlc(struct IsdnCardState *cs))
 	cs->bcs[1].BC_SetStack = setstack_hdlc;
 	cs->bcs[0].BC_Close = close_hdlcstate;
 	cs->bcs[1].BC_Close = close_hdlcstate;
-	modehdlc(cs->bcs, 0, 0);
-	modehdlc(cs->bcs + 1, 0, 0);
+	modehdlc(cs->bcs, -1, 0);
+	modehdlc(cs->bcs + 1, -1, 1);
 }
 
 static void

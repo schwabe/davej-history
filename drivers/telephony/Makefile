@@ -17,9 +17,9 @@ MX_OBJS  :=
 M_OBJS  :=
 
 ifeq ($(CONFIG_PHONE),y)
-  L_OBJS += phonedev.o
+  LX_OBJS += phonedev.o
 else
-  ifeq ($(CONFIG_PARPORT),m)
+  ifeq ($(CONFIG_PHONE),m)
     MX_OBJS += phonedev.o
   endif
 endif

@@ -433,7 +433,7 @@ enum tulip_offsets {
 
 /* The bits in the CSR5 status registers, mostly interrupt sources. */
 enum status_bits {
-	TimerInt=0x800, TPLnkFail=0x1000, TPLnkPass=0x10,
+	TimerInt=0x800, SytemError=0x2000, TPLnkFail=0x1000, TPLnkPass=0x10,
 	NormalIntr=0x10000, AbnormalIntr=0x8000,
 	RxJabber=0x200, RxDied=0x100, RxNoBuf=0x80, RxIntr=0x40,
 	TxFIFOUnderflow=0x20, TxJabber=0x08, TxNoBuf=0x04, TxDied=0x02, TxIntr=0x01,
@@ -530,6 +530,9 @@ struct tulip_private {
 	int cur_index;						/* Current media index. */
 	int saved_if_port;
 	unsigned char pci_bus, pci_devfn;
+	int ttimer;
+	int susp_rx;
+	unsigned long nir;
 	int pad0, pad1;						/* Used for 8-byte alignment */
 };
 
@@ -548,6 +551,7 @@ static void pnic_do_nway(struct device *dev);
 static void tulip_tx_timeout(struct device *dev);
 static void tulip_init_ring(struct device *dev);
 static int tulip_start_xmit(struct sk_buff *skb, struct device *dev);
+static int tulip_refill_rx(struct device *dev);
 static int tulip_rx(struct device *dev);
 static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int tulip_close(struct device *dev);
@@ -2484,6 +2488,9 @@ static void tulip_init_ring(struct device *dev)
 	tp->tx_full = 0;
 	tp->cur_rx = tp->cur_tx = 0;
 	tp->dirty_rx = tp->dirty_tx = 0;
+	tp->susp_rx = 0;
+	tp->ttimer = 0;
+	tp->nir = 0;
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		tp->rx_ring[i].status = 0x00000000;
@@ -2577,7 +2584,15 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	struct device *dev = (struct device *)dev_instance;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int csr5, work_budget = max_interrupt_work;
+	int csr5;
+	int entry;
+	int missed;
+	int rx = 0;
+	int tx = 0;
+	int oi = 0;
+	int maxrx = RX_RING_SIZE;
+	int maxtx = TX_RING_SIZE;
+	int maxoi = TX_RING_SIZE;
 
 #if defined(__i386__) && defined(SMP_CHECK)
 	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
@@ -2595,6 +2610,8 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	dev->interrupt = 1;
 #endif
 
+	tp->nir++;
+
 	do {
 		csr5 = inl(ioaddr + CSR5);
 		/* Acknowledge all of the current interrupt sources ASAP. */
@@ -2607,10 +2624,12 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		if ((csr5 & (NormalIntr|AbnormalIntr)) == 0)
 			break;
 
-		if (csr5 & (RxIntr | RxNoBuf))
-			work_budget -= tulip_rx(dev);
+		if (csr5 & (RxIntr | RxNoBuf)) {
+			rx += tulip_rx(dev);
+			tulip_refill_rx(dev);
+		}
 
-		if (csr5 & (TxNoBuf | TxDied | TxIntr)) {
+		if (csr5 & (TxNoBuf | TxDied | TxIntr | TimerInt)) {
 			unsigned int dirty_tx;
 
 			for (dirty_tx = tp->dirty_tx; tp->cur_tx - dirty_tx > 0;
@@ -2623,7 +2642,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				/* Check for Rx filter setup frames. */
 				if (tp->tx_skbuff[entry] == NULL)
 				  continue;
-
+				
 				if (status & 0x8000) {
 					/* There was an major error, log it. */
 #ifndef final_version
@@ -2655,6 +2674,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				/* Free the original skb. */
 				dev_free_skb(tp->tx_skbuff[entry]);
 				tp->tx_skbuff[entry] = 0;
+				tx++;
 			}
 
 #ifndef final_version
@@ -2697,38 +2717,71 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				/* Restart the transmit process. */
 				outl(tp->csr6 | 0x0002, ioaddr + CSR6);
 				outl(tp->csr6 | 0x2002, ioaddr + CSR6);
+				outl(0, ioaddr + CSR1);
 			}
 			if (csr5 & RxDied) {		/* Missed a Rx frame. */
 				tp->stats.rx_errors++;
 				tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
 				outl(tp->csr6 | 0x2002, ioaddr + CSR6);
 			}
-			if (csr5 & TimerInt) {
-				if (tulip_debug > 2)
-					printk(KERN_ERR "%s: Re-enabling interrupts, %8.8x.\n",
-						   dev->name, csr5);
-				outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR7);
-			}
 			if (csr5 & (TPLnkPass | TPLnkFail | 0x08000000)) {
 				if (tp->link_change)
 					(tp->link_change)(dev, csr5);
 			}
+			if (csr5 & SytemError) {
+				printk(KERN_ERR "%s: (%lu) System Error occured\n", dev->name, tp->nir);
+			}
 			/* Clear all error sources, included undocumented ones! */
 			outl(0x0800f7ba, ioaddr + CSR5);
+			oi++;
 		}
-		if (--work_budget < 0) {
+		if (csr5 & TimerInt) {
+#if 0
+			if (tulip_debug > 2)
+				printk(KERN_ERR "%s: Re-enabling interrupts, %8.8x.\n",
+					   dev->name, csr5);
+			outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR7);
+#endif
+			tp->ttimer = 0;
+			oi++;
+		}
+		if (tx > maxtx || rx > maxrx || oi > maxoi) {
+#if 0
 			if (tulip_debug > 1)
+#endif
 				printk(KERN_WARNING "%s: Too much work during an interrupt, "
-					   "csr5=0x%8.8x.\n", dev->name, csr5);
+					   "csr5=0x%8.8x. (%lu) (%d,%d,%d)\n", dev->name, csr5, tp->nir, tx, rx, oi);
 			/* Acknowledge all interrupt sources. */
-			outl(0x8001ffff, ioaddr + CSR5);
+#if 0
 			/* Clear all interrupting sources, set timer to re-enable. */
-			outl(((~csr5) & 0x0001ebef) | AbnormalIntr | TimerInt,
+			outl(((~csr5) & 0x0001ebef) | NormalIntr | AbnormalIntr | TimerInt,
 				 ioaddr + CSR7);
 			outl(12, ioaddr + CSR11);
+			tp->ttimer = 1;
+#endif
 			break;
 		}
 	} while (1);
+
+	tulip_refill_rx(dev);
+
+	/* check if we card is in suspend mode */
+	entry = tp->dirty_rx % RX_RING_SIZE;
+	if (tp->rx_skbuff[entry] == NULL) {
+		printk(KERN_WARNING "%s: in rx suspend mode: (%lu) (tp->cur_rx = %u, ttimer = %d, rx = %d) go/stay in suspend mode\n", dev->name, tp->nir, tp->cur_rx, tp->ttimer, rx);
+		if (tp->ttimer == 0 || (inl(ioaddr + CSR11) & 0xffff) == 0) {
+			printk(KERN_WARNING "%s: in rx suspend mode: (%lu) set timer\n", dev->name, tp->nir);
+			outl(tulip_tbl[tp->chip_id].valid_intrs | TimerInt,
+				ioaddr + CSR7);
+			outl(TimerInt, ioaddr + CSR5);
+			outl(12, ioaddr + CSR11);
+			tp->ttimer = 1;
+		}
+	}
+
+	if ((missed = inl(ioaddr + CSR8) & 0x1ffff)) {
+		tp->stats.rx_dropped += missed & 0x10000 ? 0x10000 : missed;
+	}
 
 	if (tulip_debug > 4)
 		printk(KERN_DEBUG "%s: exiting interrupt, csr5=%#4.4x.\n",
@@ -2742,12 +2795,35 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	return;
 }
 
+static int tulip_refill_rx(struct device *dev)
+{
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	int entry;
+	int refilled = 0;
+
+	/* Refill the Rx ring buffers. */
+	for (; tp->cur_rx - tp->dirty_rx > 0; tp->dirty_rx++) {
+		entry = tp->dirty_rx % RX_RING_SIZE;
+		if (tp->rx_skbuff[entry] == NULL) {
+			struct sk_buff *skb;
+			skb = tp->rx_skbuff[entry] = dev_alloc_skb(PKT_BUF_SZ);
+			if (skb == NULL)
+				break;
+			skb->dev = dev;			/* Mark as being used by this device. */
+			tp->rx_ring[entry].buffer1 = virt_to_le32desc(skb->tail);
+			refilled++;
+		}
+		tp->rx_ring[entry].status = cpu_to_le32(DescOwned);
+	}
+	return refilled;
+}
+
 static int tulip_rx(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int entry = tp->cur_rx % RX_RING_SIZE;
 	int rx_work_limit = tp->dirty_rx + RX_RING_SIZE - tp->cur_rx;
-	int work_done = 0;
+	int received = 0;
 
 	if (tulip_debug > 4)
 		printk(KERN_DEBUG " In tulip_rx(), entry %d %8.8x.\n", entry,
@@ -2808,7 +2884,6 @@ static int tulip_rx(struct device *dev)
 				memcpy(skb_put(skb, pkt_len), tp->rx_skbuff[entry]->tail,
 					   pkt_len);
 #endif
-				work_done++;
 			} else { 	/* Pass up the skb already on the Rx ring. */
 				char *temp = skb_put(skb = tp->rx_skbuff[entry], pkt_len);
 				tp->rx_skbuff[entry] = NULL;
@@ -2829,25 +2904,11 @@ static int tulip_rx(struct device *dev)
 			tp->stats.rx_bytes += pkt_len;
 #endif
 		}
+		received++;
 		entry = (++tp->cur_rx) % RX_RING_SIZE;
 	}
 
-	/* Refill the Rx ring buffers. */
-	for (; tp->cur_rx - tp->dirty_rx > 0; tp->dirty_rx++) {
-		entry = tp->dirty_rx % RX_RING_SIZE;
-		if (tp->rx_skbuff[entry] == NULL) {
-			struct sk_buff *skb;
-			skb = tp->rx_skbuff[entry] = dev_alloc_skb(PKT_BUF_SZ);
-			if (skb == NULL)
-				break;
-			skb->dev = dev;			/* Mark as being used by this device. */
-			tp->rx_ring[entry].buffer1 = virt_to_le32desc(skb->tail);
-			work_done++;
-		}
-		tp->rx_ring[entry].status = cpu_to_le32(DescOwned);
-	}
-
-	return work_done;
+	return received;
 }
 
 static int tulip_close(struct device *dev)

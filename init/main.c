@@ -117,20 +117,29 @@ extern void js_am_setup(char *str, int *ints);
 #ifdef CONFIG_JOY_ANALOG
 extern void js_an_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_JOY_ASSASIN
+#ifdef CONFIG_JOY_ASSASSIN
 extern void js_as_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_JOY_CONSOLE
 extern void js_console_setup(char *str, int *ints);
+extern void js_console_setup_2(char *str, int *ints);
+extern void js_console_setup_3(char *str, int *ints);
 #endif
 #ifdef CONFIG_JOY_DB9
 extern void js_db9_setup(char *str, int *ints);
+extern void js_db9_setup_2(char *str, int *ints);
+extern void js_db9_setup_3(char *str, int *ints);
 #endif
 #ifdef CONFIG_JOY_TURBOGRAFX
 extern void js_tg_setup(char *str, int *ints);
+extern void js_tg_setup_2(char *str, int *ints);
+extern void js_tg_setup_3(char *str, int *ints);
 #endif
 #ifdef CONFIG_JOY_LIGHTNING
 extern void js_l4_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_JOY_PCI
+extern void js_pci_setup(char *str, int *ints);
 #endif
 extern void eth_setup(char *str, int *ints);
 #ifdef CONFIG_ARCNET_COM20020
@@ -680,30 +689,33 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_JOY_ANALOG
 	{ "js_an=", js_an_setup },
 #endif
-#ifdef CONFIG_JOY_ASSASIN
+#ifdef CONFIG_JOY_ASSASSIN
 	{ "js_as=", js_as_setup },
 #endif
 #ifdef CONFIG_JOY_CONSOLE
 	{ "js_console=", js_console_setup },
-	{ "js_console2=", js_console_setup },
-	{ "js_console3=", js_console_setup },
+	{ "js_console2=", js_console_setup_2 },
+	{ "js_console3=", js_console_setup_3 },
 #endif
 #ifdef CONFIG_JOY_DB9
 	{ "js_db9=", js_db9_setup },
-	{ "js_db9_2=", js_db9_setup },
-	{ "js_db9_3=", js_db9_setup },
+	{ "js_db9_2=", js_db9_setup_2 },
+	{ "js_db9_3=", js_db9_setup_3 },
 #endif
 #ifdef CONFIG_JOY_TURBOGRAFX
 	{ "js_tg=", js_tg_setup },
-	{ "js_tg_2=", js_tg_setup },
-	{ "js_tg_3=", js_tg_setup },
+	{ "js_tg_2=", js_tg_setup_2 },
+	{ "js_tg_3=", js_tg_setup_3 },
+#endif
+#ifdef CONFIG_JOY_LIGHTNING
+	{ "js_l4=", js_l4_setup },
+#endif
+#ifdef CONFIG_JOY_PCI
+	{ "js_pci=", js_pci_setup },
 #endif
 #ifdef CONFIG_SCSI
 	{ "max_scsi_luns=", scsi_luns_setup },
 	{ "scsi_logging=", scsi_logging_setup },
-#endif
-#ifdef CONFIG_JOY_LIGHTNING
-	{ "js_l4=", js_l4_setup },
 #endif
 #ifdef CONFIG_SCSI_ADVANSYS
 	{ "advansys=", advansys_setup },

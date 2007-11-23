@@ -128,10 +128,20 @@ static ide_startstop_t read_intr (ide_drive_t *drive)
 	int i;
 	unsigned int msect, nsect;
 	struct request *rq;
-
+#if 0
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
 		return ide_error(drive, "read_intr", stat);
 	}
+#else	/* new way for dealing with premature shared PCI interrupts */
+	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
+		if (stat & (ERR_STAT|DRQ_STAT)) {
+			return ide_error(drive, "read_intr", stat);
+		}
+		/* no data yet, so wait for another interrupt */
+		ide_set_handler(drive, &read_intr, WAIT_CMD);
+		return ide_started;
+	}
+#endif
 	msect = drive->mult_count;
 	
 read_next:
@@ -152,7 +162,7 @@ read_next:
 	rq->buffer += nsect<<9;
 	rq->errors = 0;
 	i = (rq->nr_sectors -= nsect);
-	if ((rq->current_nr_sectors -= nsect) <= 0)
+	if (((long)(rq->current_nr_sectors -= nsect)) <= 0)
 		ide_end_request(1, HWGROUP(drive));
 	if (i > 0) {
 		if (msect)
@@ -187,7 +197,7 @@ static ide_startstop_t write_intr (ide_drive_t *drive)
 			rq->errors = 0;
 			i = --rq->nr_sectors;
 			--rq->current_nr_sectors;
-			if (rq->current_nr_sectors <= 0)
+			if (((long)rq->current_nr_sectors) <= 0)
 				ide_end_request(1, hwgroup);
 			if (i > 0) {
 				idedisk_output_data (drive, rq->buffer, SECTOR_WORDS);
@@ -196,7 +206,7 @@ static ide_startstop_t write_intr (ide_drive_t *drive)
 			}
 			return ide_stopped;
 		}
-		printk("%s: write_intr error2: nr_sectors=%ld, stat=0x%02x\n", drive->name, rq->nr_sectors, stat);
+		return ide_stopped;     /* the original code did this here (?) */ 
 	}
 	return ide_error(drive, "write_intr", stat);
 }
@@ -242,7 +252,7 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 		 *	Completed ?
 		 */
 		 
-		if ((rq->nr_sectors -= nsect) <= 0)
+		if (((long)(rq->nr_sectors -= nsect)) <= 0)
 		{
 			spin_unlock_irqrestore(&io_request_lock, flags);
 			break;
@@ -266,7 +276,7 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 				 *	deep crap
 				 */
 				spin_unlock_irqrestore(&io_request_lock, flags);
-				printk("%s: buffer list corrupted (%d, %d, %d)\n", drive->name,
+				printk("%s: buffer list corrupted (%ld, %ld, %d)\n", drive->name,
 					rq->current_nr_sectors, rq->nr_sectors, nsect);
 				ide_end_request(0, hwgroup);
 				return 1;
@@ -316,6 +326,7 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 				return ide_stopped;
 			}
 		}
+		return ide_stopped;     /* the original code did this here (?) */ 
 	}
 	return ide_error(drive, "multwrite_intr", stat);
 }

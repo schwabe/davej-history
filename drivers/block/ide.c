@@ -2711,47 +2711,16 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	if (!drive)
 		return 0;
 
-	if (drive->forced_geom) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
+	if (drive->forced_geom)
 		return 0;
-	}
 
-	if (xparm > 1 && xparm <= drive->bios_head && drive->bios_sect == 63) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
+	if (xparm > 1 && xparm <= drive->bios_head && drive->bios_sect == 63)
 		return 0;		/* we already have a translation */
-	}
 
 	printk("%s ", msg);
 
-	if (xparm < 0 && (drive->bios_cyl * drive->bios_head * drive->bios_sect) < (1024 * 16 * 63)) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
+	if (xparm < 0 && (drive->bios_cyl * drive->bios_head * drive->bios_sect) < (1024 * 16 * 63))
 		return 0;		/* small disk: no translation needed */
-	}
-
-	if (drive->id) {
-		drive->cyl  = drive->id->cyls;
-		drive->head = drive->id->heads;
-		drive->sect = drive->id->sectors;
-	}
-	drive->bios_cyl  = drive->cyl;
-	drive->bios_head = drive->head;
-	drive->bios_sect = drive->sect;
-	drive->special.b.set_geometry = 1;
 
 	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
 	drive->bios_sect = 63;
@@ -2779,12 +2748,7 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	}
 	drive->part[0].nr_sects = current_capacity(drive);
 	printk("[%d/%d/%d]", drive->bios_cyl, drive->bios_head, drive->bios_sect);
-	/*
-	 * Update the current 3D drive values.
-	 */
-	drive->id->cur_cyls    = drive->bios_cyl;
-	drive->id->cur_heads   = drive->bios_head;
-	drive->id->cur_sectors = drive->bios_sect;
+
 	return 1;
 }
 

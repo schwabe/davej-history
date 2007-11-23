@@ -99,6 +99,8 @@ static IXJ_REGFUNC ixj_PostIoctl = &Stub;
 static void ixj_read_frame(int board);
 static void ixj_write_frame(int board);
 static void ixj_init_timer(void);
+static void ixj_add_timer(void);
+static void ixj_del_timer(void);
 static void ixj_timeout(unsigned long ptr);
 static int read_filters(int board);
 static int LineMonitor(int board);
@@ -346,13 +348,77 @@ int ixj_unregister(int index)
 	return retval;
 }
 
-void ixj_init_timer(void)
+static void ixj_init_timer(void)
 {
 	init_timer(&ixj_timer);
 	ixj_timer.function = ixj_timeout;
 	ixj_timer.data = (int) NULL;
+}
+
+static void ixj_add_timer(void)
+{
 	ixj_timer.expires = jiffies + (hertz / samplerate);
 	add_timer(&ixj_timer);
+}
+
+static void ixj_del_timer(void)
+{
+	del_timer(&ixj_timer);
+}
+
+static void ixj_tone_timeout(int board)
+{
+	IXJ *j = &ixj[board];
+	IXJ_TONE ti;
+	
+	j->tone_state++;
+	if (j->tone_state == 3) {
+		j->tone_state = 0;
+		if (j->cadence_t) {
+			j->tone_cadence_state++;
+			if (j->tone_cadence_state >= j->cadence_t->elements_used) 
+			{
+				switch (j->cadence_t->termination) 
+				{
+					case PLAY_ONCE:
+						ixj_cpt_stop(board);
+							break;
+					case REPEAT_LAST_ELEMENT:
+						j->tone_cadence_state--;
+						ixj_play_tone(board, j->cadence_t->ce[j->tone_cadence_state].index);
+						break;
+					case REPEAT_ALL:
+						j->tone_cadence_state = 0;
+						if (j->cadence_t->ce[j->tone_cadence_state].freq0) 
+						{
+							ti.tone_index = j->cadence_t->ce[j->tone_cadence_state].index;
+							ti.freq0 = j->cadence_t->ce[j->tone_cadence_state].freq0;
+							ti.gain0 = j->cadence_t->ce[j->tone_cadence_state].gain0;
+							ti.freq1 = j->cadence_t->ce[j->tone_cadence_state].freq1;
+							ti.gain1 = j->cadence_t->ce[j->tone_cadence_state].gain1;
+							ixj_init_tone(board, &ti);
+						}
+						ixj_set_tone_on(j->cadence_t->ce[0].tone_on_time, board);
+						ixj_set_tone_off(j->cadence_t->ce[0].tone_off_time, board);
+						ixj_play_tone(board, j->cadence_t->ce[0].index);
+						break;
+				}
+			} else {
+				if (j->cadence_t->ce[j->tone_cadence_state].gain0) 
+				{
+					ti.tone_index = j->cadence_t->ce[j->tone_cadence_state].index;
+					ti.freq0 = j->cadence_t->ce[j->tone_cadence_state].freq0;
+					ti.gain0 = j->cadence_t->ce[j->tone_cadence_state].gain0;
+					ti.freq1 = j->cadence_t->ce[j->tone_cadence_state].freq1;
+					ti.gain1 = j->cadence_t->ce[j->tone_cadence_state].gain1;
+					ixj_init_tone(board, &ti);
+				}
+				ixj_set_tone_on(j->cadence_t->ce[j->tone_cadence_state].tone_on_time, board);
+				ixj_set_tone_off(j->cadence_t->ce[j->tone_cadence_state].tone_off_time, board);
+				ixj_play_tone(board, j->cadence_t->ce[j->tone_cadence_state].index);
+			}
+		}
+	}
 }
 
 static void ixj_timeout(unsigned long ptr)
@@ -360,288 +426,230 @@ static void ixj_timeout(unsigned long ptr)
 	int board;
 	unsigned long jifon;
 	IXJ *j;
-	IXJ_TONE ti;
-	static int mutex = 0;
 
-	/* What is this trying to do ?? */
-	/* This is a safeguard in case the loop does not complete before the
-	   next timer tick.  Since all the work is done during this timer loop,
-	   we do not want the next iteration of the loop to start before the
-	   last one finished. */
+	for (board = 0; board < IXJMAX; board++) 
+	{
+		j = &ixj[board];
 
-	if (!mutex) {
-		mutex++;
-		for (board = 0; board < IXJMAX; board++) {
-			j = &ixj[board];
-
-			if (j->DSPbase) {
+		if (j->DSPbase) 
+		{
 #ifdef PERFMON_STATS
-				j->timerchecks++;
+			j->timerchecks++;
 #endif
-				if (j->tone_state) {
-
-					if (!ixj_hookstate(board)) {
-						ixj_cpt_stop(board);
-						if (j->m_hook) {
-							j->m_hook = 0;
-							j->ex.bits.hookstate = 1;
-							if (j->async_queue)
-								kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
-
-						}
-						goto timer_end;
+			if (j->tone_state) 
+			{
+				if (!ixj_hookstate(board)) 
+				{
+					ixj_cpt_stop(board);
+					if (j->m_hook) 
+					{
+						j->m_hook = 0;
+						j->ex.bits.hookstate = 1;
+						if (j->async_queue)
+							kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
 					}
-					if (j->tone_state == 1)
-						jifon = (hertz * j->tone_on_time * 25 / 100000);
-					else
-						jifon = (hertz * j->tone_on_time * 25 / 100000) +
-						    (hertz * j->tone_off_time * 25 / 100000);
-					if (jiffies < j->tone_start_jif + jifon) {
-						if (j->tone_state == 1) {
-							ixj_play_tone(board, j->tone_index);
-							if (j->dsp.low == 0x20) {
-								goto timer_end;
-							}
-						} else {
-							ixj_play_tone(board, 0);
-							if (j->dsp.low == 0x20) {
-								goto timer_end;
-							}
+					goto timer_end;
+				}
+				if (j->tone_state == 1)
+					jifon = (hertz * j->tone_on_time * 25 / 100000);
+				else
+					jifon = (hertz * j->tone_on_time * 25 / 100000) +
+					    (hertz * j->tone_off_time * 25 / 100000);
+				if (jiffies < j->tone_start_jif + jifon) {
+					if (j->tone_state == 1) {
+						ixj_play_tone(board, j->tone_index);
+						if (j->dsp.low == 0x20) {
+							goto timer_end;
 						}
 					} else {
-						j->tone_state++;
-						if (j->tone_state == 3) {
-							j->tone_state = 0;
-							if (j->cadence_t) {
-								j->tone_cadence_state++;
-								if (j->tone_cadence_state == j->cadence_t->elements_used) {
-									switch (j->cadence_t->termination) {
-									case PLAY_ONCE:
-										ixj_cpt_stop(board);
-										break;
-									case REPEAT_LAST_ELEMENT:
-										j->tone_cadence_state--;
-										ixj_play_tone(board, j->cadence_t->ce[j->tone_cadence_state].index);
-										break;
-									case REPEAT_ALL:
-										j->tone_cadence_state = 0;
-										if (j->cadence_t->ce[j->tone_cadence_state].freq0) {
-											ti.tone_index = j->cadence_t->ce[j->tone_cadence_state].index;
-											ti.freq0 = j->cadence_t->ce[j->tone_cadence_state].freq0;
-											ti.gain0 = j->cadence_t->ce[j->tone_cadence_state].gain0;
-											ti.freq1 = j->cadence_t->ce[j->tone_cadence_state].freq1;
-											ti.gain1 = j->cadence_t->ce[j->tone_cadence_state].gain1;
-											ixj_init_tone(board, &ti);
-										}
-										ixj_set_tone_on(j->cadence_t->ce[0].tone_on_time, board);
-										ixj_set_tone_off(j->cadence_t->ce[0].tone_off_time, board);
-										ixj_play_tone(board, j->cadence_t->ce[0].index);
-										break;
-									}
-								} else {
-									if (j->cadence_t->ce[j->tone_cadence_state].gain0) {
-										ti.tone_index = j->cadence_t->ce[j->tone_cadence_state].index;
-										ti.freq0 = j->cadence_t->ce[j->tone_cadence_state].freq0;
-										ti.gain0 = j->cadence_t->ce[j->tone_cadence_state].gain0;
-										ti.freq1 = j->cadence_t->ce[j->tone_cadence_state].freq1;
-										ti.gain1 = j->cadence_t->ce[j->tone_cadence_state].gain1;
-										ixj_init_tone(board, &ti);
-									}
-									ixj_set_tone_on(j->cadence_t->ce[j->tone_cadence_state].tone_on_time, board);
-									ixj_set_tone_off(j->cadence_t->ce[j->tone_cadence_state].tone_off_time, board);
-									ixj_play_tone(board, j->cadence_t->ce[j->tone_cadence_state].index);
-								}
-							}
-						}
-						if (j->flags.dialtone) {
-							ixj_dialtone(board);
-						}
-						if (j->flags.busytone) {
-							ixj_busytone(board);
-							if (j->dsp.low == 0x20) {
-								goto timer_end;
-							}
-						}
-						if (j->flags.ringback) {
-							ixj_ringback(board);
-							if (j->dsp.low == 0x20) {
-								goto timer_end;
-							}
-						}
-						if (!j->tone_state) {
-							if (j->dsp.low == 0x20 || (j->play_mode == -1 && j->rec_mode == -1))
-								idle(board);
-							if (j->dsp.low == 0x20 && j->play_mode != -1)
-								ixj_play_start(board);
-							if (j->dsp.low == 0x20 && j->rec_mode != -1)
-								ixj_record_start(board);
+						ixj_play_tone(board, 0);
+						if (j->dsp.low == 0x20) {
+							goto timer_end;
 						}
 					}
-				}
-				if (!j->tone_state || j->dsp.low != 0x20) {
-					if (IsRxReady(board)) {
-						ixj_read_frame(board);
+				} else {
+					ixj_tone_timeout(board);
+					if (j->flags.dialtone) {
+						ixj_dialtone(board);
 					}
-					if (IsTxReady(board)) {
-						ixj_write_frame(board);
-					}
-				}
-				if (j->flags.cringing) {
-					if (ixj_hookstate(board) & 1) {
-						j->flags.cringing = 0;
-						ixj_ring_off(board);
-					} else {
-						if (jiffies - j->ring_cadence_jif >= (.5 * hertz)) {
-							j->ring_cadence_t--;
-							if (j->ring_cadence_t == -1)
-								j->ring_cadence_t = 15;
-							j->ring_cadence_jif = jiffies;
-						}
-						if (j->ring_cadence & 1 << j->ring_cadence_t) {
-							ixj_ring_on(board);
-						} else {
-							ixj_ring_off(board);
-						}
-						goto timer_end;
-					}
-				}
-				if (!j->flags.ringing) {
-					if (ixj_hookstate(board)) {
-						if (j->dsp.low == 0x21 &&
-						    j->pld_slicr.bits.state != PLD_SLIC_STATE_ACTIVE)
-                // Internet LineJACK
-						 {
-							SLIC_SetState(PLD_SLIC_STATE_ACTIVE, board);
-						}
-						LineMonitor(board);
-						read_filters(board);
-						ixj_WriteDSPCommand(0x511B, board);
-						j->proc_load = j->ssr.high << 8 | j->ssr.low;
-						if (!j->m_hook) {
-							j->m_hook = j->ex.bits.hookstate = 1;
-							if (j->async_queue)
-								kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
-
-						}
-					} else {
-						if (j->dsp.low == 0x21 &&
-						    j->pld_slicr.bits.state == PLD_SLIC_STATE_ACTIVE)
-                // Internet LineJACK
-						 {
-							SLIC_SetState(PLD_SLIC_STATE_STANDBY, board);
-						}
-						if (j->ex.bits.dtmf_ready) {
-							j->dtmf_wp = j->dtmf_rp = j->ex.bits.dtmf_ready = 0;
-						}
-						if (j->m_hook) {
-							j->m_hook = 0;
-							j->ex.bits.hookstate = 1;
-							if (j->async_queue)
-								kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
-
+					if (j->flags.busytone) {
+						ixj_busytone(board);
+						if (j->dsp.low == 0x20) {
+							goto timer_end;
 						}
 					}
-				}
-				if (j->cardtype == 300) {
-					if (j->flags.pstn_present) {
-						j->pld_scrr.byte = inb_p(j->XILINXbase);
-						if (jiffies >= j->pstn_sleeptil && j->pld_scrr.bits.daaflag) {
-							daa_int_read(board);
-							if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.RING) {
-								if (!j->flags.pstn_ringing) {
-									j->flags.pstn_ringing = 1;
-									if (j->daa_mode != SOP_PU_RINGING)
-										daa_set_mode(board, SOP_PU_RINGING);
-								}
-							}
-							if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.VDD_OK) {
-								j->pstn_winkstart = 0;
-								if (j->flags.pstn_ringing && !j->pstn_envelope) {
-									j->ex.bits.pstn_ring = 0;
-									j->pstn_envelope = 1;
-									j->pstn_ring_start = jiffies;
-								}
-							} else {
-								if (j->flags.pstn_ringing && j->pstn_envelope &&
-								    jiffies > j->pstn_ring_start + ((hertz * 15) / 10)) {
-									j->ex.bits.pstn_ring = 1;
-									j->pstn_envelope = 0;
-								} else if (j->daa_mode == SOP_PU_CONVERSATION) {
-									if (!j->pstn_winkstart) {
-										j->pstn_winkstart = jiffies;
-									} else if (jiffies > j->pstn_winkstart + (hertz * j->winktime / 1000)) {
-										daa_set_mode(board, SOP_PU_SLEEP);
-										j->pstn_winkstart = 0;
-										j->ex.bits.pstn_wink = 1;
-									}
-								} else {
-									j->ex.bits.pstn_ring = 0;
-								}
-							}
-							if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.Cadence) {
-								if (j->daa_mode == SOP_PU_RINGING) {
-									daa_set_mode(board, SOP_PU_SLEEP);
-									j->flags.pstn_ringing = 0;
-									j->ex.bits.pstn_ring = 0;
-								}
-							}
-							if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.Caller_ID) {
-								if (j->daa_mode == SOP_PU_RINGING && j->flags.pstn_ringing) {
-									j->pstn_cid_intr = 1;
-									j->pstn_cid_recieved = jiffies;
-								}
-							}
-						} else {
-							if (j->pld_scrr.bits.daaflag) {
-								daa_int_read(board);
-							}
-							j->ex.bits.pstn_ring = 0;
-							if (j->pstn_cid_intr && jiffies > j->pstn_cid_recieved + (hertz * 3)) {
-								if (j->daa_mode == SOP_PU_RINGING) {
-									ixj_daa_cid_read(board);
-									j->ex.bits.caller_id = 1;
-								}
-								j->pstn_cid_intr = 0;
-							} else {
-								j->ex.bits.caller_id = 0;
-							}
-							if (!j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.VDD_OK) {
-								if (j->flags.pstn_ringing && j->pstn_envelope) {
-									j->ex.bits.pstn_ring = 1;
-									j->pstn_envelope = 0;
-								} else if (j->daa_mode == SOP_PU_CONVERSATION) {
-									if (!j->pstn_winkstart) {
-										j->pstn_winkstart = jiffies;
-									} else if (jiffies > j->pstn_winkstart + (hertz * 320 / 1000)) {
-										daa_set_mode(board, SOP_PU_SLEEP);
-										j->pstn_winkstart = 0;
-										j->ex.bits.pstn_wink = 1;
-									}
-								}
-							}
+					if (j->flags.ringback) {
+						ixj_ringback(board);
+						if (j->dsp.low == 0x20) {
+							goto timer_end;
 						}
 					}
+					if (!j->tone_state) {
+						if (j->dsp.low == 0x20 || (j->play_mode == -1 && j->rec_mode == -1))
+							idle(board);
+						if (j->dsp.low == 0x20 && j->play_mode != -1)
+							ixj_play_start(board);
+						if (j->dsp.low == 0x20 && j->rec_mode != -1)
+							ixj_record_start(board);
+					}
 				}
-				if ((j->ex.bits.f0 || j->ex.bits.f1 || j->ex.bits.f2 || j->ex.bits.f3)
-				    && j->filter_cadence) {
-				}
-				if (j->ex.bytes) {
-					wake_up_interruptible(&j->poll_q);	// Wake any blocked selects
-
-					if (j->async_queue)
-						kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
-
-				}
-			} else {
-				break;
 			}
+			if (!j->tone_state || j->dsp.low != 0x20) {
+				if (IsRxReady(board)) {
+					ixj_read_frame(board);
+				}
+				if (IsTxReady(board)) {
+					ixj_write_frame(board);
+				}
+			}
+			if (j->flags.cringing) {
+				if (ixj_hookstate(board) & 1) {
+					j->flags.cringing = 0;
+					ixj_ring_off(board);
+				} else {
+					if (jiffies - j->ring_cadence_jif >= (.5 * hertz)) {
+						j->ring_cadence_t--;
+						if (j->ring_cadence_t == -1)
+							j->ring_cadence_t = 15;
+						j->ring_cadence_jif = jiffies;
+					}
+					if (j->ring_cadence & 1 << j->ring_cadence_t) {
+						ixj_ring_on(board);
+					} else {
+						ixj_ring_off(board);
+					}
+					goto timer_end;
+				}
+			}
+			if (!j->flags.ringing) {
+				if (ixj_hookstate(board)) {
+					if (j->dsp.low == 0x21 &&
+					    j->pld_slicr.bits.state != PLD_SLIC_STATE_ACTIVE)
+               // Internet LineJACK
+					{
+						SLIC_SetState(PLD_SLIC_STATE_ACTIVE, board);
+					}
+					LineMonitor(board);
+					read_filters(board);
+					ixj_WriteDSPCommand(0x511B, board);
+					j->proc_load = j->ssr.high << 8 | j->ssr.low;
+					if (!j->m_hook) {
+						j->m_hook = j->ex.bits.hookstate = 1;
+						if (j->async_queue)
+							kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
+					}
+				} else {
+					if (j->dsp.low == 0x21 &&
+					    j->pld_slicr.bits.state == PLD_SLIC_STATE_ACTIVE)
+               // Internet LineJACK
+					{
+						SLIC_SetState(PLD_SLIC_STATE_STANDBY, board);
+					}
+					if (j->ex.bits.dtmf_ready) {
+						j->dtmf_wp = j->dtmf_rp = j->ex.bits.dtmf_ready = 0;
+					}
+					if (j->m_hook) {
+						j->m_hook = 0;
+						j->ex.bits.hookstate = 1;
+						if (j->async_queue)
+							kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
+					}
+				}
+			}
+			if (j->cardtype == 300) {
+				if (j->flags.pstn_present) {
+					j->pld_scrr.byte = inb_p(j->XILINXbase);
+					if (jiffies >= j->pstn_sleeptil && j->pld_scrr.bits.daaflag) {
+						daa_int_read(board);
+						if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.RING) {
+							if (!j->flags.pstn_ringing) {
+								j->flags.pstn_ringing = 1;
+								if (j->daa_mode != SOP_PU_RINGING)
+									daa_set_mode(board, SOP_PU_RINGING);
+							}
+						}
+						if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.VDD_OK) {
+							j->pstn_winkstart = 0;
+							if (j->flags.pstn_ringing && !j->pstn_envelope) {
+								j->ex.bits.pstn_ring = 0;
+								j->pstn_envelope = 1;
+								j->pstn_ring_start = jiffies;
+							}
+						} else {
+							if (j->flags.pstn_ringing && j->pstn_envelope &&
+							    jiffies > j->pstn_ring_start + ((hertz * 15) / 10)) {
+								j->ex.bits.pstn_ring = 1;
+								j->pstn_envelope = 0;
+							} else if (j->daa_mode == SOP_PU_CONVERSATION) {
+								if (!j->pstn_winkstart) {
+									j->pstn_winkstart = jiffies;
+								} else if (jiffies > j->pstn_winkstart + (hertz * j->winktime / 1000)) {
+									daa_set_mode(board, SOP_PU_SLEEP);
+									j->pstn_winkstart = 0;
+									j->ex.bits.pstn_wink = 1;
+								}
+							} else {
+								j->ex.bits.pstn_ring = 0;
+							}
+						}
+						if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.Cadence) {
+							if (j->daa_mode == SOP_PU_RINGING) {
+								daa_set_mode(board, SOP_PU_SLEEP);
+								j->flags.pstn_ringing = 0;
+								j->ex.bits.pstn_ring = 0;
+							}
+						}
+						if (j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.Caller_ID) {
+							if (j->daa_mode == SOP_PU_RINGING && j->flags.pstn_ringing) {
+								j->pstn_cid_intr = 1;
+								j->pstn_cid_recieved = jiffies;
+							}
+						}
+					} else {
+						if (j->pld_scrr.bits.daaflag) {
+							daa_int_read(board);
+						}
+						j->ex.bits.pstn_ring = 0;
+						if (j->pstn_cid_intr && jiffies > j->pstn_cid_recieved + (hertz * 3)) {
+							if (j->daa_mode == SOP_PU_RINGING) {
+								ixj_daa_cid_read(board);
+								j->ex.bits.caller_id = 1;
+							}
+							j->pstn_cid_intr = 0;
+						} else {
+							j->ex.bits.caller_id = 0;
+						}
+						if (!j->m_DAAShadowRegs.XOP_REGS.XOP.xr0.bitreg.VDD_OK) {
+							if (j->flags.pstn_ringing && j->pstn_envelope) {
+								j->ex.bits.pstn_ring = 1;
+								j->pstn_envelope = 0;
+							} else if (j->daa_mode == SOP_PU_CONVERSATION) {
+								if (!j->pstn_winkstart) {
+									j->pstn_winkstart = jiffies;
+								} else if (jiffies > j->pstn_winkstart + (hertz * 320 / 1000)) {
+									daa_set_mode(board, SOP_PU_SLEEP);
+									j->pstn_winkstart = 0;
+									j->ex.bits.pstn_wink = 1;
+								}
+							}
+						}
+					}
+				}
+			}
+			if ((j->ex.bits.f0 || j->ex.bits.f1 || j->ex.bits.f2 || j->ex.bits.f3)
+			    && j->filter_cadence) {
+			}
+			if (j->ex.bytes) {
+				wake_up_interruptible(&j->poll_q);	// Wake any blocked selects
+				if (j->async_queue)
+					kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
+			}
+		} else {
+			break;
 		}
 	}
-      timer_end:
-	if (mutex == 1) {
-		ixj_init_timer();
-		mutex--;
-	}
+timer_end:
+	ixj_add_timer();
 }
 
 static int ixj_status_wait(int board)
@@ -845,7 +853,7 @@ static void ixj_ring_on(int board)
 	if (j->dsp.low == 0x20)	// Internet PhoneJACK
 	 {
 		if (ixjdebug > 0)
-			printk(KERN_INFO "IXJ Ring On /dev/ixj%d\n", board);
+			printk(KERN_INFO "IXJ Ring On /dev/phone%d\n", board);
 
 		j->gpio.bytes.high = 0x0B;
 		j->gpio.bytes.low = 0x00;
@@ -879,12 +887,17 @@ static int ixj_hookstate(int board)
 	case 500:
 		SLIC_GetState(board);
 		if (j->pld_slicr.bits.state == PLD_SLIC_STATE_ACTIVE ||
-		    j->pld_slicr.bits.state == PLD_SLIC_STATE_STANDBY) {
-			if (j->flags.ringing) {
-				det = jiffies + (hertz / 50);
-				while (time_before(jiffies, det)) {
-					current->state = TASK_INTERRUPTIBLE;
-					schedule_timeout(1);
+		    j->pld_slicr.bits.state == PLD_SLIC_STATE_STANDBY) 
+		{
+			if (j->flags.ringing) 
+			{
+				if(!in_interrupt())
+				{
+					det = jiffies + (hertz / 50);
+					while (time_before(jiffies, det)) {
+						current->state = TASK_INTERRUPTIBLE;
+						schedule_timeout(1);
+					}
 				}
 				SLIC_GetState(board);
 				if (j->pld_slicr.bits.state == PLD_SLIC_STATE_RINGING) {
@@ -989,6 +1002,8 @@ static int ixj_ring(int board)
 			}
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(1);
+			if(signal_pending(current))
+				break;
 		}
 		jif = jiffies + (3 * hertz);
 		ixj_ring_off(board);
@@ -998,6 +1013,8 @@ static int ixj_ring(int board)
 				while (time_before(jiffies, det)) {
 					current->state = TASK_INTERRUPTIBLE;
 					schedule_timeout(1);
+					if(signal_pending(current))
+						break;
 				}
 				if (ixj_hookstate(board) & 1) {
 					j->flags.ringing = 0;
@@ -1006,6 +1023,8 @@ static int ixj_ring(int board)
 			}
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(1);
+			if(signal_pending(current))
+				break;
 		}
 	}
 	ixj_ring_off(board);
@@ -1810,7 +1829,7 @@ static int ixj_record_start(int board)
 	}
 	if (!j->read_buffer) {
 		if (!j->read_buffer)
-			j->read_buffer = kmalloc(j->rec_frame_size * 2, GFP_KERNEL);
+			j->read_buffer = kmalloc(j->rec_frame_size * 2, GFP_ATOMIC);
 		if (!j->read_buffer) {
 			printk("Read buffer allocation for ixj board %d failed!\n", board);
 			return -ENOMEM;
@@ -2165,7 +2184,7 @@ static int ixj_play_start(int board)
 			return -1;
 	}
 	if (!j->write_buffer) {
-		j->write_buffer = kmalloc(j->play_frame_size * 2, GFP_KERNEL);
+		j->write_buffer = kmalloc(j->play_frame_size * 2, GFP_ATOMIC);
 		if (!j->write_buffer) {
 			printk("Write buffer allocation for ixj board %d failed!\n", board);
 			return -ENOMEM;
@@ -3341,6 +3360,7 @@ static void ixj_cpt_stop(board)
 
 	j->tone_state = 0;
 
+	ixj_del_timer();
 	if (j->cadence_t) {
 		if (j->cadence_t->ce) {
 			kfree(j->cadence_t->ce);
@@ -3348,6 +3368,7 @@ static void ixj_cpt_stop(board)
 		kfree(j->cadence_t);
 		j->cadence_t = NULL;
 	}
+	ixj_add_timer();
 	if (j->dsp.low == 0x20 || (j->play_mode == -1 && j->rec_mode == -1))
 		idle(board);
 	if (j->play_mode != -1)
@@ -3394,6 +3415,12 @@ static int ixj_build_cadence(int board, IXJ_CADENCE * cp)
 	if (copy_from_user(lcep, lcp->ce, sizeof(IXJ_CADENCE_ELEMENT) * lcp->elements_used))
 		return -EFAULT;
 
+	if(j->cadence_t)
+	{
+		kfree(j->cadence_t->ce);
+		kfree(j->cadence_t);
+	}
+	
 	lcp->ce = (void *) lcep;
 	j->cadence_t = lcp;
 	j->tone_cadence_state = 0;
@@ -3535,7 +3562,7 @@ int ixj_ioctl(struct inode *inode, struct file *file_p,
 	int retval = 0;
 
 	if (ixjdebug > 1)
-		printk(KERN_DEBUG "ixj%d ioctl, cmd: 0x%x, arg: 0x%lx\n", minor, cmd, arg);
+		printk(KERN_DEBUG "phone%d ioctl, cmd: 0x%x, arg: 0x%lx\n", minor, cmd, arg);
 	if (minor >= IXJMAX)
 		return -ENODEV;
 
@@ -4575,7 +4602,8 @@ int ixj_read_proc(char *buf, char **start, off_t offset, int len, int unused)
 	}
 	return len;
 }
-struct proc_dir_entry ixj_proc_entry =
+
+static struct proc_dir_entry ixj_proc_entry =
 {
 	0,
 	3, "ixj",
@@ -4586,12 +4614,7 @@ struct proc_dir_entry ixj_proc_entry =
 	&ixj_read_proc
 };
 
-#ifdef MODULE
-
-MODULE_DESCRIPTION("Internet PhoneJACK/Internet LineJACK module - www.quicknet.net");
-MODULE_AUTHOR("Ed Okerson <eokerson@quicknet.net>");
-
-void cleanup_module(void)
+static void cleanup(void)
 {
 	int cnt;
 
@@ -4630,7 +4653,6 @@ void cleanup_module(void)
 	proc_unregister(&proc_root, ixj_proc_entry.low_ino);
 }
 
-#endif
 
 // Typedefs
 typedef struct {
@@ -4724,13 +4746,22 @@ static DWORD PCIEE_GetSerialNumber(WORD wAddress)
 static int dspio[IXJMAX + 1] = {0,};
 static int xio[IXJMAX + 1] = {0,};
 
+MODULE_DESCRIPTION("Internet PhoneJACK/Internet LineJACK module - www.quicknet.net");
+MODULE_AUTHOR("Ed Okerson <eokerson@quicknet.net>");
+
 MODULE_PARM(dspio, "1-" __MODULE_STRING(IXJMAX) "i");
 MODULE_PARM(xio, "1-" __MODULE_STRING(IXJMAX) "i");
 
 #ifdef MODULE
+
+void cleanup_module(void)
+{
+	cleanup();
+}
+
 int init_module(void)
 #else
-init __init ixj_init(void)
+int __init ixj_init(void)
 #endif
 {
 	int result;
@@ -4772,7 +4803,7 @@ init __init ixj_init(void)
 			result = check_region(ixj[cnt].DSPbase, 16);
 			if (result) {
 				printk(KERN_INFO "ixj: can't get I/O address 0x%x\n", ixj[cnt].DSPbase);
-				cleanup_module();
+				cleanup();
 				return result;
 			}
 			request_region(ixj[cnt].DSPbase, 16, "ixj DSP");
@@ -4814,7 +4845,7 @@ init __init ixj_init(void)
 			result = check_region(ixj[cnt].DSPbase, 16);
 			if (result) {
 				printk(KERN_INFO "ixj: can't get I/O address 0x%x\n", ixj[cnt].DSPbase);
-				cleanup_module();
+				cleanup();
 				return result;
 			}
 			request_region(ixj[cnt].DSPbase, 16, "ixj DSP");
@@ -4837,7 +4868,7 @@ init __init ixj_init(void)
 				result = check_region(ixj[cnt].DSPbase, 16);
 				if (result) {
 					printk(KERN_INFO "ixj: can't get I/O address 0x%x\n", ixj[cnt].DSPbase);
-					cleanup_module();
+					cleanup();
 					return result;
 				}
 				request_region(ixj[cnt].DSPbase, 16, "ixj DSP");
@@ -4853,7 +4884,7 @@ init __init ixj_init(void)
 //  result = register_chrdev(ixj_major, "ixj", &ixj_fops);
 	//  if (result < 0) {
 	//    printk(KERN_INFO "ixj: can't get major number\n");
-	//    cleanup_module();
+	//    cleanup();
 	//    return result;
 	//  }
 	//  if (ixj_major == 0)
@@ -4862,7 +4893,7 @@ init __init ixj_init(void)
 	proc_register(&proc_root, &ixj_proc_entry);
 
 	ixj_init_timer();
-
+	ixj_add_timer();	
 	return probe;
 }
 

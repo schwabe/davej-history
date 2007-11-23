@@ -16,7 +16,7 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.36 (991008)";
+ static char * sg_version_str = "Version: 2.1.36 (991218)";
  static int sg_version_num = 20136; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
@@ -691,7 +691,6 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     Sg_device * sdp;
     Sg_fd * sfp;
     Sg_request * srp = NULL;
-    int closed = 0;
     static const int min_sb_len = 
                 SG_MAX_SENSE > sizeof(SCpnt->sense_buffer) ? 
                         sizeof(SCpnt->sense_buffer) : SG_MAX_SENSE;
@@ -793,21 +792,24 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     scsi_release_command(SCpnt);
     SCpnt = NULL;
     if (sfp->closed) { /* whoops this fd already released, cleanup */
-        closed = 1;
         SCSI_LOG_TIMEOUT(1,
                printk("sg__done: already closed, freeing ...\n"));
 /* should check if module is unloaded <<<<<<< */
         sg_finish_rem_req(srp, NULL, 0);
+        srp = NULL;
         if (NULL == sfp->headrp) { 
             SCSI_LOG_TIMEOUT(1,
                 printk("sg__done: already closed, final cleanup\n"));
             sg_remove_sfp(sdp, sfp);
+            sfp = NULL;
         }
     }
 /* Now wake up any sg_read() that is waiting for this packet. */
-    wake_up_interruptible(&sfp->read_wait);
-    if ((sfp->async_qp) && (! closed))
-        kill_fasync(sfp->async_qp, SIGPOLL);
+    if (sfp && srp) {
+        wake_up_interruptible(&sfp->read_wait);
+        if (sfp->async_qp)
+            kill_fasync(sfp->async_qp, SIGPOLL);
+    }
 }
 
 static void sg_debug_all(const Sg_fd * sfp)

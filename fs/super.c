@@ -983,6 +983,12 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!data)
 		return 0;
 
+	/* If this is the kernel, just trust the pointer. */
+	if (segment_eq(get_fs(), KERNEL_DS)) {
+		*where = (unsigned long) data;
+		return 0;
+	}
+
 	vma = find_vma(current->mm, (unsigned long) data);
 	if (!vma || (unsigned long) data < vma->vm_start)
 		return -EFAULT;
@@ -1000,6 +1006,13 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	}
 	*where = page;
 	return 0;
+}
+
+static void free_mount_page(unsigned long page)
+{
+	if (segment_eq(get_fs(), KERNEL_DS))
+		return;
+	free_page(page);
 }
 
 /*
@@ -1039,7 +1052,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 		retval = do_remount(dir_name,
 				    new_flags & ~MS_MGC_MSK & ~MS_REMOUNT,
 				    (char *) page);
-		free_page(page);
+		free_mount_page(page);
 		goto out;
 	}
 
@@ -1047,7 +1060,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	if (retval < 0)
 		goto out;
 	fstype = get_fs_type((char *) page);
-	free_page(page);
+	free_mount_page(page);
 	retval = -ENODEV;
 	if (!fstype)		
 		goto out;
@@ -1101,7 +1114,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	}
 	retval = do_mount(dev, dev_name, dir_name, fstype->name, flags,
 				(void *) page);
-	free_page(page);
+	free_mount_page(page);
 	if (retval)
 		goto clean_up;
 

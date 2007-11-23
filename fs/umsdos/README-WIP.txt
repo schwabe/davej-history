@@ -11,6 +11,10 @@ I'd call it pre-release, and ask for as many people as possible to
 come and test it! See notes below for some more information, or if
 you are trying to use UMSDOS as root partition.
 
+Userland NOTE: new umsdos_progs (umssync, umssetup, udosctl & friends) that
+will compile and work on 2.2.x kernels and glibc based systems may be found
+at http://cvs.linux.hr/
+
 Legend: those lines marked with '+' on the beggining of line indicates it
 passed all of my tests, and performed perfect in all of them.
 

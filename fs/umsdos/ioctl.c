@@ -280,6 +280,8 @@ printk("umsdos_ioctl: renaming %s/%s to %s/%s\n",
 old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
 new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 			ret = msdos_rename (dir, old_dentry, dir, new_dentry);
+			d_drop(new_dentry);
+			d_drop(old_dentry);
 			dput(new_dentry);
 		}
 		dput(old_dentry);

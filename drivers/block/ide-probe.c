@@ -386,12 +386,20 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 	/* Extract drive geometry from CMOS+BIOS if not already setup */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
-		if ((cmos_disks & (0xf0 >> (unit*4))) && !drive->present && !drive->nobios) {
-			drive->cyl   = drive->bios_cyl  = *(unsigned short *)BIOS;
-			drive->head  = drive->bios_head = *(BIOS+2);
-			drive->sect  = drive->bios_sect = *(BIOS+14);
-			drive->ctl   = *(BIOS+8);
-			drive->present = 1;
+		if ((cmos_disks & (0xf0 >> (unit*4)))
+		    && !drive->present && !drive->nobios) {
+			unsigned short cyl = *(unsigned short *)BIOS;
+			unsigned char head = *(BIOS+2);
+			unsigned char sect = *(BIOS+14);
+			if (cyl > 0 && head > 0 && sect > 0 && sect < 64) {
+				drive->cyl   = drive->bios_cyl  = cyl;
+				drive->head  = drive->bios_head = head;
+				drive->sect  = drive->bios_sect = sect;
+				drive->ctl   = *(BIOS+8);
+				drive->present = 1;
+			} else
+				printk("hd%d: C/H/S=%d/%d/%d from BIOS ignored\n",
+				       cyl, head, sect);
 		}
 		BIOS += 16;
 	}

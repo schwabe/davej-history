@@ -265,12 +265,12 @@ parse_long:
 	}
 
 Found:
-	fat_brelse(sb, bh);
 	res = long_slots + 1;
 	*spos = cpos - sizeof(struct msdos_dir_entry);
 	*lpos = cpos - res*sizeof(struct msdos_dir_entry);
 	MSDOS_I(inode)->i_last_pos = cpos;
 exit:
+	fat_brelse(sb, bh);
 	if (unicode) {
 		free_page((unsigned long) unicode);
 	}

@@ -1541,10 +1541,11 @@ E: orc@pell.chi.il.us
 D: improved memory detection code.
 
 N: Vojtech Pavlik
-E: vojtech@ucw.cz
+E: vojtech@suse.cz
 D: Joystick driver
 D: arcnet-hardware readme
 D: Minor ARCnet hacking
+D: USB development
 S: Ucitelska 1576
 S: Prague 8
 S: 182 00 Czech Republic

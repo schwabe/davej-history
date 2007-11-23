@@ -168,7 +168,14 @@ dentry, f_pos));
 	} else if (S_ISBLK (inode->i_mode)) {
 		inode->i_op = &blkdev_inode_operations;
 	} else if (S_ISFIFO (inode->i_mode)) {
-		init_fifo (inode);
+	/* if someone is using FIFO, we must not reinitialize it, because
+	   we will destroy its locks, and sleep_on in fifo_open() will
+	   hardlock/oops our kernel! this started happening with
+	   patch-2.2.7. Why did it not happen before ? Maybe we were
+	   never called with i_count > 1 ?
+	*/
+		if (inode->i_count < 2)	
+			init_fifo (inode);
 	}
 }
 
@@ -349,7 +356,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS 0.85 "
+	printk (KERN_INFO "UMSDOS 0.85b "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 
