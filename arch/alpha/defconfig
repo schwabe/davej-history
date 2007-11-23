@@ -12,12 +12,11 @@
 #
 CONFIG_MODULES=y
 # CONFIG_MODVERSIONS is not set
-# CONFIG_KMOD is not set
+CONFIG_KMOD=y
 
 #
 # General setup
 #
-CONFIG_NATIVE=y
 CONFIG_ALPHA_GENERIC=y
 # CONFIG_ALPHA_ALCOR is not set
 # CONFIG_ALPHA_XL is not set
@@ -39,12 +38,12 @@ CONFIG_ALPHA_GENERIC=y
 # CONFIG_ALPHA_P2K is not set
 # CONFIG_ALPHA_RAWHIDE is not set
 # CONFIG_ALPHA_RUFFIAN is not set
+# CONFIG_ALPHA_RX164 is not set
 # CONFIG_ALPHA_SX164 is not set
 # CONFIG_ALPHA_SABLE is not set
 # CONFIG_ALPHA_TAKARA is not set
-# CONFIG_SMP is not set
 CONFIG_PCI=y
-CONFIG_ALPHA_NEED_ROUNDING_EMULATION=y
+# CONFIG_SMP is not set
 # CONFIG_PCI_QUIRKS is not set
 CONFIG_PCI_OLD_PROC=y
 CONFIG_NET=y
@@ -88,7 +87,7 @@ CONFIG_PARIDE_PARPORT=y
 #
 # Networking options
 #
-# CONFIG_PACKET is not set
+CONFIG_PACKET=y
 # CONFIG_NETLINK is not set
 # CONFIG_FIREWALL is not set
 # CONFIG_FILTER is not set
@@ -107,7 +106,6 @@ CONFIG_INET=y
 # (it is safe to leave these untouched)
 #
 # CONFIG_INET_RARP is not set
-CONFIG_IP_NOSR=y
 CONFIG_SKB_LARGE=y
 
 #
@@ -141,6 +139,7 @@ CONFIG_SCSI_CONSTANTS=y
 # SCSI low-level drivers
 #
 # CONFIG_SCSI_7000FASST is not set
+# CONFIG_SCSI_ACARD is not set
 # CONFIG_SCSI_AHA152X is not set
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
@@ -148,23 +147,29 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_AM53C974 is not set
+# CONFIG_SCSI_MEGARAID is not set
 # CONFIG_SCSI_BUSLOGIC is not set
 # CONFIG_SCSI_DTC3280 is not set
+# CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_EATA_DMA is not set
 # CONFIG_SCSI_EATA_PIO is not set
-# CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_FUTURE_DOMAIN is not set
 # CONFIG_SCSI_GDTH is not set
 # CONFIG_SCSI_GENERIC_NCR5380 is not set
+# CONFIG_SCSI_INITIO is not set
+# CONFIG_SCSI_INIA100 is not set
 # CONFIG_SCSI_NCR53C406A is not set
+# CONFIG_SCSI_SYM53C416 is not set
 # CONFIG_SCSI_NCR53C7xx is not set
 # CONFIG_SCSI_NCR53C8XX is not set
+# CONFIG_SCSI_SYM53C8XX is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_PCI2000 is not set
 # CONFIG_SCSI_PCI2220I is not set
 # CONFIG_SCSI_PSI240I is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
 CONFIG_SCSI_QLOGIC_ISP=y
+# CONFIG_SCSI_QLOGIC_FC is not set
 # CONFIG_SCSI_SEAGATE is not set
 # CONFIG_SCSI_DC390T is not set
 # CONFIG_SCSI_T128 is not set
@@ -194,6 +199,7 @@ CONFIG_DE4X5=y
 # CONFIG_EEXPRESS_PRO100 is not set
 # CONFIG_NE2K_PCI is not set
 # CONFIG_TLAN is not set
+# CONFIG_VIA_RHINE is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
@@ -202,6 +208,8 @@ CONFIG_DE4X5=y
 # CONFIG_NET_RADIO is not set
 # CONFIG_TR is not set
 # CONFIG_HOSTESS_SV11 is not set
+# CONFIG_COSA is not set
+# CONFIG_RCPCI is not set
 # CONFIG_WAN_DRIVERS is not set
 # CONFIG_LAPBETHER is not set
 # CONFIG_X25_ASY is not set
@@ -217,7 +225,7 @@ CONFIG_DE4X5=y
 # CONFIG_ISDN is not set
 
 #
-# CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
+# Old CD-ROM drivers (not SCSI, not IDE)
 #
 # CONFIG_CD_NO_IDESCSI is not set
 
@@ -233,19 +241,31 @@ CONFIG_SERIAL=y
 CONFIG_UNIX98_PTYS=y
 CONFIG_UNIX98_PTY_COUNT=256
 CONFIG_MOUSE=y
+
+#
+# Mice
+#
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_BUSMOUSE is not set
 # CONFIG_MS_BUSMOUSE is not set
 CONFIG_PSMOUSE=y
 # CONFIG_82C710_MOUSE is not set
 # CONFIG_PC110_PAD is not set
-# CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_WATCHDOG is not set
-# CONFIG_RTC is not set
-# CONFIG_VIDEO_DEV is not set
 # CONFIG_NVRAM is not set
+# CONFIG_RTC is not set
+
+#
+# Video For Linux
+#
+# CONFIG_VIDEO_DEV is not set
+
+#
+# Joystick support
+#
 # CONFIG_JOYSTICK is not set
+# CONFIG_DTLK is not set
 
 #
 # Ftape, the floppy tape device driver
@@ -256,31 +276,43 @@ CONFIG_PSMOUSE=y
 # Filesystems
 #
 # CONFIG_QUOTA is not set
-# CONFIG_MINIX_FS is not set
-CONFIG_EXT2_FS=y
-CONFIG_ISO9660_FS=y
-# CONFIG_JOLIET is not set
+# CONFIG_AUTOFS_FS is not set
+# CONFIG_AFFS_FS is not set
+# CONFIG_HFS_FS is not set
 # CONFIG_FAT_FS is not set
 # CONFIG_MSDOS_FS is not set
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
+CONFIG_ISO9660_FS=y
+# CONFIG_JOLIET is not set
+# CONFIG_MINIX_FS is not set
+# CONFIG_NTFS_FS is not set
+# CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
+CONFIG_DEVPTS_FS=y
+# CONFIG_ROMFS_FS is not set
+CONFIG_EXT2_FS=y
+# CONFIG_SYSV_FS is not set
+# CONFIG_UFS_FS is not set
+
+#
+# Network File Systems
+#
+# CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
-# CONFIG_NFSD is not set
+# CONFIG_NFSD_SUN is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
-# CONFIG_CODA_FS is not set
 # CONFIG_SMB_FS is not set
-# CONFIG_HPFS_FS is not set
-# CONFIG_NTFS_FS is not set
-# CONFIG_SYSV_FS is not set
-# CONFIG_AFFS_FS is not set
-# CONFIG_HFS_FS is not set
-# CONFIG_ROMFS_FS is not set
-# CONFIG_AUTOFS_FS is not set
-# CONFIG_UFS_FS is not set
-CONFIG_DEVPTS_FS=y
+# CONFIG_NCP_FS is not set
+
+#
+# Partition Types
+#
+# CONFIG_BSD_DISKLABEL is not set
 # CONFIG_MAC_PARTITION is not set
+# CONFIG_SMD_DISKLABEL is not set
+# CONFIG_SOLARIS_X86_PARTITION is not set
 # CONFIG_NLS is not set
 
 #

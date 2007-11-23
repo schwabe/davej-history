@@ -298,9 +298,9 @@ void parport_unregister_device(struct pardevice *dev)
 	port = dev->port;
 
 	if (port->cad == dev) {
-		printk(KERN_WARNING "%s: refused to unregister "
-		       "currently active device %s.\n", port->name, dev->name);
-		return;
+		printk(KERN_DEBUG "%s: %s forgot to release port\n",
+		       port->name, dev->name);
+		parport_release (dev);
 	}
 
 	spin_lock(&port->pardevice_lock);

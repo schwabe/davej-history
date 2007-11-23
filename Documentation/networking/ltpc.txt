@@ -65,7 +65,7 @@ line in atalkd.conf is
 
 Card Configuration:
 
-The interrupts and so forth are configured via the dipswitch on the
+The interrupts and so forth are configured via the DIP switch on the
 board.  Set the switches so as not to conflict with other hardware.
 
        Interrupts -- set at most one.  If none are set, the driver uses

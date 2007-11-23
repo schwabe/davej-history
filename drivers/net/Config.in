@@ -109,6 +109,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   if [ "$CONFIG_MCA" = "y" ]; then
     tristate 'NE/2 (ne2000 MCA version) support' CONFIG_NE2_MCA
+    tristate 'SKnet MCA support' CONFIG_SKMC
   fi
   bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
   if [ "$CONFIG_NET_EISA" = "y" ]; then

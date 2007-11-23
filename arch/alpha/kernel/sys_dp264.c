@@ -2,8 +2,8 @@
  *	linux/arch/alpha/kernel/sys_dp264.c
  *
  *	Copyright (C) 1995 David A Rusling
- *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1996, 1999 Jay A Estabrook
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the DP264 (EV6+TSUNAMI).
  */
@@ -35,7 +35,7 @@
 #define dev2hose(d) (bus2hose[(d)->bus->number]->pci_hose_index)
 
 /*
- * HACK ALERT! only CPU#0 is used currently
+ * HACK ALERT! only the boot cpu is used for interrupts.
  */
 
 static void
@@ -98,29 +98,28 @@ dp264_device_interrupt(unsigned long vector, struct pt_regs * regs)
 #if 1
 	printk("dp264_device_interrupt: NOT IMPLEMENTED YET!! \n");
 #else
-        unsigned long pld;
-        unsigned int i;
+	unsigned long pld;
+	unsigned int i;
 
-        /* Read the interrupt summary register of TSUNAMI */
-        pld = TSUNAMI_cchip->dir0.csr;
+	/* Read the interrupt summary register of TSUNAMI */
+	pld = TSUNAMI_cchip->dir0.csr;
 
-        /*
-         * Now for every possible bit set, work through them and call
-         * the appropriate interrupt handler.
-         */
-        while (pld) {
-                i = ffz(~pld);
-                pld &= pld - 1; /* clear least bit set */
-                if (i == 55) {
-                        isa_device_interrupt(vector, regs);
-		} else { /* if not timer int */
-                        handle_irq(16 + i, 16 + i, regs);
-                }
+	/*
+	 * Now for every possible bit set, work through them and call
+	 * the appropriate interrupt handler.
+	 */
+	while (pld) {
+		i = ffz(~pld);
+		pld &= pld - 1; /* clear least bit set */
+		if (i == 55)
+			isa_device_interrupt(vector, regs);
+		else
+			handle_irq(16 + i, 16 + i, regs);
 #if 0
 		TSUNAMI_cchip->dir0.csr = 1UL << i; mb();
 		tmp = TSUNAMI_cchip->dir0.csr;
 #endif
-        }
+	}
 #endif
 }
 
@@ -131,20 +130,19 @@ dp264_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 
 	ack = irq = (vector - 0x800) >> 4;
 
-        /*
-         * The EV6 machines SRM console reports PCI interrupts with a vector
-	 * calculated by:
+	/*
+	 * The SRM console reports PCI interrupts with a vector calculated by:
 	 *
 	 *	0x900 + (0x10 * DRIR-bit)
 	 *
-	 * So bit 16 shows up as IRQ 32, etc, etc.
+	 * So bit 16 shows up as IRQ 32, etc.
 	 * 
 	 * On DP264/BRICK/MONET, we adjust it down by 16 because at least
 	 * that many of the low order bits of the DRIR are not used, and
 	 * so we don't count them.
-         */
-        if (irq >= 32)
-                ack = irq = irq - 16;
+	 */
+	if (irq >= 32)
+		ack = irq = irq - 16;
 
 	handle_irq(irq, ack, regs);
 }
@@ -156,19 +154,18 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 
 	ack = irq = (vector - 0x800) >> 4;
 
-        /*
-         * The EV6 machines SRM console reports PCI interrupts with a vector
-	 * calculated by:
+	/*
+	 * The SRM console reports PCI interrupts with a vector calculated by:
 	 *
 	 *	0x900 + (0x10 * DRIR-bit)
 	 *
-	 * So bit 16 shows up as IRQ 32, etc, etc.
+	 * So bit 16 shows up as IRQ 32, etc.
 	 * 
 	 * CLIPPER uses bits 8-47 for PCI interrupts, so we do not need
 	 * to scale down the vector reported, we just use it.
 	 *
 	 * Eg IRQ 24 is DRIR bit 8, etc, etc
-         */
+	 */
 	handle_irq(irq, ack, regs);
 }
 
@@ -306,42 +303,38 @@ monet_map_irq(struct pci_dev *dev, int slot, int pin)
 		{    32,    32,    33,    34,    35}, /* IdSel 13 slot 3 PCI0*/
 		{    28,    28,    29,    30,    31}, /* IdSel 14 slot 4 PCI2*/
 		{    24,    24,    25,    26,    27}  /* IdSel 15 slot 5 PCI2*/
-};
+	};
 	const long min_idsel = 3, max_idsel = 15, irqs_per_slot = 5;
-	int irq = COMMON_TABLE_LOOKUP;
-
-	return irq;
+	return COMMON_TABLE_LOOKUP;
 }
 
 static int __init
 monet_swizzle(struct pci_dev *dev, int *pinp)
 {
-        int slot, pin = *pinp;
+	int slot, pin = *pinp;
 
-        /* Check first for the built-in bridge on hose 1. */
-        if (dev2hose(dev) == 1 && PCI_SLOT(dev->bus->self->devfn) == 8) {
-	  slot = PCI_SLOT(dev->devfn);
-        }
-        else
-        {
-                /* Must be a card-based bridge.  */
-                do {
+	/* Check first for the built-in bridge on hose 1. */
+	if (dev2hose(dev) == 1 && PCI_SLOT(dev->bus->self->devfn) == 8) {
+		slot = PCI_SLOT(dev->devfn);
+	} else {
+		/* Must be a card-based bridge.  */
+		do {
 			/* Check for built-in bridge on hose 1. */
-                        if (dev2hose(dev) == 1 &&
+			if (dev2hose(dev) == 1 &&
 			    PCI_SLOT(dev->bus->self->devfn) == 8) {
 				slot = PCI_SLOT(dev->devfn);
 				break;
-                        }
-                        pin = bridge_swizzle(pin, PCI_SLOT(dev->devfn)) ;
+			}
+			pin = bridge_swizzle(pin, PCI_SLOT(dev->devfn)) ;
 
-                        /* Move up the chain of bridges.  */
-                        dev = dev->bus->self;
-                        /* Slot of the next bridge.  */
-                        slot = PCI_SLOT(dev->devfn);
-                } while (dev->bus->self);
-        }
-        *pinp = pin;
-        return slot;
+			/* Move up the chain of bridges.  */
+			dev = dev->bus->self;
+			/* Slot of the next bridge.  */
+			slot = PCI_SLOT(dev->devfn);
+		} while (dev->bus->self);
+	}
+	*pinp = pin;
+	return slot;
 }
 
 static int __init
@@ -360,11 +353,9 @@ webbrick_map_irq(struct pci_dev *dev, int slot, int pin)
 		{    39,    39,    38,    37,    36}, /* IdSel 15 slot 1 */
 		{    43,    43,    42,    41,    40}, /* IdSel 16 slot 2 */
 		{    47,    47,    46,    45,    44}, /* IdSel 17 slot 3 */
-};
+	};
 	const long min_idsel = 7, max_idsel = 17, irqs_per_slot = 5;
-	int irq = COMMON_TABLE_LOOKUP;
-
-	return irq;
+	return COMMON_TABLE_LOOKUP;
 }
 
 static int __init
@@ -492,6 +483,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	pci_fixup:		webbrick_pci_fixup,
 	kill_arch:		generic_kill_arch,
 };
+
 struct alpha_machine_vector clipper_mv __initmv = {
 	vector_name:		"Clipper",
 	DO_EV6_MMU,
@@ -513,5 +505,6 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	pci_fixup:		clipper_pci_fixup,
 	kill_arch:		generic_kill_arch,
 };
+
 /* No alpha_mv alias for webbrick/monet/clipper, since we compile them
    in unconditionally with DP264; setup_arch knows how to cope.  */

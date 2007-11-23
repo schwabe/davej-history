@@ -437,7 +437,7 @@ static void dump_packet(const struct iphdr *ip,
 
 	for (opti = 0; opti < (ip->ihl - sizeof(struct iphdr) / 4); opti++)
 		printk(" O=0x%8.8X", *opt++);
-	printk(" %s(#%d)\n", tcpsyn ? "SYN " : /* "PENANCE" */ "", count);
+	printk(" %s(#%d)\n", syn ? "SYN " : /* "PENANCE" */ "", count);
 }
 
 /* function for checking chain labels for user space. */
@@ -532,7 +532,7 @@ ip_fw_domatch(struct ip_fwkernel *f,
 	f->counters[slot].bcnt+=ntohs(ip->tot_len);
 	f->counters[slot].pcnt++;
 	if (f->ipfw.fw_flg & IP_FW_F_PRN) {
-		dump_packet(ip,rif,f,label,src_port,dst_port,count,syn);
+		dump_packet(ip,rif,f,label,src_port,dst_port,count,tcpsyn);
 	}
 	ip->tos = (ip->tos & f->ipfw.fw_tosand) ^ f->ipfw.fw_tosxor;
 

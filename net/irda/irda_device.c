@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Mon May 10 23:02:47 1999
+ * Modified at:   Tue Jun  1 09:05:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -102,6 +102,12 @@ __initfunc(int irda_device_init( void))
 #ifdef CONFIG_NSC_FIR
 	pc87108_init();
 #endif
+#ifdef CONFIG_TOSHIBA_FIR
+	toshoboe_init();
+#endif
+#ifdef CONFIG_SMC_IRCC_FIR
+	ircc_init();
+#endif
 #ifdef CONFIG_ESI_DONGLE
 	esi_init();
 #endif
@@ -114,6 +120,10 @@ __initfunc(int irda_device_init( void))
 #ifdef CONFIG_GIRBIL_DONGLE
 	girbil_init();
 #endif
+#ifdef CONFIG_GIRBIL_DONGLE
+	litelink_init();
+#endif
+
 	return 0;
 }
 
@@ -166,6 +176,8 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
 	/* Initialize timers */
 	init_timer(&self->media_busy_timer);	
 
+	self->lock = SPIN_LOCK_UNLOCKED;
+
 	/* A pointer to the low level implementation */
 	self->priv = priv;
 
@@ -197,7 +209,7 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
 	/* Open network device */
 	dev_open(&self->netdev);
 
-	MESSAGE("IrDA: Registred device %s\n", self->name);
+	MESSAGE("IrDA: Registered device %s\n", self->name);
 
 	irda_device_set_media_busy(self, FALSE);
 
@@ -304,6 +316,8 @@ void irda_device_set_media_busy(struct irda_device *self, int status)
  */
 static void __irda_device_change_speed(struct irda_device *self, int speed)
 {
+	int n = 0;
+
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 	
@@ -311,22 +325,37 @@ static void __irda_device_change_speed(struct irda_device *self, int speed)
 	 *  Is is possible to change speed yet? Wait until the last byte 
 	 *  has been transmitted.
 	 */
-	if (self->wait_until_sent) {
-		self->wait_until_sent(self);
-		
-		if (self->dongle)
-			self->dongle->change_speed(self, speed);
-		
-		if (self->change_speed) {
-			self->change_speed(self, speed);
-			
-			/* Update the QoS value only */
-			self->qos.baud_rate.value = speed;
-		}
-	} else {
-		WARNING("IrDA: wait_until_sent() "
-			"has not implemented by the IrDA device driver!\n");
+	if (!self->wait_until_sent) {
+		ERROR("IrDA: wait_until_sent() "
+		      "has not implemented by the IrDA device driver!\n");
+		return;
 	}
+
+	/* Make sure all transmitted data has actually been sent */
+	self->wait_until_sent(self);
+
+	/* Make sure nobody tries to transmit during the speed change */
+	while (irda_lock((void *) &self->netdev.tbusy) == FALSE) {
+		WARNING(__FUNCTION__ "(), device locked!\n");
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(MSECS_TO_JIFFIES(10));
+
+		if (n++ > 10) {
+			WARNING(__FUNCTION__ "(), breaking loop!\n");
+			break;
+		}
+	}
+	
+	if (self->dongle)
+		self->dongle->change_speed(self, speed);
+	
+	if (self->change_speed) {
+		self->change_speed(self, speed);
+		
+		/* Update the QoS value only */
+		self->qos.baud_rate.value = speed;
+	}
+	self->netdev.tbusy = FALSE;
 }
 
 /*
@@ -337,8 +366,6 @@ static void __irda_device_change_speed(struct irda_device *self, int speed)
  */
 inline void irda_device_change_speed(struct irda_device *self, int speed)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
-
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return;);
 
@@ -349,27 +376,27 @@ inline void irda_device_change_speed(struct irda_device *self, int speed)
 
 inline int irda_device_is_media_busy( struct irda_device *self)
 {
-	ASSERT( self != NULL, return FALSE;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return FALSE;);
+	ASSERT(self != NULL, return FALSE;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return FALSE;);
 	
 	return self->media_busy;
 }
 
 inline int irda_device_is_receiving( struct irda_device *self)
 {
-	ASSERT( self != NULL, return FALSE;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return FALSE;);
+	ASSERT(self != NULL, return FALSE;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return FALSE;);
 
-	if ( self->is_receiving)
-		return self->is_receiving( self);
+	if (self->is_receiving)
+		return self->is_receiving(self);
 	else
 		return FALSE;
 }
 
-inline struct qos_info *irda_device_get_qos( struct irda_device *self)
+inline struct qos_info *irda_device_get_qos(struct irda_device *self)
 {
-	ASSERT( self != NULL, return NULL;);
-	ASSERT( self->magic == IRDA_DEVICE_MAGIC, return NULL;);
+	ASSERT(self != NULL, return NULL;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return NULL;);
 
 	return &self->qos;
 }
@@ -390,8 +417,6 @@ static struct enet_statistics *irda_device_get_stats( struct device *dev)
 int irda_device_setup(struct device *dev) 
 {
 	struct irda_device *self;
-
-	DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(dev != NULL, return -1;);
 
@@ -464,6 +489,8 @@ static int irda_device_net_change_mtu( struct device *dev, int new_mtu)
      return 0;  
 }
 
+
+#define SIOCSDONGLE     SIOCDEVPRIVATE
 static int irda_device_net_ioctl(struct device *dev, /* ioctl device */
 				 struct ifreq *rq,   /* Data passed */
 				 int	cmd)	     /* Ioctl number */
@@ -574,6 +601,10 @@ static int irda_device_net_ioctl(struct device *dev, /* ioctl device */
 #endif 
 		break;
 #endif
+	case SIOCSDONGLE: /* Set dongle */
+		/* Initialize dongle */
+		irda_device_init_dongle(self, (int) rq->ifr_data);
+		break;
 	default:
 		ret = -EOPNOTSUPP;
 	}
@@ -649,6 +680,11 @@ void irda_device_init_dongle(struct irda_device *self, int type)
 		ERROR("IrDA: Unable to find requested dongle\n");
 		return;
 	}
+	
+	/* Check if we're already using a dongle */
+	if (self->dongle) {
+		self->dongle->close(self);
+	}
 
 	/* Set the dongle to be used by this driver */
 	self->dongle = node->dongle;
@@ -658,7 +694,7 @@ void irda_device_init_dongle(struct irda_device *self, int type)
 	node->dongle->qos_init(self, &self->qos);
 	
 	/* Reset dongle */
-	node->dongle->reset(self, 0);
+	node->dongle->reset(self);
 
 	/* Set to default baudrate */
 	irda_device_change_speed(self, 9600);

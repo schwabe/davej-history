@@ -145,7 +145,7 @@ static void coda_put_super(struct super_block *sb)
         sb->s_dev = 0;
 	coda_cache_clear_all(sb);
 	sb_info = coda_sbp(sb);
-	sb_info->sbi_vcomm->vc_inuse = 0;
+/*	sb_info->sbi_vcomm->vc_inuse = 0; You can not do this: psdev_release would see usagecount == 0 and would refuse to decrease MOD_USE_COUNT --pavel */ 
 	coda_super_info.sbi_sb = NULL;
 	printk("Coda: Bye bye.\n");
 	memset(sb_info, 0, sizeof(* sb_info));

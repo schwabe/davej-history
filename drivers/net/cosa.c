@@ -1,4 +1,4 @@
-/* $Id: cosa.c,v 1.21 1999/02/06 19:49:18 kas Exp $ */
+/* $Id: cosa.c,v 1.24 1999/05/28 17:28:34 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -74,6 +74,10 @@
  * The SDL Riscom/N2 driver by Mike Natale
  * The Comtrol Hostess SV11 driver by Alan Cox
  * The Sync PPP/Cisco HDLC layer (syncppp.c) ported to Linux by Alan Cox
+ */
+/*
+ *     5/25/1999 : Marcelo Tosatti <marcelo@conectiva.com.br>
+ *             fixed a deadlock in cosa_sppp_open
  */
 
 /* ---------- Headers, macros, data structures ---------- */
@@ -753,8 +757,13 @@ static struct net_device_stats *cosa_net_stats(struct device *dev)
 
 static void chardev_channel_init(struct channel_data *chan)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,1)
 	chan->rsem = MUTEX;
 	chan->wsem = MUTEX;
+#else
+	init_MUTEX(&chan->rsem);
+	init_MUTEX(&chan->wsem);
+#endif
 }
 
 static long long cosa_lseek(struct file * file,
@@ -1264,8 +1273,10 @@ static void put_driver_status(struct cosa_data *cosa)
 			debug_status_out(cosa, 0);
 #endif
 		}
+		cosa_putdata8(cosa, 0);
 		cosa_putdata8(cosa, status);
 #ifdef DEBUG_IO
+		debug_data_cmd(cosa, 0);
 		debug_data_cmd(cosa, status);
 #endif
 	}
@@ -1658,6 +1669,7 @@ static inline void tx_interrupt(struct cosa_data *cosa, int status)
 				printk(KERN_WARNING
 					"%s: No channel wants data in TX IRQ\n",
 					cosa->name);
+				put_driver_status_nolock(cosa);
 				clear_bit(TXBIT, &cosa->rxtx);
 				spin_unlock_irqrestore(&cosa->lock, flags);
 				return;

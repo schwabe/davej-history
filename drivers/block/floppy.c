@@ -1924,8 +1924,6 @@ static int start_motor(void (*function)(void) )
 
 static void floppy_ready(void)
 {
-	unsigned long flags;
-	
 	CHECK_RESET;
 	if (start_motor(floppy_ready)) return;
 	if (fdc_dtr()) return;
@@ -1945,7 +1943,7 @@ static void floppy_ready(void)
 	if ((raw_cmd->flags & FD_RAW_READ) || 
 	    (raw_cmd->flags & FD_RAW_WRITE))
 	{
-		flags=claim_dma_lock();
+		unsigned long flags = claim_dma_lock();
 		fd_chose_dma_mode(raw_cmd->kernel_data,
 				  raw_cmd->length);
 		release_dma_lock(flags);

@@ -622,7 +622,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	
 	pte = *page_table;
 	new_page = __get_free_page(GFP_USER);
-	/* Did someone else copy this page for us while we slept? */
+	/* Did swap_out() unmapped the protected page while we slept? */
 	if (pte_val(*page_table) != pte_val(pte))
 		goto end_wp_page;
 	if (!pte_present(pte))
@@ -652,36 +652,42 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		delete_from_swap_cache(page_map);
 		/* FallThrough */
 	case 1:
-		/* We can release the kernel lock now.. */
-		unlock_kernel();
-
 		flush_cache_page(vma, address);
 		set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
 		flush_tlb_page(vma, address);
 end_wp_page:
+		/*
+		 * We can release the kernel lock now.. Now swap_out will see
+		 * a dirty page and so won't get confused and flush_tlb_page
+		 * won't SMP race. -Andrea
+		 */
+		unlock_kernel();
+
 		if (new_page)
 			free_page(new_page);
 		return 1;
 	}
 		
-	unlock_kernel();
 	if (!new_page)
-		return 0;
+		goto no_new_page;
 
-	if (PageReserved(mem_map + MAP_NR(old_page)))
+	if (PageReserved(page_map))
 		++vma->vm_mm->rss;
 	copy_cow_page(old_page,new_page);
 	flush_page_to_ram(old_page);
 	flush_page_to_ram(new_page);
 	flush_cache_page(vma, address);
 	set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
-	free_page(old_page);
 	flush_tlb_page(vma, address);
+	unlock_kernel();
+	__free_page(page_map);
 	return 1;
 
 bad_wp_page:
 	printk("do_wp_page: bogus page at address %08lx (%08lx)\n",address,old_page);
 	send_sig(SIGKILL, tsk, 1);
+no_new_page:
+	unlock_kernel();
 	if (new_page)
 		free_page(new_page);
 	return 0;

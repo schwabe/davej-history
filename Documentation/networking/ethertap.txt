@@ -1,7 +1,7 @@
 Documentation on setup and use of EtherTap.
 
 Contact Jay Schulist <Jay.Schulist@spacs.k12.wi.us> if you
-have questions or need futher assistance.
+have questions or need further assistance.
 
 Introduction
 ============
@@ -49,11 +49,11 @@ get the general idea.
 
         1.2.3.4 will be the router to the outside world
         1.2.3.5 our box
-        2.0.0.1 our box (appletalk side)
-        2.0.0.* a pile of macintoys
+        2.0.0.1 our box (AppleTalk side)
+        2.0.0.* a pile of Macintoys
 
 
-[1.2.3.4]-------------1.2.3.5[Our Box]2.0.0.1---------> macs
+[1.2.3.4]-------------1.2.3.5[Our Box]2.0.0.1---------> Macs
 
 The routing on our box would be
 

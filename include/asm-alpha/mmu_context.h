@@ -108,7 +108,7 @@ __EXTERN_INLINE void ev5_get_mmu_context(struct task_struct *p)
 	if (mm) {
 		unsigned long asn = asn_cache;
 		/* Check if our ASN is of an older version,
-		   or on a different CPU, and thus invalid */
+		   or on a different CPU, and thus invalid.  */
 		if ((mm->context ^ asn) & ~HARDWARE_ASN_MASK)
 			get_new_mmu_context(p, mm);
 	}

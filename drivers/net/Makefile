@@ -486,6 +486,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SKMC),y)
+L_OBJS += sk_mca.o
+else
+  ifeq ($(CONFIG_SKMC),m)
+  M_OBJS += sk_mca.o
+  endif
+endif
+
 ifeq ($(CONFIG_ELMC_II),y)
 L_OBJS += 3c527.o
 else
